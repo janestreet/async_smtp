@@ -1,0 +1,14 @@
+This library implements an SMTP client, server, and proxy using
+[Async](https://github.com/janestreet/async) and
+[Email_message](https://github.com/janestreet-alpha/email_message).
+
+It was written by Leah Hanson during her internship over the Summer of
+2012.
+
+The projects hosted under
+[janestreet-alpha](https://github.com/janestreet-alpha) are libraries
+and utilities that we hope the community will find useful. They have
+been tested but not yet reviewed with the same level of scrutiny as
+Jane Street's [core libraries](https://github.com/janestreet). Patches
+are welcome.
+
