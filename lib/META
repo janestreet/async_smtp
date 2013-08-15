@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: 4ea296ff8112d4ace8501839d1c0ef93)
+version = "109.38.alpha1"
+description = "SMTP client and server"
+requires = "async core core_extended email_message threads"
+archive(byte) = "async_smtp.cma"
+archive(byte, plugin) = "async_smtp.cma"
+archive(native) = "async_smtp.cmxa"
+archive(native, plugin) = "async_smtp.cmxs"
+exists_if = "async_smtp.cma"
+# OASIS_STOP
+

@@ -1,3 +1,28 @@
 # OASIS_START
+# DO NOT EDIT (digest: aa2b4d819a1175309b1e4055a58a4f78)
+# Ignore VCS directories, you can use the same kind of rule outside 
+# OASIS_START/STOP if you want to exclude directories that contains 
+# useless stuff for the build process
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library async_smtp
+"lib/async_smtp.cmxs": use_async_smtp
+"lib/comm.cmx": for-pack(Async_smtp)
+"lib/lexer.cmx": for-pack(Async_smtp)
+"lib/send_mail.cmx": for-pack(Async_smtp)
+"lib/smtp.cmx": for-pack(Async_smtp)
+<lib/*.ml{,i}>: pkg_async
+<lib/*.ml{,i}>: pkg_core
+<lib/*.ml{,i}>: pkg_core_extended
+<lib/*.ml{,i}>: pkg_email_message
+<lib/*.ml{,i}>: pkg_threads
 # OASIS_STOP
 # <lib/*.ml{,i}>: syntax_camlp4o
