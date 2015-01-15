@@ -1,3 +1,4 @@
 # OASIS_START
 # OASIS_STOP
-# <lib/*.ml{,i}>: syntax_camlp4o
+<**/*.ml>: warn(-40)
+<command/*>: ugly_hack_to_workaround_ocamlbuild_nightmare

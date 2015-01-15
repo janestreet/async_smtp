@@ -2,14 +2,14 @@ OASISFormat:      0.3
 OCamlVersion:     >= 4.00.0
 FindlibVersion:   >= 1.3.2
 Name:             async_smtp
-Version:          109.38.alpha1
+Version:          112.17.00
 Synopsis:         SMTP client and server
 Authors:          Jane Street Capital LLC <opensource@janestreet.com>
 Copyrights:       (C) 2005-2013 Jane Street Capital LLC <opensource@janestreet.com>
 Maintainers:      Jane Street Capital LLC <opensource@janestreet.com>
 License:          Apache-2.0
 LicenseFile:      LICENSE.txt
-Homepage:         https://github.com/janestreet-alpha/async_smtp
+Homepage:         https://github.com/janestreet/async_smtp
 Plugins:          StdFiles (0.3), DevFiles (0.3), META (0.3)
 XStdFilesAUTHORS: false
 XStdFilesREADME:  false
@@ -18,19 +18,147 @@ BuildTools:       ocamlbuild, camlp4o
 Library async_smtp
   Path:               lib
   Pack:               true
-  Modules:            Comm,
-                      Lexer,
-                      Send_mail,
-                      Smtp
+  Modules:            Adjustable_throttle,
+                      Base64,
+                      Client,
+                      Comm,
+                      Command_lexer,
+                      Common,
+                      Config,
+                      Email_address_lexer,
+                      Fake_spool,
+                      Rpc_impl,
+                      Rpc_intf,
+                      Rpc_server,
+                      Sendmail,
+                      Server_callbacks,
+                      Server,
+                      Spool_directory,
+                      Spooled_message_internal,
+                      Spool,
+                      Std,
+                      Types
   BuildDepends:       async,
+                      async_extended,
                       core,
-                      core_extended,
+                      core.syntax,
                       email_message,
+                      pa_ounit,
+                      pa_ounit.syntax,
+                      pa_test,
+                      pa_test.syntax,
+                      re2,
+                      textutils,
+                      threads
+  XMETARequires:      async,
+                      async_extended,
+                      core,
+                      email_message,
+                      pa_ounit,
+                      pa_test,
+                      re2,
+                      textutils,
                       threads
 
-Document "async_smtp"
-  Title:                SMTP client and server
-  Type:                 ocamlbuild (0.3)
-  BuildTools+:          ocamldoc
-  XOCamlbuildPath:      lib
-  XOCamlbuildLibraries: async_smtp
+Library async_smtp_command
+  Path:               command
+  Pack:               true
+  FindlibName:        command
+  FindlibParent:      async_smtp
+  Modules:            Bsmtp,
+                      Common,
+                      Gc_admin,
+                      Spool
+  BuildDepends:       async,
+                      async_smtp,
+                      core,
+                      email_message,
+                      re2,
+                      textutils,
+                      threads
+
+Library async_smtp_tools
+  Path:               tools/lib
+  Pack:               true
+  FindlibName:        tools
+  FindlibParent:      async_smtp
+  Modules:            Headers,
+                      Hex,
+                      Std,
+                      Stress_test,
+                      Transform_email_stream
+  BuildDepends:       async,
+                      async_smtp,
+                      async_smtp.command,
+                      core,
+                      cryptokit,
+                      email_message,
+                      re2,
+                      textutils,
+                      threads
+
+Executable "run-async-smtyp"
+  Path:               sample
+  MainIs:             run_async_smtp.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp
+
+Executable "add-bsmtp-header"
+  Path:               tools/bin
+  MainIs:             add_bsmtp_header.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+
+Executable "feeder"
+  Path:               tools/bin
+  MainIs:             feeder.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+
+Executable "mbox-to-bsmtp"
+  Path:               tools/bin
+  MainIs:             mbox_to_bsmtp.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+
+Executable "normalize-bsmtp"
+  Path:               tools/bin
+  MainIs:             normalize_bsmtp.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+
+Executable "qstatus"
+  Path:               tools/bin
+  MainIs:             qstatus.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp,
+                      async_smtp.command,
+                      async_smtp.tools
+
+Executable "simplemail"
+  Path:               tools/bin
+  MainIs:             simplemail.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+
+Executable "stress-test"
+  Path:               tools/bin
+  MainIs:             stress_test.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+
+Executable "wait-for-smtp"
+  Path:               tools/bin
+  MainIs:             wait_for_smtp.ml
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       async_smtp.tools
+

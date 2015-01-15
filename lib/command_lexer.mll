@@ -8,9 +8,9 @@ open Comm
 rule
 parse_command =
   parse
-  | "HELO" (_* as str)        { Hello str }
+  | "HELO" (_* as str)        { Helo str }
   | "MAIL FROM:" (_* as str)  { Sender str }
-  | "RCPT TO:" (_* as str)    { Receiver str }
+  | "RCPT TO:" (_* as str)    { Recipient str }
   | "DATA"                    { Data }
   | "NOOP"                    { Noop }
   | "HELP"                    { Help }

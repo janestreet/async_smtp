@@ -1,7 +1,7 @@
 type t =
-  | Hello of string
+  | Helo of string
   | Sender of string
-  | Receiver of string
+  | Recipient of string
   | Data
   | Quit
   | Help
