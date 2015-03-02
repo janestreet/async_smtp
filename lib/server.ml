@@ -403,6 +403,8 @@ let start ~config (module Cb : Callbacks.S) =
 let config t = t.config
 ;;
 
+let ports t = List.map ~f:Tcp.Server.listening_on t.servers
+
 let close ?timeout t =
   Deferred.List.iter ~how:`Parallel t.servers ~f:Tcp.Server.close
   >>= fun () ->

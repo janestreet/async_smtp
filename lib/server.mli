@@ -20,3 +20,5 @@ val read_bsmtp
 val read_mbox
   :  Reader.t
   -> Envelope.t Or_error.t Pipe.Reader.t
+
+val ports : t -> int list
