@@ -1,13 +1,13 @@
- open Core.Std
- open Async.Std
- open Async_smtp.Std
- open Email_message.Std
+open Core.Std
+open Async.Std
+open Async_smtp.Std
+open Email_message.Std
 
- module Field_name = Email_field_name
- module Envelope = Smtp_envelope
+module Field_name = Email_field_name
+module Envelope = Smtp_envelope
 
- module Crypto = Cryptokit
- module Hash = Crypto.Hash
+module Crypto = Cryptokit
+module Hash = Crypto.Hash
 
 module Config = struct
   module Header_cond = struct

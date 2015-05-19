@@ -122,11 +122,11 @@ let compare_message_sender =
 ;;
 
 let compare_message_recipients =
-  Compare.map ~f:Envelope.recipients (List.compare ~cmp:Email_address.compare)
+  Compare.map ~f:Envelope.recipients (List.compare Email_address.compare)
 ;;
 
 let compare_message_subject =
-  Compare.map ~f:(Envelope.get_headers ~name:"Subject") (List.compare ~cmp:String.compare)
+  Compare.map ~f:(Envelope.get_headers ~name:"Subject") (List.compare String.compare)
 ;;
 
 let compare_message_body =
@@ -137,7 +137,7 @@ let compare_message_body =
 ;;
 
 let compare_message_headers =
-  List.compare ~cmp:Headers.Header.compare
+  List.compare Headers.Header.compare
   |> Compare.map ~f:Email.headers
   |> Compare.map ~f:Envelope.email
 ;;
