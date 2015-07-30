@@ -54,13 +54,11 @@ let main ?config () =
         incr counter;
         Envelope.add_header envelope ~name ~value:(Int.to_string !counter))
   in
-  Smtp_client.write stdout ~helo:"testing" pipe |> Deferred.Or_error.ok_exn
-  >>= fun () ->
-  Writer.flushed stdout
+  Smtp_client.Bsmtp.write stdout pipe
 ;;
 
 let command =
-  Command.async
+  Command.async_or_error
     ~summary:("Convert mbox to bsmtp")
     Command.Spec.(
       empty

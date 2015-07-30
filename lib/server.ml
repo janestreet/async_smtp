@@ -1,7 +1,10 @@
 open Core.Std
 open Async.Std
+open Async_ssl.Std
 open Types
 open Email_message.Std
+
+module Config = Server_config
 
 
 module Callbacks = Server_callbacks
@@ -51,30 +54,41 @@ let read_data ~max_size reader =
 ;;
 
 
+
+
 module Glog(S:sig
-              val session : Session.t
-            end) = struct
-    let tags =
-      [ "local",   Host_and_port.to_string S.session.Session.local
-      ; "remote",  Host_and_port.to_string S.session.Session.remote
-      ; "session", S.session.Session.id
-      ]
-    let debug = Log.Global.debug ~tags
-    let info = Log.Global.info ~tags
-    let error = Log.Global.error ~tags
-        end
+    val session : Session.t
+  end) = struct
+  let tags =
+    [ "local",   Host_and_port.to_string S.session.Session.local
+    ; "remote",  Host_and_port.to_string S.session.Session.remote
+    ; "session", S.session.Session.id
+    ]
+  let debug = Log.Global.debug ~tags
+  let info = Log.Global.info ~tags
+  let error = Log.Global.error ~tags
+end
 
-
-let session
+let rec start_session
     ~config
     ~reader
-    ~write_reply
+    ?(is_protocol_upgrade=false)
+    ?writer
+    ?write_reply
     ~send_envelope
-    ~local
-    ~remote
+    ~session
     (module Cb : Callbacks.S) =
-  let session = Session.create ~local ~remote () in
   let module Glog = Glog(struct let session = session end) in
+  let write_reply_default reply =
+    match writer with
+    | Some writer ->
+      Writer.write_line writer (Reply.to_string reply);
+      Writer.flushed writer
+    | None ->
+      if Reply.is_ok reply then Deferred.unit
+      else failwithf !"Unconsumed failure: %{Reply}" reply ()
+  in
+  let write_reply = Option.value write_reply ~default:write_reply_default in
   let write_reply reply =
     Glog.debug !"Writing reply: %{Reply}" reply;
     write_reply reply
@@ -96,11 +110,12 @@ let session
     write_reply (Reply.Command_not_implemented_502 msg)
   in
   let command_not_recognized msg =
+    let msg = add_session_id msg in
     write_reply (Reply.Command_not_recognized_500 msg)
   in
-  let ok_completed msg =
-    let msg = add_session_id msg in
-    write_reply (Reply.Ok_completed_250 msg )
+  let ok_completed ?(extra=[]) msg =
+    let msg = String.concat ~sep:"\n" (add_session_id msg :: extra) in
+    write_reply (Reply.Ok_completed_250 msg)
   in
   let ok_continue () =
     ok_completed "continue"
@@ -133,7 +148,7 @@ let session
       Glog.debug "Got Eof on reader";
       return ()
     | `Ok input ->
-      match Command.of_string_opt input with
+      match Option.try_with (fun () -> Command.of_string input) with
       | None ->
         Glog.debug "Got unexpected input on reader: %s" input;
         command_not_recognized input
@@ -144,24 +159,48 @@ let session
         next cmd
   in
   let rec top ~session =
-    loop ~next:function
+    loop ~next:(function
       | Command.Quit ->
         closing_connection ()
       | Command.Noop ->
         ok_continue () >>= fun () -> top ~session
-      | Command.Helo helo ->
-        top_helo ~session helo
+      | Command.Reset ->
+        ok_continue () >>= fun () -> top ~session
+      | Command.Hello helo ->
+        top_helo ~extended:false ~session helo
+      | Command.Extended_hello helo ->
+        top_helo ~extended:true ~session helo
+      | Command.Start_tls -> begin
+        match config.Config.tls_options with
+        | None ->
+          command_not_implemented Command.Start_tls >>= fun () -> top ~session
+        | Some tls_options ->
+          top_start_tls ~session tls_options
+        end
       | Command.Sender sender ->
         top_envelope ~session sender
       | (Command.Recipient _ | Command.Data) as cmd ->
         bad_sequence_of_commands cmd >>= fun () -> top ~session
-      | cmd ->
-        command_not_implemented cmd >>= fun () -> top ~session
-  and top_helo ~session helo =
+      | (Command.Help) as cmd ->
+        command_not_implemented cmd >>= fun () -> top ~session)
+  and top_helo ~extended ~session helo =
     Cb.session_helo ~session helo
     >>= function
     | `Continue ->
-      ok_continue ()
+      let extensions =
+        (match Session.tls session with
+         | None -> [ "STARTTLS" ]
+         | Some _ -> [])
+        @
+        [ "8BITMIME" ]
+      in
+      let greeting, extra =
+        if extended then
+          "Continue, extensions follow:", extensions
+        else
+          "Continue, extensions follow: " ^ String.concat ~sep:", " extensions, []
+      in
+      ok_completed ~extra greeting
       >>= fun () ->
       top ~session
     | `Deny reject ->
@@ -170,6 +209,68 @@ let session
       top ~session
     | `Disconnect reject ->
       write_maybe_reply reject
+  and top_start_tls ~session tls_options =
+    service_ready "Begin TLS transition"
+    >>= fun () ->
+      let old_reader = reader in
+      let old_writer = writer |> Option.value_exn in
+      let reader_pipe_r,reader_pipe_w = Pipe.create () in
+      let writer_pipe_r,writer_pipe_w = Pipe.create () in
+      Ssl.server
+        ?version:tls_options.Config.Tls.version
+        ?name:tls_options.Config.Tls.name
+        ?ca_file:tls_options.Config.Tls.ca_file
+        ?ca_path:tls_options.Config.Tls.ca_path
+        ~crt_file:tls_options.Config.Tls.crt_file
+        ~key_file:tls_options.Config.Tls.key_file
+        (* Closing ssl connection will close the pipes which will in turn close
+           the readers. *)
+        ~net_to_ssl:(Reader.pipe old_reader)
+        ~ssl_to_net:(Writer.pipe old_writer)
+        ~ssl_to_app:reader_pipe_w
+        ~app_to_ssl:writer_pipe_r
+        ()
+      >>= function
+      | Error e ->
+        Glog.error !"Failed to start TLS, aborting session: %{sexp:Error.t}" e;
+        return ()
+      | Ok tls ->
+        let session =
+          Session.create
+            ~id:(session.Session.id ^ "|TLS")
+            ~local:session.Session.local
+            ~remote:session.Session.remote
+            ~tls
+            ()
+        in
+        Reader.of_pipe (Info.of_string "SMTP/TLS") reader_pipe_r
+        >>= fun new_reader ->
+        Writer.of_pipe (Info.of_string "SMTP/TLS") writer_pipe_w
+        >>= fun (new_writer, _) ->
+        Deferred.all_ignore
+          [ begin
+            Ssl.Connection.closed tls
+            >>= fun result ->
+            Result.iter_error result ~f:(fun e ->
+                Glog.error !"TLS error: %{sexp:Error.t}" e);
+            Deferred.all_unit
+              [ Reader.close new_reader
+              ; Writer.flushed new_writer
+                >>= fun () ->
+                Writer.close new_writer
+              ]
+          end
+          ; begin
+            start_session
+              ~config
+              ~reader:new_reader
+              ~writer:new_writer
+              ~send_envelope
+              ~session
+              ~is_protocol_upgrade:true
+              (module Cb : Callbacks.S)
+          end
+          ]
   and top_envelope ~session sender =
     match Sender.of_string sender with
     | Error _err ->
@@ -188,7 +289,7 @@ let session
         >>= fun () ->
         envelope ~session ~sender ~recipients:[] ~rejected_recipients:[]
   and envelope ~session ~sender ~recipients ~rejected_recipients =
-    loop ~next:function
+    loop ~next:(function
       | Command.Quit ->
         closing_connection ()
       | Command.Noop ->
@@ -197,12 +298,17 @@ let session
         envelope_recipient ~session ~sender ~recipients ~rejected_recipients recipient
       | Command.Data when not (List.is_empty recipients) ->
         envelope_data ~session ~sender ~recipients ~rejected_recipients
-      | (Command.Helo _ | Command.Sender _ | Command.Data) as cmd ->
+      | ( Command.Hello _ | Command.Extended_hello _
+        | Command.Sender _ | Command.Data
+        | Command.Start_tls
+        ) as cmd ->
         bad_sequence_of_commands cmd
         >>= fun () -> envelope ~session ~sender ~recipients ~rejected_recipients
-      | cmd ->
+      | Command.Reset ->
+        ok_continue () >>= fun () -> top ~session
+      | (Command.Help) as cmd ->
         command_not_implemented cmd
-        >>= fun () -> envelope ~session ~sender ~recipients ~rejected_recipients
+        >>= fun () -> envelope ~session ~sender ~recipients ~rejected_recipients)
   and envelope_recipient ~session ~sender ~recipients ~rejected_recipients recipient =
     match Email_address.of_string recipient with
     | Error _ ->
@@ -237,15 +343,15 @@ let session
         match Email.of_bigbuffer data with
         | Ok email -> Ok email
         | Error error ->
-          Glog.error !"Syntax error in message %{sexp:Error.t}" error;
+          Glog.info !"Syntax error in message %{sexp:Error.t}" error;
           match config.Config.malformed_emails with
           | `Reject ->
             Error (Reply.Syntax_error_501 "Malformed Message")
           | `Wrap ->
             let data = data |> Bigbuffer.contents in
-            Ok (Email.Simple.create_exn
-                  ~headers:["X-JS-Parse-Error", sprintf !"%{sexp:Error.t}" error]
-                  ~body:data)
+            Ok (Email.Simple.Content.text
+                  ~extra_headers:["X-JS-Parse-Error", sprintf !"%{sexp:Error.t}" error]
+                  data :> Email.t)
       in
       match email with
       | Error error ->
@@ -286,16 +392,21 @@ let session
             >>= fun () ->
             top ~session
   in
-  Cb.session_connect ~session
-  >>= function
-  | `Disconnect reject ->
-    Glog.debug !"Rejected session: %{sexp: Reply.t option}" reject;
-    write_maybe_reply reject
-  | `Accept hello ->
-    Glog.info "Starting session";
-    service_ready hello
-    >>= fun () ->
-    top ~session
+  if is_protocol_upgrade
+  then top ~session
+  else begin
+    Cb.session_connect ~session
+    >>= function
+    | `Disconnect reject ->
+      Glog.debug !"Rejected session: %{sexp: Reply.t option}" reject;
+      write_maybe_reply reject
+    | `Accept hello ->
+      Glog.info "Starting session";
+      service_ready hello
+      >>= fun () ->
+      top ~session
+  end
+
 ;;
 
 module Protect_callbacks(Cb:Callbacks.S) : Callbacks.S = struct
@@ -360,27 +471,23 @@ end
 let tcp_servers ~spool ~config (module Cb : Callbacks.S) =
   let module Cb = Protect_callbacks(Cb) in
   Deferred.List.map ~how:`Parallel (Config.ports config) ~f:(fun port ->
-      let local = Host_and_port.create ~host:"*" ~port in
-      Tcp.Server.create (Tcp.on_port port)
-        ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
-        (fun (`Inet (inet_in, port_in)) reader writer ->
-           let remote =
-             Host_and_port.create ~host:(Unix.Inet_addr.to_string inet_in) ~port:port_in
-           in
-           let write_reply reply =
-             Writer.write_line writer (Reply.to_string reply);
-             Writer.flushed writer
-           in
-           let send_envelope ~original_msg envelopes_with_next_hops =
-             Spool.add spool ~original_msg envelopes_with_next_hops
-             >>|? Envelope.Id.to_string
-           in
-           session
-             ~config
-             ~reader ~write_reply ~send_envelope
-             ~local ~remote
-             (module Cb)
-        ))
+    let local = Host_and_port.create ~host:"*" ~port in
+    Tcp.Server.create (Tcp.on_port port)
+      ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
+      (fun (`Inet (inet_in, port_in)) reader writer ->
+         let remote =
+           Host_and_port.create ~host:(Unix.Inet_addr.to_string inet_in) ~port:port_in
+         in
+         let send_envelope ~original_msg envelopes_with_next_hops =
+           Spool.add spool ~original_msg envelopes_with_next_hops
+           >>|? Envelope.Id.to_string
+         in
+         start_session
+           ~config
+           ~reader ~writer ~send_envelope
+           ~session:(Session.create ~local ~remote ())
+           (module Cb)
+      ))
 ;;
 
 type t =
@@ -417,9 +524,10 @@ let close ?timeout t =
 
 let read_bsmtp reader =
   Pipe.init (fun out ->
-      session
+      start_session
         ~config:(Config.empty)
         ~reader
+        ?writer:None
         ~write_reply:(fun reply ->
             Log.Global.debug !"Discarding reply: %{Reply}" reply;
             if Reply.is_ok reply then return ()
@@ -434,8 +542,10 @@ let read_bsmtp reader =
             >>= fun () ->
             return (Ok "pipped")
           )
-        ~local:(Host_and_port.create ~host:"*pipe*" ~port:0)
-        ~remote:(Host_and_port.create ~host:"*pipe*" ~port:0)
+        ~session:(Session.create
+                    ~local:(Host_and_port.create ~host:"*pipe*" ~port:0)
+                    ~remote:(Host_and_port.create ~host:"*pipe*" ~port:0)
+                    ())
         (module Callbacks.Simple:Callbacks.S))
 ;;
 

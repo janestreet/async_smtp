@@ -7,7 +7,7 @@ type t
 (* Lock the spool directory. Load all the files that are already present
    there. *)
 val create
-  :  config:Config.t
+  :  config:Server_config.t
   -> send:(Envelope_with_next_hop.t -> unit Or_error.t Deferred.t)
   -> t Or_error.t Deferred.t
 

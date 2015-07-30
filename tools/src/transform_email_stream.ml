@@ -40,12 +40,12 @@ module Bodies = struct
     | None -> ident
     | Some s ->
       let re = Re2.Regex.escape s |> Re2.Regex.create_exn in
-      Envelope.modify_email ~f:fun email ->
+      Envelope.modify_email ~f:(fun email ->
         if not (Re2.Regex.matches re (Email.to_string email)) then email
         else begin
           let headers = (Email.headers email :> (string * string) list) in
-          Email.Simple.create ~headers ~body:"" |> Or_error.ok_exn
-        end
+          Email.Simple.Expert.content ~encoding:`Quoted_printable ~extra_headers:headers ""
+        end)
 
   let hash_fun data =
     data
@@ -67,8 +67,8 @@ module Bodies = struct
              encoding
         |> Octet_stream.of_string
       in
-      Envelope.modify_email ~f:fun email ->
-        Email.map_data email ~f:hash_data
+      Envelope.modify_email ~f:(fun email ->
+        Email.map_data email ~f:hash_data)
     | Some `whole ->
       let hash_body email =
         email
@@ -76,10 +76,10 @@ module Bodies = struct
         |> hash_fun
         |> sprintf "\nBODY HIDDEN.\nHASH=%s\n"
       in
-      Envelope.modify_email ~f:fun email ->
+      Envelope.modify_email ~f:(fun email ->
         let headers = (Email.headers email :> (string * string) list) in
         let body = hash_body email in
-        Email.Simple.create ~headers ~body |> Or_error.ok_exn
+        Email.Simple.Expert.content ~encoding:`Quoted_printable ~extra_headers:headers body)
 
   let transform t =
     let mask_body = mask_body t in

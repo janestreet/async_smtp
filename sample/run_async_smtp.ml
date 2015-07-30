@@ -3,7 +3,7 @@ open Async.Std
 open Async_smtp.Std
 
 let config =
- { Smtp_config.
+ { Smtp_server.Config.
    spool_dir = "/tmp/spool-mailcore"
  ; tmp_dir = None
  ; ports = [ 2200; 2201 ]
@@ -12,6 +12,17 @@ let config =
  ; rpc_port = 2210
  ; malformed_emails = `Reject
  ; max_message_size = Byte_units.create `Megabytes 1.
+ ; tls_options =
+     Some
+       { Smtp_server.Config.Tls.
+         version = None
+       ; name = None
+       ; crt_file = "/tmp/mailcore.crt"
+       ; key_file = "/tmp/mailcore.key"
+       ; ca_file = None
+       ; ca_path  = None
+       }
+ ; client = Smtp_client.Config.default
  }
 
 module Callbacks = struct
@@ -22,15 +33,15 @@ module Callbacks = struct
 
   let process_envelope ~session:_ envelope =
     return (`Send
-               [ Smtp_envelope_with_next_hop.create
-                   ~envelope
-                   ~next_hop_choices:[destination]
-                   ~retry_intervals:[]
-               ])
+              [ Smtp_envelope_with_next_hop.create
+                  ~envelope
+                  ~next_hop_choices:[destination]
+                  ~retry_intervals:[]
+              ])
 end
 
 let main () =
-  let spool_dir = Smtp_config.spool_dir config in
+  let spool_dir = Smtp_server.Config.spool_dir config in
   Log.Global.info "creating %s" spool_dir;
   Unix.mkdir ~p:() spool_dir
   >>= fun () ->
@@ -38,7 +49,7 @@ let main () =
   >>| Or_error.ok_exn
   >>= fun server ->
   let ports =
-    Smtp_config.ports config
+    Smtp_server.Config.ports config
     |> List.map ~f:Int.to_string
     |> String.concat ~sep:", "
   in
@@ -56,4 +67,3 @@ let run () =
 ;;
 
 run ()
-

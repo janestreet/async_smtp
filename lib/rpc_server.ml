@@ -1,7 +1,7 @@
 open Core.Std
 open Async.Std
 
-let implementations =
+let implementations () =
   let open Rpc_impl in
   [ Spool.status ()
   ; Spool.freeze ()
@@ -15,15 +15,16 @@ let implementations =
   ; Gc.minor ()
   ; Gc.compact ()
   ; Gc.stat_pipe ()
+  ; Monitor.errors ()
   ; Process.pid ()
   ]
 ;;
 
 let start (config, spool) ~plugin_rpcs =
   let initial_connection_state = (fun _socket_addr _connection -> (config, spool)) in
-  let where_to_listen = Tcp.on_port (Config.rpc_port config) in
+  let where_to_listen = Tcp.on_port (Server_config.rpc_port config) in
   let implementations =
-    implementations
+    implementations ()
     @ List.map plugin_rpcs ~f:(Rpc.Implementation.lift ~f:ignore)
   in
   let implementations =
@@ -31,6 +32,6 @@ let start (config, spool) ~plugin_rpcs =
   in
   Rpc.Connection.serve ~implementations ~where_to_listen ~initial_connection_state ()
   >>= fun _tcp_server ->
-  Log.Global.info "RPC server connection closed";
+  Log.Global.info "RPC server listening on %d" (Server_config.rpc_port config);
   Deferred.unit
 ;;

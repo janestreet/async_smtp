@@ -2,6 +2,8 @@ open Core.Std
 open Async.Std
 open Async_extended.Std
 
+module Config = Server_config
+
 open Types
 
 module Spooled_message = Spooled_message_internal
@@ -56,6 +58,7 @@ type t =
   ; file_throttle : unit Throttle.t
   ; messages      : Spooled_message.t Spooled_message.Id.Table.t
   ; event_stream  : Event.t Bus.t
+  ; client        : Client_config.t
   } with fields
 ;;
 
@@ -102,6 +105,7 @@ let create ~config : t Deferred.Or_error.t =
     ~file_throttle
     ~messages
     ~event_stream
+    ~client:config.Config.client
 ;;
 
 (* Using the Async queue to store the messages waiting for retry. *)
@@ -117,23 +121,35 @@ let rec enqueue ?at t spooled_msg =
     else begin
       Log.Global.debug !"enqueuing message %{Spooled_message.Id}" msgid;
       Adjustable_throttle.enqueue t.send_throttle (fun () ->
-        Spooled_message.send spooled_msg
+        Spooled_message.send spooled_msg ~config:t.client
         >>| function
         | Error e ->
           Log.Global.error !"error sending %{Spooled_message.Id}: %s"
             (Spooled_message.id spooled_msg) (Error.to_string_hum e)
-        | Ok `Done ->
-          remove_message t spooled_msg;
-          delivered_event t spooled_msg
-        | Ok (`Retry_at at) ->
-          enqueue ~at t spooled_msg
-        | Ok `Give_up -> ())
+        | Ok () ->
+          match Spooled_message.status spooled_msg with
+          | `Delivered ->
+            remove_message t spooled_msg;
+            delivered_event t spooled_msg
+          | `Send_now ->
+            enqueue t spooled_msg
+          | `Send_at at ->
+            enqueue ~at t spooled_msg
+          | `Sending ->
+            failwithf !"Message has status Sending after returning from \
+                        Spooled_message.send: %{Spooled_message.Id}"
+              (Spooled_message.id spooled_msg) ()
+          | `Frozen -> ())
     end)
 ;;
 
 let schedule t msg =
-  match Spooled_message.next_action msg with
-  | `Frozen -> ()
+  match Spooled_message.status msg with
+  | `Frozen  -> ()
+  | (`Sending | `Delivered) as status ->
+    failwithf !"Unexpected status %{sexp:Spooled_message.Status.t} when trying \
+                to schedule message %{Spooled_message.Id}"
+      status (Spooled_message.id msg) ()
   | `Send_at at ->
     Log.Global.info !"spooling %{Spooled_message.Id} at %{Time}"
       (Spooled_message.id msg) at;
@@ -202,23 +218,25 @@ let with_outstanding_msg t id ~f =
   | Some spooled_msg ->
     f spooled_msg
 
-let freeze t id =
-  with_outstanding_msg t id ~f:(fun spooled_msg ->
-    Throttle.enqueue t.file_throttle (fun () ->
-      Spooled_message.freeze spooled_msg)
-    >>=? fun () ->
-    frozen_event t spooled_msg;
-    Deferred.Or_error.ok_unit)
+let freeze t ids =
+  Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
+    with_outstanding_msg t id ~f:(fun spooled_msg ->
+      Throttle.enqueue t.file_throttle (fun () ->
+        Spooled_message.freeze spooled_msg)
+      >>=? fun () ->
+      frozen_event t spooled_msg;
+      Deferred.Or_error.ok_unit))
 ;;
 
-let send_now ?(new_retry_intervals=[]) t id =
-  with_outstanding_msg t id ~f:(fun spooled_msg ->
-    Throttle.enqueue t.file_throttle (fun () ->
-      Spooled_message.unfreeze ~new_retry_intervals spooled_msg)
-    >>=? fun () ->
-    unfrozen_event t spooled_msg;
-    enqueue t spooled_msg;
-    Deferred.Or_error.ok_unit)
+let send_now ?(new_retry_intervals = []) t ids =
+  Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
+    with_outstanding_msg t id ~f:(fun msg ->
+      Throttle.enqueue t.file_throttle (fun () ->
+        Spooled_message.unfreeze ~new_retry_intervals msg)
+      >>=? fun () ->
+      unfrozen_event t msg;
+      enqueue t msg;
+      Deferred.Or_error.ok_unit))
 ;;
 
 module Spooled_message_info = struct
@@ -238,7 +256,6 @@ module Spooled_message_info = struct
 
   (* Internal *)
   let time_on_spool      = sp Spooled_message.time_on_spool
-  let next_action        = sp Spooled_message.next_action
   let next_hop_choices   = sp Spooled_message.next_hop_choices
 end
 
@@ -283,10 +300,8 @@ module Status = struct
     let msg_to_string msg =
       let frozen_text =
         match S.status msg with
-        | `Frozen  -> "*** frozen ***"
-        | `Waiting -> ""
-        | `Sending -> "*** sending ***"
-        | `Delivered -> "*** delivered ***"
+        | `Send_at _ | `Send_now | `Sending | `Delivered -> ""
+        | `Frozen                                        -> "*** frozen ***"
       in
       let time = S.time_on_spool msg |> Time.Span.to_short_string in
       let size =
@@ -356,13 +371,15 @@ module Status = struct
           in
           let next_attempt =
             Column.create_attr "next attempt" (fun a ->
-              match S.next_action a with
+              match S.status a with
               | `Send_at at ->
                 display_span (Time.diff at (Time.now ()))
-              | `Send_now ->
+              | (`Send_now | `Sending) ->
                 [`Green], "now"
               | `Frozen ->
                 [`Red], "frozen"
+              | `Delivered ->
+                [`Green], "delivered"
             )
           in
           let next_hop =

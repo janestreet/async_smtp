@@ -65,7 +65,7 @@ let match_header conds =
   let conds =
     List.fold conds
       ~init:Field_name.Map.empty
-      ~f:fun acc {Config.Header_cond.name; if_} ->
+      ~f:(fun acc {Config.Header_cond.name; if_} ->
         let cond ~name:other ~value:_ =
           Field_name.equal name other
         in
@@ -76,11 +76,11 @@ let match_header conds =
             let re = Re2.Regex.escape s |> Re2.Regex.create_exn in
             fun ~name ~value -> cond ~name ~value && Re2.Regex.matches re value
         in
-        Map.add_multi acc ~key:name ~data:cond
+        Map.add_multi acc ~key:name ~data:cond)
   in
   fun ~name ~value ->
     match Map.find conds name with
-    | Some conds -> List.exists conds ~f:fun cond -> cond ~name ~value
+    | Some conds -> List.exists conds ~f:(fun cond -> cond ~name ~value)
     | None       -> false
 ;;
 
@@ -88,7 +88,7 @@ let match_listed_header conds =
   let conds =
     List.fold conds
       ~init:Field_name.Map.empty
-      ~f:fun acc {Config.Listed_header_cond.name; if_; remove_duplicates} ->
+      ~f:(fun acc {Config.Listed_header_cond.name; if_; remove_duplicates} ->
         let cond ~name:other ~value:_ =
           Field_name.equal name other
         in
@@ -99,19 +99,19 @@ let match_listed_header conds =
             let re = Re2.Regex.escape s |> Re2.Regex.create_exn in
             fun ~name ~value -> cond ~name ~value && Re2.Regex.matches re value
         in
-        Map.add_multi acc ~key:name ~data:(cond, remove_duplicates)
+        Map.add_multi acc ~key:name ~data:(cond, remove_duplicates))
   in
   fun ~name ~value ->
     match Map.find conds name with
     | None       -> None
     | Some conds ->
-      List.find_map conds ~f:fun (cond, remove_duplicates) ->
-        if cond ~name ~value then Some remove_duplicates else None
+      List.find_map conds ~f:(fun (cond, remove_duplicates) ->
+        if cond ~name ~value then Some remove_duplicates else None)
 ;;
 
 let strip_whitespace_headers =
-  Envelope.modify_headers ~f:(List.map ~f:fun (k,v) ->
-    (k, String.strip v))
+  Envelope.modify_headers ~f:(List.map ~f:(fun (k,v) ->
+    (k, String.strip v)))
 ;;
 
 let normalize_whitespace s =
@@ -136,8 +136,8 @@ let normalize_whitespace_headers cond =
 
 let filter_headers cond =
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.filter ~f:fun (name, value) ->
-    not (cond ~name ~value))
+  Envelope.modify_headers ~f:(List.filter ~f:(fun (name, value) ->
+    not (cond ~name ~value)))
 ;;
 
 let hash_headers cond =
@@ -148,14 +148,14 @@ let hash_headers cond =
     |> sprintf "[hidden : sha256 = %s]"
   in
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.map ~f:fun (name, value) ->
-      name, if cond ~name ~value then hash value else value)
+  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
+      name, if cond ~name ~value then hash value else value))
 ;;
 
 let mask_headers cond =
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.map ~f:fun (name, value) ->
-    name, if cond ~name ~value then "XXX" else value)
+  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
+    name, if cond ~name ~value then "XXX" else value))
 ;;
 
 let sort_emails_in_header pattern =
@@ -167,7 +167,7 @@ let sort_emails_in_header pattern =
          else Fn.id)
      |> List.map ~f:Email_address.to_string)
   in
-  Envelope.modify_headers ~f:(List.map ~f:fun (name, value) ->
+  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
     let value =
       match match_listed_header pattern ~name ~value with
       | None                   -> value
@@ -182,7 +182,7 @@ let sort_emails_in_header pattern =
         | Ok emails ->
           f ~remove_duplicates emails |> String.concat ~sep:", "
     in
-    name, value)
+    name, value))
 ;;
 
 let sort_words_in_header pattern =
@@ -196,13 +196,13 @@ let sort_words_in_header pattern =
            else Fn.id)
        |> String.concat ~sep:" ")
   in
-  Envelope.modify_headers ~f:(List.map ~f:fun (name, value) ->
+  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
     let value =
       match match_listed_header pattern ~name ~value with
       | None       -> value
       | Some remove_duplicates -> f ~remove_duplicates value
     in
-    name, value)
+    name, value))
 ;;
 
 let sort_headers =

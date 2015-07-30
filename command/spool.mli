@@ -21,13 +21,13 @@ val set_max_send_jobs
   -> unit Deferred.t
 
 val freeze
-  : msgid:Smtp_spool.Spooled_message_id.t
+  : msgids:Smtp_spool.Spooled_message_id.t list
   -> Rpc.Connection.t
   -> unit Deferred.t
 
 val send_now
   : ?retry_intervals:Time.Span.t list
-  -> msgid:Smtp_spool.Spooled_message_id.t
+  -> msgids:Smtp_spool.Spooled_message_id.t list
   -> Rpc.Connection.t
   -> unit Deferred.t
 

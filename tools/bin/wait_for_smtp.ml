@@ -4,50 +4,26 @@ open Async_smtp.Std
 
 module Reply = Smtp_reply
 
-let check_connection reader writer =
-  let send_one_cmd cmd =
-    Writer.write_line writer (Smtp_command.to_string cmd);
-    Writer.flushed writer
-  in
-  let receive_one_cmd () =
-    Reader.read_line reader
-    >>| function
-    | `Eof -> Error (Error.of_string "Got 'Eof' on connection")
-    | `Ok resp ->
-      let r = Reply.of_string resp in
-      if Reply.is_ok r then Ok r
-      else Error (Error.of_string (sprintf !"Failed to send message: %{Reply}" r))
-  in
-  let send_and_receive_one_cmd cmd =
-    send_one_cmd cmd >>= fun () -> receive_one_cmd ()
-  in
-  receive_one_cmd ()
-  >>=? fun _ ->
-  send_and_receive_one_cmd (Smtp_command.Helo (Unix.gethostname ()))
-  >>=? fun _ ->
-  send_and_receive_one_cmd Smtp_command.Quit
-  >>|? fun _ -> ()
+let check_handshake ~smtp_config ~dest () =
+  Deferred.Or_error.try_with_join (fun () ->
+      Smtp_client.Tcp.with_ ~config:smtp_config dest ~f:fun _client ->
+        Deferred.Or_error.ok_unit
+    )
 
-let check ~host ~port ~handshake =
-  Monitor.try_with (fun () ->
-      let destination = Tcp.to_host_and_port host port in
+let check_no_handshake ~dest () =
+  Deferred.Or_error.try_with_join (fun () ->
+      let destination = Async_smtp_tools.Util.Host_and_port.inet_address dest in
       Tcp.with_connection destination
-        (fun _socket reader writer ->
-           if handshake then
-             check_connection reader writer
-           else
-             Deferred.Or_error.ok_unit
+        (fun _socket _reader _writer ->
+           Deferred.Or_error.ok_unit
     ))
-  >>| function
-  | Ok ok -> ok
-  | Error exn -> Or_error.of_exn exn
 
-let rec main ~host ~port ~sleep ~trys ~handshake () =
+let rec loop ~sleep ~trys ~check =
   match trys with
   | 0 ->
     exit 1
   | _ ->
-    check ~host ~port ~handshake
+    check ()
     >>= function
     | Ok () ->
       printf "ok\n";
@@ -55,19 +31,25 @@ let rec main ~host ~port ~sleep ~trys ~handshake () =
     | Error _err ->
       Clock.after sleep
       >>= fun () ->
-      main ~host ~port ~sleep ~trys:(trys - 1) ~handshake ()
+      loop ~sleep ~trys:(trys - 1) ~check
+
+let main ~smtp_config ~dest ~sleep ~trys ~handshake () =
+  let check =
+    if handshake then
+      check_handshake ~smtp_config ~dest
+    else
+      check_no_handshake ~dest
+  in
+  loop ~sleep ~trys ~check
 
 let command =
   Command.async
     ~summary:("Repeatedly attempt to connect to an smtp server until handshake succeeds.")
     Command.Spec.(
       empty
-      ++ step (fun m host -> m ~host)
-      +> flag "host" (optional_with_default "localhost" string)
-        ~doc:"HOST target host to wait for (default localhost)"
-      ++ step (fun m port -> m ~port)
-      +> flag "port" (optional_with_default 25 int)
-        ~doc:"PORT target port to wait for (default localhost)"
+      ++ Async_smtp_tools.Util.Smtp_client_config.arg_spec ()
+      ++ step (fun m dest -> m ~dest)
+      +> anon ("HOST[:PORT]" %: Async_smtp_tools.Util.Host_and_port.arg_type_with_port 25)
       ++ step (fun m sleep -> m ~sleep)
       +> flag "sleep" (optional_with_default (sec 0.1) time_span)
         ~doc:"SLEEP how long to wait before retrying, for local testing small

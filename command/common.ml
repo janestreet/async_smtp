@@ -13,7 +13,7 @@ module Command : sig
   val config_or_rpc
     :  summary:string
     -> ?readme:(unit -> string)
-    -> ('main, ([`Config of Smtp_config.t | `Rpc of Rpc.Connection.t] -> unit Deferred.t)) Spec.t
+    -> ('main, ([`Config of Smtp_server.Config.t | `Rpc of Rpc.Connection.t] -> unit Deferred.t)) Spec.t
     -> 'main
     -> t
 end = struct
@@ -37,14 +37,14 @@ end = struct
           Option.map config_path
             ~f:(fun c ->
                 Thread_safe.block_on_async_exn
-                  (fun () -> Smtp_config.load_exn c))
+                  (fun () -> Smtp_server.Config.load_exn c))
         in
         let rpc_server =
           match rpc_server, config with
-          | Some v, (_ : Smtp_config.t option) -> v
+          | Some v, (_ : Smtp_server.Config.t option) -> v
           | None, None -> failwith "at least one of -rpc-server or -config required"
           | None, Some config ->
-            let port = Smtp_config.rpc_port config in
+            let port = Smtp_server.Config.rpc_port config in
             Host_and_port.create ~host:"localhost" ~port
         in
         m ~rpc_server ~config)
@@ -74,8 +74,8 @@ end = struct
             | Some config ->
               m (`Config config)
             | None ->
-              rpc_client_command0 ~host_and_port:rpc_server ~f:fun client ->
-                m (`Rpc client)
+              rpc_client_command0 ~host_and_port:rpc_server ~f:(fun client ->
+                m (`Rpc client))
           )
         ++ rpc_server_or_config_flag ()
       )

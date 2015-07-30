@@ -1,6 +1,38 @@
 open Core.Std
 open Async.Std
 
+module Monitor = struct
+  let errors () =
+    let seqnum = ref 0 in
+    let error_stream = Bus.create ~can_subscribe_after_start:true in
+    Bus.start error_stream;
+    (* Hearbeats *)
+    Clock.every (sec 10.) (fun () ->
+      Bus.write error_stream (!seqnum, None));
+    (* Actual errors *)
+    let send_errors = Log.Output.create (fun messages ->
+      Queue.iter messages ~f:(fun message ->
+        match Log.Message.level message with
+        | Some `Error ->
+          let error =
+            Log.Message.message message
+            |> Error.of_string
+          in
+          incr seqnum;
+          Bus.write error_stream (!seqnum, Some error)
+        | _ -> ());
+      Deferred.unit)
+    in
+    Log.Global.set_output (send_errors :: Log.Global.get_output ());
+    Rpc.Pipe_rpc.implement Rpc_intf.Monitor.errors
+      (fun _ () ~aborted ->
+         Log.Global.debug "received error stream subscription";
+         let pipe = Bus.reader_exn error_stream in
+         (aborted >>> fun () -> Pipe.close_read pipe);
+         return (Ok pipe))
+  ;;
+end
+
 module Spool = struct
   let status () =
     Rpc.Rpc.implement Rpc_intf.Spool.status
@@ -9,13 +41,13 @@ module Spool = struct
 
   let freeze () =
     Rpc.Rpc.implement Rpc_intf.Spool.freeze
-      (fun (_config, spool) msgid -> Spool.freeze spool msgid)
+      (fun (_config, spool) msgids -> Spool.freeze spool msgids)
   ;;
 
   let send_now () =
     Rpc.Rpc.implement Rpc_intf.Spool.send_now
-      (fun (_config, spool) (msgid, new_retry_intervals) ->
-         Spool.send_now ~new_retry_intervals spool msgid)
+      (fun (_config, spool) (msgids, new_retry_intervals) ->
+         Spool.send_now ~new_retry_intervals spool msgids)
   ;;
 
   let events () =

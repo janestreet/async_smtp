@@ -5,7 +5,13 @@ open Types
 module Id : Identifiable
 
 module Status : sig
-  type t = [ `Waiting | `Sending | `Frozen | `Delivered ] with sexp, bin_io
+  type t =
+    [ `Send_now
+    | `Send_at of Time.t
+    | `Sending
+    | `Frozen
+    | `Delivered
+    ] with sexp, bin_io
 end
 
 (* Spooled_message.t does not contain the full envelope. The envelope is loaded
@@ -41,18 +47,7 @@ val load_with_envelope
 
 (* It is an error to call [send] on a message that is currently being sent or
    for which the call previously returned [`Done]. *)
-val send
-  :  t
-  -> [ `Done
-     | `Retry_at of Time.t
-     | `Give_up
-     ] Or_error.t Deferred.t
-
-val next_action
-  :  t
-  -> [ `Send_at of Time.t
-     | `Send_now
-     | `Frozen ]
+val send : t -> config:Client_config.t -> unit Or_error.t Deferred.t
 
 val freeze : t -> unit Or_error.t Deferred.t
 

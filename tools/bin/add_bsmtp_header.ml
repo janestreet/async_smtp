@@ -10,13 +10,11 @@ let main ~name ~value () =
   let pipe = Smtp_server.read_bsmtp stdin in
   let pipe = Pipe.map pipe ~f:Or_error.ok_exn in
   let pipe = Pipe.map pipe ~f:(Envelope.add_header ~name ~value) in
-  Smtp_client.write stdout ~helo:"testing" pipe |> Deferred.Or_error.ok_exn
-  >>= fun () ->
-  Writer.flushed stdout
+  Smtp_client.Bsmtp.write stdout pipe
 ;;
 
 let command =
-  Command.async
+  Command.async_or_error
     ~summary:("Add a header to each message in a bsmtp file")
     Command.Spec.(
       empty

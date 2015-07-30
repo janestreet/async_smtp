@@ -57,7 +57,7 @@ type t
     that for the purposes of locking, the spool directory assumed to NOT be on an NFS file
     system. *)
 val create
-  :  config : Config.t
+  :  config:Server_config.t
   -> unit
   -> t Deferred.Or_error.t
 
@@ -85,12 +85,15 @@ val kill_and_flush
     call only [n] will be allowed to run in parallel. *)
 val set_max_concurrent_jobs : t -> int -> unit
 
-val freeze : t -> Spooled_message_id.t -> unit Deferred.Or_error.t
+val freeze
+  :  t
+  -> Spooled_message_id.t list
+  -> unit Deferred.Or_error.t
 
 val send_now
   :  ?new_retry_intervals : Time.Span.t list
   -> t
-  -> Spooled_message_id.t
+  -> Spooled_message_id.t list
   -> unit Deferred.Or_error.t
 
 module Spooled_message_info : sig
@@ -100,7 +103,13 @@ module Spooled_message_info : sig
   val spool_date         : t -> Time.t
   val last_relay_attempt : t -> (Time.t * Error.t) option
   val parent_id          : t -> Envelope.Id.t
-  val status             : t -> [ `Waiting | `Sending | `Frozen | `Delivered ]
+  val status
+    : t
+    -> [ `Send_now
+       | `Send_at of Time.t
+       | `Sending
+       | `Frozen
+       | `Delivered ]
 
   (* These will not be populated for information obtained using [status].  Use
      [status_from_disk] if you want to see envelopes. Part of the reason is that
@@ -129,8 +138,8 @@ val status : t -> Status.t
 
     You should not try to work out the total number of unsent messages by counting the
     messages in the status. You should use the [count_from_disk] function instead. *)
-val status_from_disk : Config.t -> Status.t Deferred.Or_error.t
-val count_from_disk : Config.t -> int Or_error.t Deferred.t
+val status_from_disk : Server_config.t -> Status.t Deferred.Or_error.t
+val count_from_disk : Server_config.t -> int Or_error.t Deferred.t
 
 module Event : sig
   type t = Time.t *

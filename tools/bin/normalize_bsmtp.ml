@@ -24,9 +24,8 @@ let process ~config input output =
     |> Pipe.map ~f:(T.transform_without_sort config)
     |> T.sort config
   in
-  Smtp_client.write output ~helo:"testing" pipe |> Deferred.Or_error.ok_exn
-  >>= fun () ->
-  Writer.flushed output
+  Smtp_client.Bsmtp.write output pipe
+  >>| Or_error.ok_exn
 ;;
 
 let run_pipe ?config () =
@@ -37,11 +36,11 @@ let run_pipe ?config () =
   process ~config input output
 
 let run_file ~config input output =
-  Reader.with_file ~exclusive:true input ~f:fun input ->
+  Reader.with_file ~exclusive:true input ~f:(fun input ->
     Unix.mkdir ~p:() (Filename.dirname output)
     >>= fun () ->
-    Writer.with_file ~exclusive:true output ~f:fun output ->
-      process ~config input output
+    Writer.with_file ~exclusive:true output ~f:(fun output ->
+      process ~config input output))
 
 let rec run_recursive ~config input output =
   Sys.is_directory_exn input
@@ -49,8 +48,8 @@ let rec run_recursive ~config input output =
   | false -> run_file ~config input output
   | true ->
     Sys.ls_dir input
-    >>= Deferred.List.iter ~f:fun name ->
-      run_recursive ~config (input ^/ name) (output ^/ name)
+    >>= Deferred.List.iter ~f:(fun name ->
+      run_recursive ~config (input ^/ name) (output ^/ name))
 
 let run_recursive ?config input output () =
   Config.load config

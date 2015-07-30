@@ -43,8 +43,13 @@ module Locks = struct
 end
 
 module Status = struct
-  type t = [ `Waiting | `Sending | `Frozen | `Delivered ]
-  with sexp, bin_io, compare
+  type t =
+    [ `Send_now
+    | `Send_at of Time.t
+    | `Sending
+    | `Frozen
+    | `Delivered
+    ] with sexp, bin_io, compare
 end
 
 (* A value of type t should only be modified via with_file below. This
@@ -56,8 +61,14 @@ type t =
   ; parent_id                    : Envelope.Id.t
   ; spool_date                   : Time.t
   ; next_hop_choices             : Host_and_port.t list
+  (* The head of this list is the time at which we should attempt a delivery
+     after the next time a delivery fails. *)
   ; mutable retry_intervals      : Time.Span.t list
   ; mutable remaining_recipients : Email_address.t list
+  (* Currently not used, but saved to disk to aid in triaging frozen messages and failed
+     deliveries. Addresses on this list will not be included in remaining_recipients, and
+     would otherwise be lost to the ether. *)
+  ; mutable failed_recipients    : Email_address.t list
   ; mutable relay_attempts       : (Time.t * Error.t) list
   ; mutable status               : Status.t
   } with fields, sexp, bin_io
@@ -69,9 +80,14 @@ let file t =
   match t.status with
   | `Frozen ->
     Some (Spool_directory.frozen_dir t.spool_dir ^/ Id.to_string t.id)
-  | `Waiting | `Sending ->
+  | `Send_now | `Send_at _ | `Sending ->
     Some (Spool_directory.active_dir t.spool_dir ^/ Id.to_string t.id)
   | `Delivered -> None
+
+let status t =
+  match t.status with
+  | `Send_at time when Time.(time > now ()) -> `Send_now
+  | status -> status
 
 module On_disk = struct
   type meta = t with sexp, bin_io
@@ -133,11 +149,12 @@ let create spool_dir envelope_with_next_hop ~original_msg =
       ~spool_dir
       ~spool_date:(Time.now ())
       ~remaining_recipients
+      ~failed_recipients:[]
       ~next_hop_choices
       ~retry_intervals
       ~relay_attempts:[]
       ~parent_id
-      ~status:`Waiting
+      ~status:`Send_now
       ~id
   in
   let on_disk = On_disk.create ~meta:t ~envelope in
@@ -158,29 +175,9 @@ let load_with_envelope path =
 let last_relay_attempt t =
   List.hd t.relay_attempts
 
-let next_action t =
-  match t.status with
-  | `Frozen | `Delivered -> `Frozen
-  | `Waiting | `Sending ->
-    match last_relay_attempt t with
-    | None -> `Send_now
-    | Some (last_relay_time, _error) ->
-      match t.retry_intervals with
-      | [] ->
-        Log.Global.error
-          ("Spooled_message.next_action: message contains no retry intervals, but its \
-            status is not frozen: %s")
-          (Id.to_string t.id);
-        `Frozen
-      | retry_interval :: _ ->
-        let send_at = Time.add last_relay_time retry_interval in
-        (* The < case may happen after unfreezing. *)
-        if Time.(send_at < now ()) then `Send_now else `Send_at send_at
-;;
-
 let with_file t
-    (f : Envelope.t -> ([`Sync | `Unlink] * 'a) Or_error.t Deferred.t)
-    : 'a Or_error.t Deferred.t
+    (f : Envelope.t -> [`Sync | `Unlink] Or_error.t Deferred.t)
+    : unit Or_error.t Deferred.t
     =
   Locks.lock t.id
   >>= fun () ->
@@ -217,7 +214,7 @@ let with_file t
     Common.rename ~src:from_file ~dst:from_file_bak
     >>=? fun () ->
     f on_disk.envelope
-    >>=? fun (action, result) ->
+    >>=? fun action ->
     begin match action with
     | `Unlink ->
       Common.unlink from_file_bak
@@ -228,7 +225,7 @@ let with_file t
       Common.unlink from_file_bak
     end
     >>=? fun () ->
-    return (Ok result)
+    return (Ok ())
   end
   >>= fun result ->
   Locks.release t.id;
@@ -238,21 +235,21 @@ let freeze t =
   with_file t (fun _envelope ->
     Log.Global.info !"freezing %{Id}" (id t);
     t.status <- `Frozen;
-    return (Ok (`Sync, ())))
+    return (Ok `Sync))
 ;;
 
 let unfreeze ~new_retry_intervals t =
   with_file t (fun _envelope ->
     Log.Global.info !"unfreezing %{Id}" (id t);
-    t.status <- `Waiting;
+    t.status <- `Send_now;
     t.retry_intervals <- new_retry_intervals @ t.retry_intervals;
-    return (Ok (`Sync, ())))
+    return (Ok `Sync))
 ;;
 
 (* We are being conservative here for simplicity - if we get a permanent error
    from one hop, we assume that we would get the same error from the remaining
    hops. *)
-let send_to_hops t envelope =
+let send_to_hops t ~config envelope =
   let rec send_to_hops = function
     | [] ->
       Log.Global.info !"all next hops failed for %{Envelope.Id}"
@@ -273,57 +270,71 @@ let send_to_hops t envelope =
       Log.Global.debug "trying to send message %s to %s"
         t.id (Host_and_port.to_string hop);
       let envelope = Envelope.set envelope ~recipients:t.remaining_recipients () in
-      Client.send hop envelope
+      Client.Tcp.with_ ~config hop ~f:(fun client ->
+          Client.send_envelope client envelope)
       >>= function
-      | Ok (Ok ()) -> return `Done
       | Error e ->
         error e;
         send_to_hops untried_next_hops
-      | Ok (Error ((`Bad_sender r | `Bad_data r | `Other r) as e)) ->
-        error (Client.Smtp_error.to_error e);
-        if Reply.is_permanent_error r then fail_permanently ()
-        else send_to_hops untried_next_hops
-      | Ok (Error ((`Bad_recipients bad_recipients) as e)) ->
-        error (Client.Smtp_error.to_error e);
-        let recipients_to_retry =
-          List.filter_map bad_recipients ~f:(fun (recipient, reply) ->
-            if Reply.is_permanent_error reply then None else Some recipient)
-        in
-        t.remaining_recipients <- List.filter t.remaining_recipients ~f:(fun r ->
-          List.mem recipients_to_retry (Email_address.to_string r));
-        if List.is_empty t.remaining_recipients
-        then fail_permanently ()
-        else send_to_hops untried_next_hops
+      | Ok envelope_status ->
+        match Client.Envelope_status.ok_or_error ~allow_rejected_recipients:false envelope_status with
+        | Ok _msg_id ->
+          return `Done
+        | Error e ->
+          error e;
+          match envelope_status with
+          | Ok (_ (* envelope_id *), rejected_recipients)
+          | Error (`No_recipients rejected_recipients) ->
+            let permanently_failed_recipients, temporarily_failed_recipients =
+              List.partition_map rejected_recipients ~f:fun (recipient, reject) ->
+                if Reply.is_permanent_error reject then `Fst recipient
+                else `Snd recipient
+            in
+            t.remaining_recipients <- temporarily_failed_recipients;
+            t.failed_recipients <- t.failed_recipients @ permanently_failed_recipients;
+            if List.is_empty t.remaining_recipients
+            then fail_permanently ()
+            else send_to_hops untried_next_hops
+          | Error (`Rejected_sender r
+                  | `Rejected_sender_and_recipients (r,_)
+                  | `Rejected_body (r,_)) ->
+            if Reply.is_permanent_error r then fail_permanently ()
+            else send_to_hops untried_next_hops
   in
   send_to_hops t.next_hop_choices
 
-let do_send t =
+let do_send t ~config =
   with_file t (fun envelope ->
     t.status <- `Sending;
-    send_to_hops t envelope
+    send_to_hops t ~config envelope
     >>| function
     | `Done ->
       t.status <- `Delivered;
-      Ok (`Unlink, `Done)
+      Ok `Unlink
     | (`Fail_permanently | `Try_later) as fail ->
       match fail, t.retry_intervals with
       | `Fail_permanently, _ | _, [] ->
         t.status <- `Frozen;
-        Ok (`Sync, `Give_up)
+        Ok `Sync
       | `Try_later, r :: rs ->
-        t.status <- `Waiting;
+        t.status <- `Send_at (Time.add (Time.now ()) r);
         t.retry_intervals <- rs;
-        Ok (`Sync, `Retry_at (Time.add (Time.now ()) r)))
+        Ok `Sync)
 ;;
 
-let send t =
+let send t ~config =
   match t.status with
-  | `Waiting -> do_send t
-  | `Frozen -> return (Ok `Give_up)
+  | `Send_now | `Send_at _ -> do_send t ~config
+  | `Frozen ->
+    return (Or_error.error_string
+              "Spooled_message.send: message is frozen")
   | `Sending ->
     return (Or_error.error_string
               "Spooled_message.send: message is already being sent")
   | `Delivered ->
+    (* This is technically not an error, we could just as well return
+       `Done. However, this probably signifies a flaw in the logic of the
+       caller. *)
     return (Or_error.error_string
               "Spooled_message.send: message was already sent")
 

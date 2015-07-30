@@ -40,6 +40,11 @@ let list (type a) m
   let module M = (val m : Binable.S with type t = a) in
   (module struct type t = M.t list with bin_io end)
 
+let option (type a) m
+  : (module Binable.S with type t = a option) =
+  let module M = (val m : Binable.S with type t = a) in
+  (module struct type t = M.t option with bin_io end)
+
 let pair (type a) (type b) (m1, m2)
   : (module Binable.S with type t = a * b) =
   let module M1 = (val m1 : Binable.S with type t = a) in
@@ -69,15 +74,23 @@ let event        = binable (module Spool.Event)
 let gc_stat      = binable (module Gc.Stat)
 let pid          = binable (module Pid)
 
+module Monitor = struct
+  (* Including a sequence number. We broadcast a heartbeat message (with error =
+     None) every 10 seconds..  *)
+  let errors = pipe_rpc ~name:"errors" unit (pair (int, option error)) error
+end
+
 module Spool = struct
   let prefix = "spool"
 
   let status     = rpc ~name:(prefix ^- "status") unit spool_status
-  let freeze     = rpc ~name:(prefix ^- "freeze") id (or_error unit)
+
+  let freeze     = rpc ~name:(prefix ^- "freeze") (list id) (or_error unit)
+                     ~version:1
 
   let send_now   = rpc ~name:(prefix ^- "send-now")
-                        (pair (id, (list time_span)))
-                        (or_error unit)
+                     (pair (list id, list time_span))
+                     (or_error unit)
 
   let events     = pipe_rpc ~name:(prefix ^- "events") unit event error
 

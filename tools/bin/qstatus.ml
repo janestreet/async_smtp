@@ -1,3 +1,3 @@
 open Core.Std
 
-Command.run Async_smtp_command.Spool.command
+let () = Command.run Async_smtp_command.Spool.command

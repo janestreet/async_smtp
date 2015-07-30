@@ -2,7 +2,7 @@ OASISFormat:      0.3
 OCamlVersion:     >= 4.00.0
 FindlibVersion:   >= 1.3.2
 Name:             async_smtp
-Version:          112.35.00
+Version:          113.00.00
 Synopsis:         SMTP client and server
 Authors:          Jane Street Group, LLC <opensource@janestreet.com>
 Copyrights:       (C) 2005-2013 Jane Street Group LLC <opensource@janestreet.com>
@@ -21,18 +21,20 @@ Library async_smtp
   Modules:            Adjustable_throttle,
                       Base64,
                       Client,
+                      Client_config,
+                      Client_raw,
+                      Client_server_unit_tests,
+                      Client_simple,
                       Comm,
-                      Command_lexer,
                       Common,
                       Config,
-                      Email_address_lexer,
                       Fake_spool,
                       Rpc_impl,
                       Rpc_intf,
                       Rpc_server,
-                      Sendmail,
                       Server_callbacks,
                       Server,
+                      Server_config,
                       Spool_directory,
                       Spooled_message_internal,
                       Spool,
@@ -40,6 +42,8 @@ Library async_smtp
                       Types
   BuildDepends:       async,
                       async_extended,
+                      async_shell,
+                      async_ssl,
                       core,
                       core.syntax,
                       email_message,
@@ -52,6 +56,8 @@ Library async_smtp
                       threads
   XMETARequires:      async,
                       async_extended,
+                      async_shell,
+                      async_ssl,
                       core,
                       email_message,
                       pa_ounit,
@@ -86,7 +92,8 @@ Library async_smtp_tools
                       Hex,
                       Std,
                       Stress_test,
-                      Transform_email_stream
+                      Transform_email_stream,
+                      Util
   BuildDepends:       async,
                       async_smtp,
                       async_smtp.command,

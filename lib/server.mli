@@ -6,9 +6,9 @@ module Callbacks = Server_callbacks
 
 type t
 
-val start : config:Config.t -> (module Server_callbacks.S) -> t Deferred.Or_error.t
+val start : config:Server_config.t -> (module Server_callbacks.S) -> t Deferred.Or_error.t
 
-val config : t -> Config.t
+val config : t -> Server_config.t
 
 val close  : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
 

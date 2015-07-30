@@ -2,41 +2,81 @@ open Core.Std
 open Async.Std
 open Types
 
-module Smtp_error : sig
-  type t =
-  [ `Bad_sender of Reply.t
-  | `Bad_data of Reply.t
-  (* According to the standard, if some recipients fail, the message is still
-     accepted and forwarded to the remaining recipients. *)
-  | `Bad_recipients of (string * Reply.t) list
-  | `Other of Reply.t
-  ] with sexp
+(** SMTP client API. Includes TLS support: http://tools.ietf.org/html/rfc3207
 
-  val to_string : t -> string
+    Client.t should only be used in the callback of [Tcp.with_]. The behaviour outside of
+    this functions is undefined, though its safe to assume that nothing good will come of
+    such misuse.
 
-  val to_error : t -> Error.t
+    Several of the with functions also change the underlying Readers/Writers in a
+    non-revertable way. In general if a reader/writer are passed to a function, ownership
+    is also transferred; similarly if an smtp client is passed to a with* function it
+    should not be used thereafter.
+
+    This client logs aggressively; while this produces a lot of garbage it is extremely
+    helpful when debugging issues down the line. The client includes a [Log.t] and
+    [session_id] that can be set when creating the client.  The [session_id] is extended
+    with additional information about the client state.
+
+    See [Client_raw] if you need a lower-level interface.
+*)
+
+module Peer_info : sig
+  type t
+
+  val greeting : t -> string option
+  val hello    : t -> [ `Simple of string | `Extended of string * Extension.t list ] option
+
+  val supports_extension : t -> Extension.t -> bool
 end
 
-module Smtp_result : sig
-  type ('a, 'err) t = ('a, 'err) Result.t Or_error.t Deferred.t
+type t = Client_raw.t
 
-  val ok_exn : (unit, Smtp_error.t) t -> unit Deferred.t
+val is_using_tls : t -> bool
+
+module Envelope_status : sig
+  type envelope_id = string
+  type rejected_recipients = (Email_address.t * Reply.t) list
+
+  type ok = envelope_id * rejected_recipients
+
+  type err =
+    [ `Rejected_sender of Reply.t
+    | `No_recipients of rejected_recipients
+    | `Rejected_sender_and_recipients of Reply.t * rejected_recipients
+    | `Rejected_body of Reply.t * rejected_recipients
+    ] with sexp_of
+
+  type t = (ok, err) Result.t with sexp_of
+
+  val to_string   : t -> string
+  val ok_or_error : allow_rejected_recipients:bool -> t -> string Or_error.t
+  val ok_exn      : allow_rejected_recipients:bool -> t -> string
 end
 
-val write
-  :  Writer.t
-  -> ?helo:string
-  -> Envelope.t Pipe.Reader.t
-  -> unit Or_error.t Deferred.t
-
-val send
-  :  Host_and_port.t
+(** Perform all required commands to send an SMTP evelope *)
+val send_envelope
+  :  t
   -> Envelope.t
-  -> (unit, Smtp_error.t) Smtp_result.t
+  -> Envelope_status.t Deferred.Or_error.t
 
-(* Read and forward raw SMTP commands. Send one email only. Send a helo if the
-   input does not already contain one. *)
-val send_raw
-  :  Host_and_port.t
-  -> Reader.t
-  -> ([ `Ok_summary of string | `Eof ], Smtp_error.t) Smtp_result.t
+(** Standard SMTP over tcp *)
+module Tcp : sig
+  val with_
+    : (?log:Log.t
+       -> ?session_id:string
+       -> ?config:Client_config.t
+       -> Host_and_port.t
+       -> f:(t -> 'a Deferred.Or_error.t)
+       -> 'a Deferred.Or_error.t
+      ) Tcp.with_connect_options
+end
+
+(** BSMTP writing *)
+module Bsmtp : sig
+  val write
+    :  ?skip_prelude_and_prologue:bool
+    -> Writer.t
+    -> Envelope.t Pipe.Reader.t
+    -> unit Deferred.Or_error.t
+end

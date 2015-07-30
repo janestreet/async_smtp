@@ -1,203 +1,36 @@
 open Core.Std
 open Async.Std
+open Async_ssl.Std
 open Email_message.Std
 
 module Headers = Email_headers
 
-module Email_address = struct
-  module Domain = Mimestring.Case_insensitive
-
-  (* [prefix = None] means no brackets. *)
-  type t =
-    { prefix : string option
-    ; local_part : string
-    ; domain : Domain.t option
-    }
-  with fields, sexp, bin_io, compare
-
-  (* Comma-separated list:
-     "A, B" <ab@x.com>, "C, D" <cd@x.com>
-  *)
-  let list_of_string_exn ?default_domain s =
-    let module L = Email_address_lexer in
-    L.parse_emails (Lexing.from_string s)
-    |> List.map ~f:(fun { L. local_part; domain; prefix } ->
-      let domain = Option.first_some domain default_domain in
-      { local_part; domain; prefix })
-
-  let list_of_string ?default_domain s =
-    Or_error.try_with (fun () -> list_of_string_exn ?default_domain s)
-
-  let of_string ?default_domain s =
-    let open Or_error.Monad_infix in
-    list_of_string ?default_domain s
-    >>= function
-    | [result] -> Ok result
-    | _ -> Or_error.error_string ("Expected single email address: " ^ s)
-
-  let of_string_exn ?default_domain s =
-    Or_error.ok_exn (of_string ?default_domain s)
-
-  let compose ~prefix ~address_part =
-    match prefix with
-    | None -> address_part
-    | Some prefix -> sprintf "%s<%s>" prefix address_part
-
-  let to_string t =
-    let address_part =
-      match t.domain with
-      | None -> t.local_part
-      | Some domain -> sprintf "%s@%s" t.local_part domain
-    in
-    compose ~prefix:t.prefix ~address_part
-
-  let list_to_header_value ts =
-    String.concat ~sep:",\n\t" (List.map ts ~f:to_string)
-
-  let address_part ?(brackets = false) ?(lowercase_domain = false) t =
-    let prefix = if brackets then Some "" else None in
-    let domain =
-      if not lowercase_domain
-      then t.domain
-      else Option.map t.domain ~f:String.lowercase
-    in
-    { t with prefix; domain }
-
-  let address_part_string ?brackets ?lowercase_domain t =
-    to_string (address_part ?brackets ?lowercase_domain t)
-
-  let set_address_part t address_part =
-    of_string (compose ~prefix:t.prefix ~address_part)
-
-  let set_prefix t prefix =
-    { t with prefix }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn "local")
-      ~expect: { local_part = "local"
-               ; domain = None
-               ; prefix = None }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn "<local>")
-      ~expect: { local_part = "local"
-               ; domain = None
-               ; prefix = Some "" }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn " local@janestreet.com ")
-      ~expect: { local_part = "local"
-               ; domain = Some "janestreet.com"
-               ; prefix = None }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn " <local@janestreet.com> ")
-      ~expect: { local_part = "local"
-               ; domain = Some "janestreet.com"
-               ; prefix = Some "" }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn " John Doe <local> ")
-      ~expect: { local_part = "local"
-               ; domain = None
-               ; prefix = Some "John Doe " }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn " John Doe <local@janestreet.com> ")
-      ~expect: { local_part = "local"
-               ; domain = Some "janestreet.com"
-               ; prefix = Some "John Doe " }
-
-  TEST_UNIT =
-    <:test_result<t>>
-      (of_string_exn " \"Doe, John\" <local@janestreet.com> ")
-      ~expect:{ local_part = "local"
-              ; domain = Some "janestreet.com"
-              ; prefix = Some "\"Doe, John\" " }
-
-  TEST_UNIT =
-    <:test_result<t list>> (list_of_string_exn "") ~expect:[]
-
-  TEST_UNIT =
-    <:test_result<t list>> (list_of_string_exn "   ") ~expect:[]
-
-  TEST_UNIT =
-    <:test_result<t list>>
-      (list_of_string_exn " \"Doe, John\" <local@janestreet.com>,
-                       \n\t \"Doe, Johnny\" <local@janestreet.com> ")
-      ~expect:[ { local_part = "local"
-                ; domain = Some "janestreet.com"
-                ; prefix = Some "\"Doe, John\" " }
-              ; { local_part = "local"
-                ; domain = Some "janestreet.com"
-                ; prefix = Some "\"Doe, Johnny\" " }]
-
-  TEST_UNIT =
-    <:test_result<t list>>
-      (list_of_string_exn "x@y.com, \"a@b.com\" <\"mailto:a\"@b.com>")
-      ~expect:[ { local_part = "x"
-                ; domain = Some "y.com"
-                ; prefix = None }
-              ; { local_part = "\"mailto:a\""
-                ; domain = Some "b.com"
-                ; prefix = Some "\"a@b.com\" " } ]
-
-  let must_fail = function
-    | Error _ -> ()
-    | Ok ts ->
-      failwithf "Expected to fail, got %s"
-        (Sexp.to_string_hum (<:sexp_of<t list>> ts)) ()
-
-  TEST_UNIT =
-    must_fail (list_of_string "mailnull@janestreet.com (Cron Daemon)")
-
-  TEST_UNIT =
-     must_fail (list_of_string "a@b.com <a@b.com>")
-
-  TEST_UNIT =
-     must_fail (list_of_string "a@@b.com")
-
-  module T = struct
-    type nonrec t = t with sexp, bin_io, compare
-    let hash = Hashtbl.hash
-    let to_string = to_string
-    let of_string s = of_string s |> Or_error.ok_exn
-  end
-  include Hashable.Make(T)
-  include Comparable.Make(T)
-  include Sexpable.Of_stringable(T)
-end
+module Email_address = Email_address
 
 module Sender = struct
   open Or_error.Monad_infix
 
   type t =
-    | Null
-    | Email of Email_address.t
-  with sexp, bin_io, compare
+    [ `Null
+    | `Email of Email_address.t
+    ] with sexp, bin_io, compare
 
   let of_string ?default_domain s =
     match String.strip s with
-    | "<>" -> Ok Null
+    | "<>" -> Ok `Null
     | s ->
       Email_address.of_string ?default_domain s
       >>= fun email ->
-      Ok (Email email)
+      Ok (`Email email)
 
   let to_string = function
-    | Null -> "<>"
-    | Email email -> Email_address.to_string email
+    | `Null -> "<>"
+    | `Email email -> Email_address.to_string email
 
   let map t ~f =
     match t with
-    | Null -> Null
-    | Email email -> Email (f email)
+    | `Null -> `Null
+    | `Email email -> `Email (f email)
 
   module T = struct
     type nonrec t = t with sexp, bin_io, compare
@@ -206,8 +39,8 @@ module Sender = struct
     let of_string s = of_string s |> Or_error.ok_exn
 
     let hash = function
-      | Null -> Hashtbl.hash Null
-      | Email email -> Email_address.hash email
+      | `Null -> Hashtbl.hash `Null
+      | `Email email -> Email_address.hash email
   end
   include Hashable.Make(T)
   include Comparable.Make(T)
@@ -346,24 +179,24 @@ module Envelope = struct
 
   let add_header t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Headers.add headers ~name value)
+      Headers.add headers ~name ~value)
 
   let set_header t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Headers.set headers ~name value)
+      Headers.set headers ~name ~value)
 
   let add_header_at_bottom t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Headers.add_at_bottom headers ~name value)
+      Headers.add_at_bottom headers ~name ~value)
 
   let set_header_at_bottom t ~name ~value =
     modify_headers t ~f:(fun headers ->
-        Headers.set_at_bottom headers ~name value)
+        Headers.set_at_bottom headers ~name ~value)
 
   let filter_headers t ~f =
-    modify_headers t ~f:fun headers ->
-      List.filter headers ~f:fun (name, value) ->
-        f ~name ~value
+    modify_headers t ~f:(fun headers ->
+      List.filter headers ~f:(fun (name, value) ->
+        f ~name ~value))
 end
 
 module Envelope_with_next_hop = struct
@@ -409,37 +242,65 @@ module Session = struct
     ; remote : Host_and_port.t
     ; local : Host_and_port.t
     ; helo : string option
-    } with sexp, fields
+    ; tls : Ssl.Connection.t option
+    } with sexp_of, fields
 
-  let create ?id ~remote ~local ?helo () =
+  let create ?id ~remote ~local ?helo ?tls () =
     let id = match id with
       | Some id -> id
       | None -> Uuid.create () |> Uuid.to_string
     in
-    { id; remote; local; helo; }
+    { id; remote; local; helo; tls; }
+
+  let cleanup t =
+    match t.tls with
+    | None -> return (Ok ())
+    | Some tls ->
+      Ssl.Connection.close tls;
+      Ssl.Connection.closed tls
 end
 
 module Command = struct
-  include Comm
+  type t =
+    | Hello of string
+    | Extended_hello of string
+    | Sender of string
+    | Recipient of string
+    | Data
+    | Reset
+    | Quit
+    | Help
+    | Noop
+    | Start_tls
 
-  let commands = ["HELO";"MAIL";"FROM";"RCPT";"TO";"DATA";"QUIT";"HELP";"NOOP"]
-
-  let of_string_opt str =
-    Option.try_with (fun () ->
-      match Command_lexer.parse_command (Lexing.from_string str) with
-      | Helo s -> Helo (String.lstrip s)
-      | Sender s -> Sender (String.lstrip s)
-      | Recipient s -> Recipient (String.lstrip s)
-      | x -> x)
+  let of_string = function
+    | str when String.is_prefix str ~prefix:"HELO " ->
+      Hello (String.drop_prefix str 5 |> String.lstrip)
+    | str when String.is_prefix str ~prefix:"EHLO " ->
+      Extended_hello (String.drop_prefix str 5 |> String.lstrip)
+    | str when String.is_prefix str ~prefix:"MAIL FROM:" ->
+      Sender (String.drop_prefix str 10 |> String.lstrip)
+    | str when String.is_prefix str ~prefix:"RCPT TO:" ->
+      Recipient (String.drop_prefix str 8 |> String.lstrip)
+    | "DATA"     -> Data
+    | "RESET"    -> Reset
+    | "QUIT"     -> Quit
+    | "HELP"     -> Help
+    | "NOOP"     -> Noop
+    | "STARTTLS" -> Start_tls
+    | str        -> failwithf "Unrecognized command: %s" str ()
 
   let to_string = function
-    | Helo string -> "HELO " ^ string
+    | Hello string -> "HELO " ^ string
+    | Extended_hello string -> "EHLO " ^ string
     | Sender string -> "MAIL FROM: " ^ string
     | Recipient string -> "RCPT TO: " ^ string
     | Data -> "DATA"
+    | Reset -> "RESET"
     | Quit -> "QUIT"
     | Help -> "HELP"
     | Noop -> "NOOP"
+    | Start_tls -> "STARTTLS"
 end
 
 module Reply = struct
@@ -448,7 +309,7 @@ module Reply = struct
   type t =
     (* Ok *)
     | System_status_211 of string
-    | Help_214
+    | Help_214 of string list
     | Service_ready_220 of string
     | Closing_connection_221
     | Ok_completed_250 of string
@@ -479,79 +340,146 @@ module Reply = struct
 
   let my_name = Unix.gethostname ()
 
+  let to_string code =
+    let rec to_string_lines acc = function
+      | [] -> assert(false)
+      | [s] -> ((sprintf "%d %s" code s) :: acc) |> List.rev
+      | s::ss ->
+        to_string_lines ((sprintf "%d-%s" code s) :: acc) ss
+    in
+    ksprintf (fun message ->
+        String.split_lines message
+        |> List.map ~f:String.strip
+        |> to_string_lines []
+        |> String.concat ~sep:"\n")
+
   let to_string = function
-    | System_status_211 s -> "211 System status: " ^s
-    | Help_214 ->
-      "214-Commands supported:\n214 "
-      ^ (String.concat ~sep:" " Command.commands)
+    | System_status_211 s ->
+      to_string 211 "System status: %s" s
+    | Help_214 commands ->
+      to_string 214 "Commands supported:\n%s" (String.concat ~sep:"\n" commands)
     | Service_ready_220 greeting ->
-      "220 "^ greeting
-    | Closing_connection_221 -> "221 " ^ my_name ^ " closing connection"
-    | Ok_completed_250 msg -> "250 Ok: " ^ msg
-    | Will_forward_251 path -> "251 User not local; will forward to " ^ path
+      to_string 220 "%s" greeting
+    | Closing_connection_221 ->
+      to_string 221 "%s closing connection" my_name
+    | Ok_completed_250 msg ->
+      to_string 250 "Ok: %s" msg
+    | Will_forward_251 path ->
+      to_string 251 "User not local; will forward to %s" path
     | Will_attempt_252 ->
-      "252 Cannot VRFY user, but will accept message and attempt"
+      to_string 252 "Cannot VRFY user, but will accept message and attempt"
     | Start_mail_input_354 ->
-      "354 Enter message, ending with \".\" on a line by itself"
+      to_string 354 "Enter message, ending with \".\" on a line by iteself"
     | Service_unavailable_421 ->
-      "421 " ^ my_name ^ " Service not available, closing transmission channel"
-    | Mailbox_unavailable_450 e -> "450 Mailbox unavailable: " ^ e
-    | Local_error_451 e -> "451 Local error: " ^ e
-    | Insufficient_storage_452 -> "452 Insufficient storage"
-    | Unable_to_accommodate_455 e -> "455 Unable to accomodate: " ^ e
-    | Command_not_recognized_500 e -> "500 unrecognized command: " ^e
-    | Syntax_error_501 e -> "501 Syntax error in parameters or arguments: " ^ e
-    | Command_not_implemented_502 e -> "502 Command not implemented: " ^ e
-    | Bad_sequence_of_commands_503 e-> "503 Bad sequence of commands: " ^ e
+      to_string 421 "%s Service not available, closing transmission channel" my_name
+    | Mailbox_unavailable_450 e ->
+      to_string 450 "Mailbox unavailbale: %s" e
+    | Local_error_451 e ->
+      to_string 451 "Local error: %s" e
+    | Insufficient_storage_452 ->
+      to_string 452 "Insufficient storage"
+    | Unable_to_accommodate_455 e ->
+      to_string 455 "Unsable to accomodate: %s" e
+    | Command_not_recognized_500 e ->
+      to_string 500 "Unrecognized command: %s" e
+    | Syntax_error_501 e ->
+      to_string 501 "Syntax error in parameters or arguments: %s" e
+    | Command_not_implemented_502 e ->
+      to_string 502 "Command not implemented: %s" e
+    | Bad_sequence_of_commands_503 e->
+      to_string 503 "Bad sequence of commands %s" e
     | Parameter_not_implemented_504 e ->
-      "504 Command parameter not implemented: " ^ e
-    | Mailbox_unavailable_550 e -> "550 Mailbox unavailable: " ^ e
-    | User_not_local_551 e -> "551 User not local: " ^ e
-    | Exceeded_storage_allocation_552 -> "552 Exceeded storage allocation"
-    | Mailbox_name_not_allowed_553 e -> "553 Mailbox name not allowed: " ^ e
-    | Transaction_failed_554 e -> "554 Transaction failed: " ^ e
-    | From_to_parameters_bad_555 e -> "555 From to To parameters bad: " ^ e
+      to_string 504 "Command parameter not implemented: " ^ e
+    | Mailbox_unavailable_550 e ->
+      to_string 550 "Mailbox unavailable: %s" e
+    | User_not_local_551 e ->
+      to_string 551 "User not local: %s" e
+    | Exceeded_storage_allocation_552 ->
+      to_string 552 "Exeeded storage allocation"
+    | Mailbox_name_not_allowed_553 e ->
+      to_string 553 "Mailbox name not allowed: %s" e
+    | Transaction_failed_554 e ->
+      to_string 554 "Transaction failed: %s" e
+    | From_to_parameters_bad_555 e ->
+      to_string 555 "From to To parameters bad: %s" e
 
-  let of_string s =
-    match Option.try_with (fun () -> String.sub ~pos:0 ~len:3 s) with
-    | None -> failwiths "Reply line too short" s String.sexp_of_t
-    | Some substring -> begin
-        match Option.try_with (fun () -> Int.of_string substring) with
-        | None -> failwiths "Unexpected start character" s String.sexp_of_t
-        | Some reply_code -> begin
-            let msg = String.drop_prefix s 4 in
-            match reply_code with
-            | 211 -> System_status_211 msg
-            | 214 -> Help_214
-            | 220 -> Service_ready_220 msg
-            | 221 -> Closing_connection_221
-            | 250 -> Ok_completed_250 msg
-            | 251 -> Will_forward_251 msg
-            | 252 -> Will_attempt_252
-            | 354 -> Start_mail_input_354
+  let of_code_message reply_code msg =
+    match reply_code with
+    | 211 -> System_status_211 msg
+    | 214 -> Help_214 (String.split_lines msg |> List.tl_exn)
+    | 220 -> Service_ready_220 msg
+    | 221 -> Closing_connection_221
+    | 250 -> Ok_completed_250 msg
+    | 251 -> Will_forward_251 msg
+    | 252 -> Will_attempt_252
+    | 354 -> Start_mail_input_354
 
-            | 421 -> Service_unavailable_421
-            | 450 -> Mailbox_unavailable_450 msg
-            | 451 -> Local_error_451 msg
-            | 452 -> Insufficient_storage_452
-            | 455 -> Unable_to_accommodate_455 msg
+    | 421 -> Service_unavailable_421
+    | 450 -> Mailbox_unavailable_450 msg
+    | 451 -> Local_error_451 msg
+    | 452 -> Insufficient_storage_452
+    | 455 -> Unable_to_accommodate_455 msg
 
-            | 500 -> Command_not_recognized_500 msg
-            | 501 -> Syntax_error_501 msg
-            | 502 -> Command_not_implemented_502 msg
-            | 503 -> Bad_sequence_of_commands_503 msg
-            | 504 -> Parameter_not_implemented_504 msg
-            | 550 -> Mailbox_unavailable_550 msg
-            | 551 -> User_not_local_551 msg
-            | 552 -> Exceeded_storage_allocation_552
-            | 553 -> Mailbox_name_not_allowed_553 msg
-            | 554 -> Transaction_failed_554 msg
-            | 555 -> From_to_parameters_bad_555 msg
+    | 500 -> Command_not_recognized_500 msg
+    | 501 -> Syntax_error_501 msg
+    | 502 -> Command_not_implemented_502 msg
+    | 503 -> Bad_sequence_of_commands_503 msg
+    | 504 -> Parameter_not_implemented_504 msg
+    | 550 -> Mailbox_unavailable_550 msg
+    | 551 -> User_not_local_551 msg
+    | 552 -> Exceeded_storage_allocation_552
+    | 553 -> Mailbox_name_not_allowed_553 msg
+    | 554 -> Transaction_failed_554 msg
+    | 555 -> From_to_parameters_bad_555 msg
+    | x -> failwiths "Invalid reply code" x Int.sexp_of_t
 
-            | x -> failwiths "Invalid reply code" x Int.sexp_of_t
-          end
-      end
+  type partial = string * int * (string list)
+
+  let parse ?partial str =
+    let finish ~prefix ~code ~rev_msg =
+      let i = String.length prefix in
+      let d = String.get str i in
+      let rev_msg = (String.slice str (i+1) (String.length str)) :: rev_msg in
+      match d with
+      | ' ' ->
+        let msg = List.rev rev_msg |> String.concat ~sep:"\n" in
+        `Done (of_code_message code msg)
+      | '-' ->
+        `Partial (prefix, code, rev_msg)
+      | _ -> assert(false)
+    in
+    match partial with
+    | Some (prefix, code, rev_msg) ->
+      if String.is_prefix ~prefix str then
+        finish ~prefix ~code ~rev_msg
+      else
+        assert(false)
+    | None ->
+      let rec loop i =
+        let d = String.get str i in
+        if Char.is_digit d then
+          loop (i+1)
+        else
+          let prefix = String.slice str 0 i in
+          finish ~prefix ~code:(Int.of_string prefix) ~rev_msg:[]
+      in
+      loop 0
   ;;
+
+  let of_string str =
+    let rec loop ?partial = function
+      | [] -> assert(false)
+      | s::ss ->
+        match parse ?partial s with
+        | `Partial partial ->
+          loop ~partial ss
+        | `Done res ->
+          if List.is_empty ss then
+            res
+          else
+            assert(false)
+    in
+    String.split_lines str |> loop
 
   let of_bigstring bs =
     of_string (Bigstring.to_string bs)
@@ -559,7 +487,7 @@ module Reply = struct
 
   let code = function
     | System_status_211 _             -> 211
-    | Help_214                        -> 214
+    | Help_214 _                      -> 214
     | Service_ready_220 _             -> 220
     | Closing_connection_221          -> 221
     | Ok_completed_250 _              -> 250
@@ -585,7 +513,7 @@ module Reply = struct
 
   let is_ok = function
     | System_status_211 _             -> true
-    | Help_214                        -> true
+    | Help_214 _                      -> true
     | Service_ready_220 _             -> true
     | Closing_connection_221          -> true
     | Ok_completed_250 _              -> true
@@ -611,7 +539,7 @@ module Reply = struct
 
   let is_permanent_error = function
     | System_status_211 _             -> false
-    | Help_214                        -> false
+    | Help_214 _                      -> false
     | Service_ready_220 _             -> false
     | Closing_connection_221          -> false
     | Ok_completed_250 _              -> false
@@ -642,7 +570,6 @@ module Reply = struct
     ;;
 
     TEST = check (System_status_211 "test")
-    TEST = check Help_214
     TEST = check (Service_ready_220 "test")
     TEST = check Closing_connection_221
     TEST = check (Ok_completed_250 "test")
@@ -665,38 +592,64 @@ module Reply = struct
     TEST = check (Mailbox_name_not_allowed_553 "test")
     TEST = check (Transaction_failed_554 "test")
     TEST = check (From_to_parameters_bad_555 "test")
+
+    let check_multiline a b =
+      let a' = of_string a in
+      Poly.equal a' b
+
+    TEST = check_multiline "250-test1\n250-test2\n250 test3" (Ok_completed_250 "test1\ntest2\ntest3")
   end
 end
 
 (* Test parsing of commands to server *)
 TEST_MODULE = struct
   let check str comm =
-    let com = Command.of_string_opt str in
-    match com with
-    | None -> false
-    | Some c -> Polymorphic_compare.equal c comm
+    let c = Command.of_string str in
+    Polymorphic_compare.equal c comm
 
-  TEST = check "HELO hi" (Command.Helo "hi")
+  TEST = check "HELO hi" (Command.Hello "hi")
+  TEST = check "EHLO hi" (Command.Extended_hello "hi")
+  TEST = check "HELP" Command.Help
   TEST = check "MAIL FROM:hi" (Command.Sender "hi")
   TEST = check "RCPT TO:hi" (Command.Recipient "hi")
   TEST = check "DATA" Command.Data
   TEST = check "QUIT" Command.Quit
-  TEST = check "HELP" Command.Help
   TEST = check "NOOP" Command.Noop
+  TEST = check "STARTTLS" Command.Start_tls
 end
 
-(* Test to_string and of_string_opt functions for symmetry *)
+(* Test to_string and of_string functions for symmetry *)
 TEST_MODULE = struct
   let check comm =
-    match Command.of_string_opt (Command.to_string comm) with
-    | None -> false
-    | Some c -> Polymorphic_compare.equal comm c
+    let c = Command.of_string (Command.to_string comm) in
+    Polymorphic_compare.equal comm c
 
-  TEST = check (Command.Helo "Helo World!~")
+  TEST = check (Command.Hello "Helo World!~")
+  TEST = check (Command.Extended_hello "Helo World!~")
   TEST = check (Command.Sender "Helo World!~")
   TEST = check (Command.Recipient "Helo World!~")
   TEST = check Command.Data
   TEST = check Command.Quit
   TEST = check Command.Help
   TEST = check Command.Noop
+  TEST = check Command.Start_tls
+end
+
+module Extension = struct
+  type t =
+    | Start_tls
+    | Other of string
+  with sexp
+
+  let of_string str =
+    let t =
+      match String.uppercase str with
+      | "STARTTLS" -> Start_tls
+      | _ -> Other str
+    in
+    t
+
+  let to_string = function
+    | Start_tls -> "STARTTLS"
+    | Other str -> str
 end

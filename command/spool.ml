@@ -65,30 +65,32 @@ let set_max_send_jobs_command =
     Command.Spec.(step (fun m v -> m ~num:v) +> anon ("n" %: int))
     set_max_send_jobs
 
-let freeze ~msgid client =
-  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.freeze client msgid
+let freeze ~msgids client =
+  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.freeze client msgids
   >>| Or_error.ok_exn
 
 let freeze_command =
-  Command.rpc ~summary:"freeze a message in the spool"
+  Command.rpc ~summary:"Freeze messages in the spool. Message ids can be \
+                        provided either as arguments or on standard input."
     Command.Spec.(
-      step (fun m v -> m ~msgid:v)
-      +> anon ("msgid" %: msgid)
+      step (fun m v -> m ~msgids:v)
+      +> anon (sequence ("msgid" %: msgid))
     )
     freeze
 ;;
 
-let send_now ?(retry_intervals=[]) ~msgid client =
-  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.send_now client (msgid, retry_intervals)
+let send_now ?(retry_intervals=[]) ~msgids client =
+  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.send_now client (msgids, retry_intervals)
   >>| Or_error.ok_exn
 
 let send_now_command =
-  Command.rpc ~summary:"unfreeze and enqueue the message"
+  Command.rpc ~summary:"Unfreeze and enqueue the messages. Message ids can be \
+                        provided either as arguments or on standard input."
     Command.Spec.(
       step (fun m v -> m ?retry_intervals:(Some v))
       +> flag "retry-interval" (listed time_span) ~doc:"SPAN additional retry intervals (order matters)"
-      ++ step (fun m v -> m ~msgid:v)
-      +> anon ("msgid" %: msgid)
+      ++ step (fun m v -> m ~msgids:v)
+      +> anon (sequence ("msgid" %: msgid))
     )
     send_now
 ;;
@@ -96,8 +98,8 @@ let send_now_command =
 let events client =
   Rpc.Pipe_rpc.dispatch_exn Smtp_rpc_intf.Spool.events client ()
   >>= fun (pipe, _) ->
-  Pipe.iter_without_pushback pipe ~f:fun event ->
-    printf !"%{sexp:Smtp_spool.Event.t}\n" event
+  Pipe.iter_without_pushback pipe ~f:(fun event ->
+    printf !"%{sexp:Smtp_spool.Event.t}\n" event)
 
 let events_command =
   Command.rpc ~summary:"view the stream of spool events"
