@@ -1,0 +1,35 @@
+# OASIS_START
+# DO NOT EDIT (digest: b44bc2b91780283ad1ad582eb127c706)
+version = "113.00.00"
+description = "SMTP client and server"
+requires =
+"async async_extended async_shell async_ssl core email_message pa_ounit pa_test re2 textutils threads"
+archive(byte) = "async_smtp.cma"
+archive(byte, plugin) = "async_smtp.cma"
+archive(native) = "async_smtp.cmxa"
+archive(native, plugin) = "async_smtp.cmxs"
+exists_if = "async_smtp.cma"
+package "tools" (
+ version = "113.00.00"
+ description = "SMTP client and server"
+ requires =
+ "async async_smtp async_smtp.command core cryptokit email_message re2 textutils threads"
+ archive(byte) = "async_smtp_tools.cma"
+ archive(byte, plugin) = "async_smtp_tools.cma"
+ archive(native) = "async_smtp_tools.cmxa"
+ archive(native, plugin) = "async_smtp_tools.cmxs"
+ exists_if = "async_smtp_tools.cma"
+)
+
+package "command" (
+ version = "113.00.00"
+ description = "SMTP client and server"
+ requires = "async async_smtp core email_message re2 textutils threads"
+ archive(byte) = "async_smtp_command.cma"
+ archive(byte, plugin) = "async_smtp_command.cma"
+ archive(native) = "async_smtp_command.cmxa"
+ archive(native, plugin) = "async_smtp_command.cmxs"
+ exists_if = "async_smtp_command.cma"
+)
+# OASIS_STOP
+

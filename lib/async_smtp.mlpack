@@ -1,0 +1,25 @@
+# OASIS_START
+# DO NOT EDIT (digest: 343262d46e230daba1865f10fdbc1fb4)
+Adjustable_throttle
+Base64
+Client
+Client_config
+Client_raw
+Client_server_unit_tests
+Client_simple
+Comm
+Common
+Config
+Fake_spool
+Rpc_impl
+Rpc_intf
+Rpc_server
+Server_callbacks
+Server
+Server_config
+Spool_directory
+Spooled_message_internal
+Spool
+Std
+Types
+# OASIS_STOP
