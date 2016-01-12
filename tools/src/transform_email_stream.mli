@@ -3,7 +3,7 @@ open Async.Std
 open Async_smtp.Std
 
 module Config : sig
-  type t with sexp
+  type t [@@deriving sexp]
 
   val default : t
 

@@ -1,4 +1,15 @@
+<**/*.ml{,i}>: warn(-40), no_alias_deps
+<**/*>: thread
+# This prevents the implicit addition of -ppx options by ocamlfind
+<**/*.ml{,i}>: predicate(ppx_driver)
+<src/*.ml>: for-pack(Async_smtp)
+<command/*.ml>: for-pack(Async_smtp_command)
+<tools/src/*.ml>: for-pack(Async_smtp_tools)
+<command/*.ml{,i}>: pp(ppx-jane -dump-ast -inline-test-lib async_smtp.command)
+<src/*.ml{,i}>: pp(ppx-jane -dump-ast -inline-test-lib async_smtp)
+<tools/src/*.ml{,i}>: pp(ppx-jane -dump-ast -inline-test-lib async_smtp.tools)
+<namespace_wrappers/*>: warn(-49)
+"namespace_wrappers": include
+<command/*>: ugly_hack_to_workaround_ocamlbuild_nightmare
 # OASIS_START
 # OASIS_STOP
-<**/*.ml>: warn(-40)
-<command/*>: ugly_hack_to_workaround_ocamlbuild_nightmare

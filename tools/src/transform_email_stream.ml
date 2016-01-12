@@ -11,13 +11,13 @@ open Async_smtp.Std
 module Envelope = Smtp_envelope
 module Sender_address = Smtp_sender
 
-module Crypto = Cryptokit
+module Crypto = Crypto.Cryptokit
 module Hash = Crypto.Hash
 
 module Envelopes = struct
   type t =
     { sort : [ `Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers ] sexp_list;
-    } with sexp
+    } [@@deriving sexp]
   ;;
 
   let default =
@@ -31,7 +31,7 @@ module Bodies = struct
   type t =
     { mask_if_contains : string sexp_option
     ; hash : [ `whole | `parts ] sexp_option
-    } with sexp
+    } [@@deriving sexp]
 
   let default = { mask_if_contains = None; hash = None; }
 
@@ -50,7 +50,7 @@ module Bodies = struct
   let hash_fun data =
     data
     |> Crypto.hash_string (Hash.sha256 ())
-    |> Hex.to_hex
+    |> Util.Hex.to_hex
 
   let hash_body t =
     match t.hash with
@@ -89,10 +89,10 @@ end
 
 module Config = struct
   type t =
-    { headers  : Headers.Config.t with default( Headers.Config.default );
-      bodies   : Bodies.t with default ( Bodies.default );
-      messages : Envelopes.t with default( Envelopes.default );
-    } with sexp
+    { headers  : Headers.Config.t [@default Headers.Config.default ];
+      bodies   : Bodies.t [@default Bodies.default ];
+      messages : Envelopes.t [@default Envelopes.default ];
+    } [@@deriving sexp]
   ;;
 
   let default =

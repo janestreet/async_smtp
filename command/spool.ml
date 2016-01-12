@@ -3,7 +3,7 @@ open Async.Std
 open Async_smtp.Std
 open Common
 
-type format = [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] with sexp
+type format = [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] [@@deriving sexp]
 
 let format =
   Command.Spec.Arg_type.create
@@ -70,8 +70,7 @@ let freeze ~msgids client =
   >>| Or_error.ok_exn
 
 let freeze_command =
-  Command.rpc ~summary:"Freeze messages in the spool. Message ids can be \
-                        provided either as arguments or on standard input."
+  Command.rpc ~summary:"Freeze messages in the spool"
     Command.Spec.(
       step (fun m v -> m ~msgids:v)
       +> anon (sequence ("msgid" %: msgid))
@@ -79,20 +78,57 @@ let freeze_command =
     freeze
 ;;
 
-let send_now ?(retry_intervals=[]) ~msgids client =
-  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.send_now client (msgids, retry_intervals)
+let send ?(retry_intervals=[]) send_info client =
+  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.send client
+    (retry_intervals, send_info)
   >>| Or_error.ok_exn
 
-let send_now_command =
-  Command.rpc ~summary:"Unfreeze and enqueue the messages. Message ids can be \
-                        provided either as arguments or on standard input."
+let remove ~msgids client =
+  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.remove client msgids
+  >>| Or_error.ok_exn
+
+let remove_command =
+  Command.rpc ~summary:"Remove messages in the spool"
     Command.Spec.(
-      step (fun m v -> m ?retry_intervals:(Some v))
-      +> flag "retry-interval" (listed time_span) ~doc:"SPAN additional retry intervals (order matters)"
-      ++ step (fun m v -> m ~msgids:v)
+      step (fun m v -> m ~msgids:v)
       +> anon (sequence ("msgid" %: msgid))
     )
-    send_now
+    remove
+;;
+
+let recover ~msgids client =
+  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.recover client msgids
+  >>| Or_error.ok_exn
+
+let recover_command =
+  Command.rpc ~summary:"recover a removed message back into a frozen state"
+    Command.Spec.(
+      step (fun m v -> m ~msgids:v)
+      +> anon (sequence ("msg" %: msgid))
+    )
+    recover
+;;
+
+let send_command =
+  Command.rpc ~summary:"Force immediate sending of messages"
+    Command.Spec.(
+      step (fun m v -> m ?retry_intervals:(Some v))
+      +> flag "retry-interval" (listed time_span) ~doc:"SPAN additional retry \
+                                                        intervals (order matters)"
+      ++ step (fun m ~all ~frozen -> function
+        | [] when frozen -> m `Frozen_only
+        | [] when all -> m `All_messages
+        | [] -> failwith "Must specify either msgids or -all or -frozen"
+        | _ when all || frozen ->
+          failwith "Can't specify msgids and -all or -frozen"
+        | msgids -> m (`Some_messages msgids))
+      ++ step (fun m v -> m ~all:v)
+      +> flag "all" no_arg ~doc:" force immediate sending of all messages"
+      ++ step (fun m v -> m ~frozen:v)
+      +> flag "frozen" no_arg ~doc:" force immidiate resending of frozen messages only"
+      +> anon (sequence ("msgid" %: msgid))
+    )
+    send
 ;;
 
 let events client =
@@ -112,7 +148,9 @@ let command =
     [ "status"           , status_command
     ; "count"            , count_command
     ; "freeze"           , freeze_command
-    ; "send-now"         , send_now_command
+    ; "send"             , send_command
+    ; "remove"           , remove_command
+    ; "recover"          , recover_command
     ; "events"           , events_command
     ; "set-max-send-jobs", set_max_send_jobs_command
     ]

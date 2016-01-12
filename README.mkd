@@ -1,3 +1,0 @@
-This library implements an SMTP client, server, and proxy using
-[Async](https://github.com/janestreet/async) and
-[Email_message](https://github.com/janestreet/email_message).

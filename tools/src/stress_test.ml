@@ -9,7 +9,7 @@ module Config = struct
     ; port : int
     ; tls : bool
     ; send_n_messages : int
-    } with fields, sexp
+    } [@@deriving fields, sexp]
 
   let make_tls_certificates t =
     Async_shell.run "openssl"
@@ -94,6 +94,8 @@ module Config = struct
       { Smtp_client.Config.
         greeting = Some "stress-test"
       ; tls = Option.value_map ~f:snd tls_options ~default:[]
+      ; send_receive_timeout = `This (Time.Span.of_sec 2.)
+      ; final_ok_timeout = `This (Time.Span.of_sec 5.)
       }
     in
     let server =

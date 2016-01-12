@@ -1,3 +1,9 @@
+## 113.24.00
+
+- Switched to PPX.
+
+- Follow Core & Async evolution.
+
 ## 113.00.00
 
 - Improve the async_smtp client interface so that it is suitable as a

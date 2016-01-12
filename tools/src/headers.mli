@@ -7,7 +7,7 @@ module Config : sig
     type t =
       { name : Email_message.Field_name.t;
         if_  : [ `Contains of string ] sexp_option;
-      } with sexp
+      } [@@deriving sexp]
     ;;
   end
 
@@ -16,7 +16,7 @@ module Config : sig
       { name : Email_message.Field_name.t;
         if_ : [ `Contains of string ] sexp_option;
         remove_duplicates : unit sexp_option;
-      } with sexp
+      } [@@deriving sexp]
     ;;
   end
 
@@ -32,7 +32,7 @@ module Config : sig
       (* read in as list of whitespace-separated words and sort *)
       sort_words            : Listed_header_cond.t sexp_list;
       sort                  : sexp_bool;
-    } with sexp
+    } [@@deriving sexp]
   ;;
 
   val default : t
@@ -41,7 +41,7 @@ module Config : sig
 end
 
 module Header : sig
-  type t = (Email_message.Field_name.t * string) with compare
+  type t = (Email_message.Field_name.t * string) [@@deriving compare]
 end
 
 val transform : Config.t -> Smtp_envelope.t -> Smtp_envelope.t

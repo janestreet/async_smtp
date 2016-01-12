@@ -6,7 +6,7 @@ open Email_message.Std
 module Field_name = Email_field_name
 module Envelope = Smtp_envelope
 
-module Crypto = Cryptokit
+module Crypto = Crypto.Cryptokit
 module Hash = Crypto.Hash
 
 module Config = struct
@@ -14,7 +14,7 @@ module Config = struct
     type t =
       { name : Field_name.t;
         if_  : [ `Contains of string ] sexp_option;
-      } with sexp
+      } [@@deriving sexp]
     ;;
   end
 
@@ -23,7 +23,7 @@ module Config = struct
       { name : Field_name.t;
         if_ : [ `Contains of string ] sexp_option;
         remove_duplicates : unit sexp_option;
-      } with sexp
+      } [@@deriving sexp]
     ;;
   end
 
@@ -37,7 +37,7 @@ module Config = struct
       sort_emails           : Listed_header_cond.t sexp_list;
       sort_words            : Listed_header_cond.t sexp_list;
       sort                  : sexp_bool;
-    } with sexp
+    } [@@deriving sexp]
   ;;
 
   let default =
@@ -58,7 +58,7 @@ module Config = struct
 end
 
 module Header = struct
-  type t = (Field_name.t * string) with compare
+  type t = (Field_name.t * string) [@@deriving compare]
 end
 
 let match_header conds =
@@ -144,7 +144,7 @@ let hash_headers cond =
   let hash data =
     data
     |> Crypto.hash_string (Hash.sha256 ())
-    |> Hex.to_hex
+    |> Util.Hex.to_hex
     |> sprintf "[hidden : sha256 = %s]"
   in
   let cond = match_header cond in
