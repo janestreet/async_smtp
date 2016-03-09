@@ -160,11 +160,11 @@ module Envelope = struct
     >>= fun recipients ->
     Ok (create ~sender ~recipients ~rejected_recipients:[] ~email ())
 
-  let get_headers t ~name =
-    let email = email t in
-    Email.headers email
-    |> fun headers ->
-    Headers.find_all headers name
+  let last_header ?whitespace t name =
+    Email.last_header ?whitespace (email t) name
+
+  let find_all_headers ?whitespace t name =
+    Email.find_all_headers ?whitespace (email t) name
 
   let modify_email t ~f =
     let email = email t in
@@ -173,37 +173,56 @@ module Envelope = struct
 
   let modify_headers t ~f =
     modify_email t ~f:(fun email ->
-      let headers = Email.headers email in
-      let headers = f headers in
-      Email.set_headers email headers)
+      Email.modify_headers email ~f)
 
-  let add_header t ~name ~value =
+  let add_header ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Headers.add headers ~name ~value)
+        Headers.add ?whitespace headers ~name ~value)
 
-  let set_header t ~name ~value =
+  let add_headers ?whitespace t ts =
     modify_headers t ~f:(fun headers ->
-      Headers.set headers ~name ~value)
+      Headers.add_all ?whitespace headers ts)
 
-  let add_header_at_bottom t ~name ~value =
+  let set_header ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Headers.add_at_bottom headers ~name ~value)
+        Headers.set ?whitespace headers ~name ~value)
 
-  let set_header_at_bottom t ~name ~value =
+  let add_header_at_bottom ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-        Headers.set_at_bottom headers ~name ~value)
+      Headers.add_at_bottom ?whitespace headers ~name ~value)
 
-  let filter_headers t ~f =
+  let add_headers_at_bottom ?whitespace t ts =
     modify_headers t ~f:(fun headers ->
-      List.filter headers ~f:(fun (name, value) ->
-        f ~name ~value))
+      Headers.add_all_at_bottom ?whitespace headers ts)
+
+  let set_header_at_bottom ?whitespace t ~name ~value =
+    modify_headers t ~f:(fun headers ->
+        Headers.set_at_bottom ?whitespace headers ~name ~value)
+
+  let filter_headers ?whitespace t ~f =
+    modify_headers t ~f:(fun headers ->
+        Headers.filter ?whitespace headers ~f)
+
+  let map_headers ?whitespace t ~f =
+    modify_headers t ~f:(fun headers ->
+        Headers.map ?whitespace headers ~f)
+end
+
+module Address = struct
+  type t = [`Inet of Host_and_port.t | `Unix of string] [@@deriving sexp, compare, bin_io]
+
+  let t_of_sexp sexp =
+    try t_of_sexp sexp with
+    | _ -> `Inet (Host_and_port.t_of_sexp sexp)
+
+  let to_string t = sexp_of_t t |> Sexp.to_string
 end
 
 module Envelope_with_next_hop = struct
   module T = struct
     type t =
       { envelope : Envelope.t
-      ; next_hop_choices : Host_and_port.t list
+      ; next_hop_choices : Address.t list
       ; retry_intervals : Time.Span.t list
       } [@@deriving fields, sexp, bin_io, compare]
 
@@ -238,19 +257,14 @@ end
 
 module Session = struct
   type t =
-    { id : string
-    ; remote : Host_and_port.t
-    ; local : Host_and_port.t
+    { remote : Address.t
+    ; local : Address.t
     ; helo : string option
     ; tls : Ssl.Connection.t option
     } [@@deriving sexp_of, fields]
 
-  let create ?id ~remote ~local ?helo ?tls () =
-    let id = match id with
-      | Some id -> id
-      | None -> Uuid.create () |> Uuid.to_string
-    in
-    { id; remote; local; helo; tls; }
+  let create ~remote ~local ?helo ?tls () =
+    { remote; local; helo; tls; }
 
   let cleanup t =
     match t.tls with
@@ -379,7 +393,7 @@ module Reply = struct
     | Insufficient_storage_452 ->
       to_string 452 "Insufficient storage"
     | Unable_to_accommodate_455 e ->
-      to_string 455 "Unsable to accomodate: %s" e
+      to_string 455 "Unable to accomodate: %s" e
     | Command_not_recognized_500 e ->
       to_string 500 "Unrecognized command: %s" e
     | Syntax_error_501 e ->

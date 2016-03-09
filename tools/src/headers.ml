@@ -1,9 +1,7 @@
 open Core.Std
 open Async.Std
 open Async_smtp.Std
-open Email_message.Std
 
-module Field_name = Email_field_name
 module Envelope = Smtp_envelope
 
 module Crypto = Crypto.Cryptokit
@@ -12,7 +10,7 @@ module Hash = Crypto.Hash
 module Config = struct
   module Header_cond = struct
     type t =
-      { name : Field_name.t;
+      { name : Email_headers.Name.t;
         if_  : [ `Contains of string ] sexp_option;
       } [@@deriving sexp]
     ;;
@@ -20,7 +18,7 @@ module Config = struct
 
   module Listed_header_cond = struct
     type t =
-      { name : Field_name.t;
+      { name : Email_headers.Name.t;
         if_ : [ `Contains of string ] sexp_option;
         remove_duplicates : unit sexp_option;
       } [@@deriving sexp]
@@ -58,16 +56,16 @@ module Config = struct
 end
 
 module Header = struct
-  type t = (Field_name.t * string) [@@deriving compare]
+  type t = (Email_headers.Name.t * string) [@@deriving compare]
 end
 
 let match_header conds =
   let conds =
     List.fold conds
-      ~init:Field_name.Map.empty
+      ~init:Email_headers.Name.Map.empty
       ~f:(fun acc {Config.Header_cond.name; if_} ->
         let cond ~name:other ~value:_ =
-          Field_name.equal name other
+          Email_headers.Name.equal name other
         in
         let cond =
           match if_ with
@@ -87,10 +85,10 @@ let match_header conds =
 let match_listed_header conds =
   let conds =
     List.fold conds
-      ~init:Field_name.Map.empty
+      ~init:Email_headers.Name.Map.empty
       ~f:(fun acc {Config.Listed_header_cond.name; if_; remove_duplicates} ->
         let cond ~name:other ~value:_ =
-          Field_name.equal name other
+          Email_headers.Name.equal name other
         in
         let cond =
           match if_ with
@@ -110,8 +108,8 @@ let match_listed_header conds =
 ;;
 
 let strip_whitespace_headers =
-  Envelope.modify_headers ~f:(List.map ~f:(fun (k,v) ->
-    (k, String.strip v)))
+  Envelope.map_headers ~whitespace:`Keep ~f:(fun ~name:_ ~value ->
+      Email_headers.Value.to_string ~whitespace:`Strip value)
 ;;
 
 let normalize_whitespace s =
@@ -127,17 +125,16 @@ let normalize_whitespace s =
 
 let normalize_whitespace_headers cond =
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
-    name,
-    if cond ~name ~value
-    then normalize_whitespace value
-    else value))
+  Envelope.map_headers ~whitespace:`Keep ~f:(fun ~name ~value ->
+      if cond ~name ~value
+      then normalize_whitespace value
+      else value)
 ;;
 
 let filter_headers cond =
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.filter ~f:(fun (name, value) ->
-    not (cond ~name ~value)))
+  Envelope.filter_headers ~f:(fun ~name ~value ->
+      not (cond ~name ~value))
 ;;
 
 let hash_headers cond =
@@ -148,14 +145,14 @@ let hash_headers cond =
     |> sprintf "[hidden : sha256 = %s]"
   in
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
-      name, if cond ~name ~value then hash value else value))
+  Envelope.map_headers ~whitespace:`Keep ~f:(fun ~name ~value ->
+      if cond ~name ~value then hash value else value)
 ;;
 
 let mask_headers cond =
   let cond = match_header cond in
-  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
-    name, if cond ~name ~value then "XXX" else value))
+  Envelope.map_headers ~whitespace:`Keep ~f:(fun ~name ~value ->
+      if cond ~name ~value then "XXX" else value)
 ;;
 
 let sort_emails_in_header pattern =
@@ -167,46 +164,43 @@ let sort_emails_in_header pattern =
          else Fn.id)
      |> List.map ~f:Email_address.to_string)
   in
-  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
-    let value =
+  Envelope.map_headers ~whitespace:`Keep ~f:(fun ~name ~value ->
       match match_listed_header pattern ~name ~value with
       | None                   -> value
       | Some remove_duplicates ->
         match Email_address.list_of_string value with
         | Error e ->
           (* Not an error since this is not a reason to trigger the kill
-             switch. *)
+                 switch. *)
           Log.Global.info "could not parse %s: %s"
             value (Error.to_string_hum e);
           value
         | Ok emails ->
-          f ~remove_duplicates emails |> String.concat ~sep:", "
-    in
-    name, value))
+          f ~remove_duplicates emails |> String.concat ~sep:", ")
 ;;
 
 let sort_words_in_header pattern =
   let f ~remove_duplicates value =
     let remove_duplicates = Option.is_some remove_duplicates in
-      (String.split value ~on:' '
-       |> List.filter ~f:(fun s -> not (String.is_empty s))
-       |> List.sort ~cmp:String.compare
-       |> (if remove_duplicates
-           then List.remove_consecutive_duplicates ~equal:String.equal
-           else Fn.id)
-       |> String.concat ~sep:" ")
+    (String.split value ~on:' '
+     |> List.filter ~f:(fun s -> not (String.is_empty s))
+     |> List.sort ~cmp:String.compare
+     |> (if remove_duplicates
+         then List.remove_consecutive_duplicates ~equal:String.equal
+         else Fn.id)
+     |> String.concat ~sep:" ")
   in
-  Envelope.modify_headers ~f:(List.map ~f:(fun (name, value) ->
-    let value =
+  Envelope.map_headers ~whitespace:`Keep ~f:(fun ~name ~value ->
       match match_listed_header pattern ~name ~value with
       | None       -> value
-      | Some remove_duplicates -> f ~remove_duplicates value
-    in
-    name, value))
+      | Some remove_duplicates -> f ~remove_duplicates value)
 ;;
 
 let sort_headers =
-  Envelope.modify_headers ~f:(List.stable_sort ~cmp:Header.compare)
+  Envelope.modify_headers ~f:(fun headers ->
+      Email_headers.to_list ~whitespace:`Keep headers
+      |> List.stable_sort ~cmp:Header.compare
+      |> Email_headers.of_list ~whitespace:`Keep)
 ;;
 
 let sort_envelope_recipients message =
@@ -220,10 +214,13 @@ let dedup_headers conds =
   let equal (name1, value1) (name2, value2) =
     if match_header conds ~name:name1 ~value:value1
     && match_header conds ~name:name2 ~value:value2
-    then Field_name.equal name1 name2
+    then Email_headers.Name.equal name1 name2
     else false
   in
-  Envelope.modify_headers ~f:(List.remove_consecutive_duplicates ~equal)
+  Envelope.modify_headers ~f:(fun headers ->
+      Email_headers.to_list ~whitespace:`Keep headers
+      |> List.remove_consecutive_duplicates ~equal
+      |> Email_headers.of_list ~whitespace:`Keep)
 
 let transform
       { Config. strip_whitespace;

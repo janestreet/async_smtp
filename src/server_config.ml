@@ -13,10 +13,14 @@ module Tls = struct
     } [@@deriving fields, sexp]
 end
 
+module Where_to_listen = struct
+  type t = [ `Port of int | `File of string ] [@@deriving sexp]
+end
+
 type t =
   { spool_dir                            : string
   ; tmp_dir                              : string option
-  ; ports                                : int list
+  ; where_to_listen                      : Where_to_listen.t list
   ; max_concurrent_send_jobs             : int
   ; max_concurrent_receive_jobs_per_port : int
   ; rpc_port                             : int
@@ -36,7 +40,7 @@ let tmp_dir t = Option.value ~default:(spool_dir t ^/ "temp") (tmp_dir t)
 let empty =
   { spool_dir = "."
   ; tmp_dir = None
-  ; ports = []
+  ; where_to_listen = []
   ; max_concurrent_send_jobs = 0
   ; max_concurrent_receive_jobs_per_port = 0
   ; rpc_port = 0

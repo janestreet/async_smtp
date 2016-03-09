@@ -5,6 +5,11 @@ open Email_message.Std
 
 let%test_module _ = (module struct
 
+   let log =
+     Lazy.force Async.Std.Log.Global.log
+     |> Mail_log.adjust_log_levels ~minimum_level:`Error
+
+
   let sender = Smtp_sender.of_string "<>" |> Or_error.ok_exn
   let recipients = [Email_address.of_string_exn "mailcore-unit-test-recipient@example.com"]
 
@@ -23,7 +28,8 @@ let%test_module _ = (module struct
         ~tmp_dir ~server_config ~client_config message ~expect_tls =
     Log.Global.set_level `Error;
     let server_config = { server_config with
-                          Smtp_server.Config.ports = [0] (* let the system choose a port *)
+                          (* let the system choose a port *)
+                          Smtp_server.Config.where_to_listen = [`Port 0]
                         ; rpc_port=0
                         ; spool_dir = tmp_dir ^/ "spool"
                         ; max_concurrent_receive_jobs_per_port = 1
@@ -33,13 +39,13 @@ let%test_module _ = (module struct
     let envelope = envelope message in
     let module Cb : Smtp_server.Callbacks.S = struct
       include Smtp_server.Callbacks.Simple
-      let process_envelope ~session:_ envelope =
+      let process_envelope ~log:_ ~session:_ envelope =
         Ivar.fill finished envelope;
         return (`Consume "done")
     end in
     Unix.mkdir ~p:() (tmp_dir ^/ "spool")
     >>= fun () ->
-    Smtp_server.start ~config:server_config (module Cb)
+    Smtp_server.start ~log ~config:server_config (module Cb)
     >>| Or_error.ok_exn
     >>= fun server ->
     let port = Smtp_server.ports server |> List.hd_exn in
@@ -47,11 +53,12 @@ let%test_module _ = (module struct
       Deferred.all_ignore
         [ begin
           Smtp_client.Tcp.with_
+            ~log
             ~config:client_config
-            (Host_and_port.create ~host:"localhost" ~port)
+            (`Inet (Host_and_port.create ~host:"localhost" ~port))
             ~f:(fun client ->
               [%test_result: bool] (Client.is_using_tls client) ~expect:expect_tls;
-              Smtp_client.send_envelope client envelope
+              Smtp_client.send_envelope ~log client envelope
               >>|? Smtp_client.Envelope_status.ok_exn ~allow_rejected_recipients:false
               >>|? ignore)
           >>| Or_error.ok_exn

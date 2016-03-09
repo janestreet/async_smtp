@@ -1,4 +1,4 @@
-open Async.Std
+open! Async.Std
 
 (** A throttle with adjustable [max_concurrent_jobs]. *)
 type t

@@ -5,6 +5,8 @@ open Types
 
 module Mutex = Async_mutex
 
+module Log = Mail_log
+
 let compare _ _ = `You_are_using_poly_compare
 let _silence_unused_warning = compare
 
@@ -60,9 +62,11 @@ end
 type t =
   { spool_dir                    : Spool_directory.t
   ; id                           : Id.t
+  (* with default so that sexps without a flowid still parse. *)
+  ; flows                        : Log.Flows.t [@default Log.Flows.none]
   ; parent_id                    : Envelope.Id.t
   ; spool_date                   : Time.t
-  ; next_hop_choices             : Host_and_port.t list
+  ; next_hop_choices             : Address.t list
   (* The head of this list is the time at which we should attempt a delivery
      after the next time a delivery fails. *)
   ; mutable retry_intervals      : Time.Span.t list
@@ -123,7 +127,6 @@ module On_disk = struct
     >>= function
     | Ok () -> return (Ok ())
     | Error e ->
-      Log.Global.debug "failed to sync %s: %s" t.meta.id (Error.to_string_hum e);
       return (Error e)
 
   let load path =
@@ -139,7 +142,7 @@ module On_disk = struct
          return (Or_error.error error t sexp_of_t)
 end
 
-let create spool_dir ~initial_status envelope_with_next_hop ~original_msg =
+let create spool_dir ~log ~initial_status envelope_with_next_hop ~flows ~original_msg =
   let parent_id = Envelope.id original_msg in
   let id = Id.create ~envelope_with_next_hop ~original_msg in
   let next_hop_choices =
@@ -162,7 +165,16 @@ let create spool_dir ~initial_status envelope_with_next_hop ~original_msg =
       ~parent_id
       ~status:initial_status
       ~id
+      ~flows
   in
+  Log.info log (lazy (Log.Message.create
+                        ~here:[%here]
+                        ~flows
+                        ~component:["spool";"enqueue"]
+                        ~spool_id:id
+                        ~tags:(List.map next_hop_choices
+                                 ~f:(fun c -> "next-hop", Address.to_string c))
+                        "spooling"));
   let on_disk = On_disk.create ~meta:t ~envelope in
   On_disk.save on_disk
   >>|? fun () ->
@@ -237,89 +249,110 @@ let with_file t
   Locks.release t.id;
   return result
 
-let freeze t =
+let freeze t ~log =
   with_file t (fun _envelope ->
-    Log.Global.info !"freezing %{Id}" (id t);
-    t.status <- `Frozen;
-    return (Ok `Sync))
+      Log.info log (lazy (Log.Message.create
+                            ~here:[%here]
+                            ~flows:t.flows
+                            ~component:["spool"]
+                            ~spool_id:t.id
+                            "frozen"));
+      t.status <- `Frozen;
+      return (Ok `Sync))
 ;;
 
-let mark_for_send_now ~retry_intervals t =
+let mark_for_send_now ~retry_intervals t ~log =
   with_file t (fun _envelope ->
-    Log.Global.info !"changing status to send_now for %{Id}" (id t);
+    Log.info log (lazy (Log.Message.create
+                          ~here:[%here]
+                          ~flows:t.flows
+                          ~component:["spool"]
+                          ~spool_id:t.id
+                          "send_now"));
     t.status <- `Send_now;
     t.retry_intervals <- retry_intervals @ t.retry_intervals;
     return (Ok `Sync))
 ;;
 
-let remove t =
+let remove t ~log =
   with_file t (fun _envelope ->
-    Log.Global.info !"deleting %{Id}" (id t);
-    t.status <- `Removed;
-    return (Ok `Sync))
+      Log.info log (lazy (Log.Message.create
+                            ~here:[%here]
+                            ~flows:t.flows
+                            ~component:["spool"]
+                            ~spool_id:t.id
+                            "deleting"));
+      t.status <- `Removed;
+      return (Ok `Sync))
 ;;
 
 (* We are being conservative here for simplicity - if we get a permanent error
    from one hop, we assume that we would get the same error from the remaining
    hops. *)
-let send_to_hops t ~config envelope =
+let send_to_hops t ~log ~config envelope =
   let rec send_to_hops = function
     | [] ->
-      Log.Global.info !"all next hops failed for %{Envelope.Id}"
-        (Envelope.id envelope);
+      Log.info log (lazy (Log.Message.create
+                            ~here:[%here]
+                            ~flows:t.flows
+                            ~component:["spool"]
+                            ~spool_id:t.id
+                            "all-next-hops-failed"));
       return `Try_later
     | hop :: untried_next_hops ->
-      let error e =
-        Log.Global.info
-          "failed to send %s to destination %s: %s"
-          t.id (Host_and_port.to_string hop)
-          (Error.to_string_hum e);
-        t.relay_attempts <- (Time.now (), e) :: t.relay_attempts
-      in
-      let fail_permanently () =
-        Log.Global.error "Got permanent error, freezing the message";
-        return `Fail_permanently
-      in
-      Log.Global.debug "trying to send message %s to %s"
-        t.id (Host_and_port.to_string hop);
       let envelope = Envelope.set envelope ~recipients:t.remaining_recipients () in
-      Client.Tcp.with_ ~config hop ~f:(fun client ->
-          Client.send_envelope client envelope)
+      Log.debug log (lazy (Log.Message.create
+                             ~here:[%here]
+                             ~flows:t.flows
+                             ~component:["spool";"send"]
+                             ~spool_id:t.id
+                             ~remote_address:hop
+                             "attempting delivery"));
+      Client.Tcp.with_ ~config hop
+        ~log
+        ~component:["spool";"send"]
+        ~f:(fun client ->
+            (* Not passing flows allong as the Client session already includes the flows. *)
+            Client.send_envelope client ~log ~flows:t.flows ~component:["spool";"send"] envelope)
       >>= function
       | Error e ->
-        error e;
+        (* Already logged by the client *)
+        t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
         send_to_hops untried_next_hops
       | Ok envelope_status ->
         match Client.Envelope_status.ok_or_error ~allow_rejected_recipients:false envelope_status with
         | Ok _msg_id ->
+          (* Already logged by the client *)
           return `Done
         | Error e ->
-          error e;
+          (* Already logged by the client *)
+          t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
           match envelope_status with
           | Ok (_ (* envelope_id *), rejected_recipients)
           | Error (`No_recipients rejected_recipients) ->
             let permanently_failed_recipients, temporarily_failed_recipients =
               List.partition_map rejected_recipients ~f:(fun (recipient, reject) ->
-                if Reply.is_permanent_error reject then `Fst recipient
+                  if Reply.is_permanent_error reject then `Fst recipient
                 else `Snd recipient)
             in
             t.remaining_recipients <- temporarily_failed_recipients;
             t.failed_recipients <- t.failed_recipients @ permanently_failed_recipients;
             if List.is_empty t.remaining_recipients
-            then fail_permanently ()
+            then return `Fail_permanently
             else send_to_hops untried_next_hops
           | Error (`Rejected_sender r
                   | `Rejected_sender_and_recipients (r,_)
                   | `Rejected_body (r,_)) ->
-            if Reply.is_permanent_error r then fail_permanently ()
+            if Reply.is_permanent_error r
+            then return `Fail_permanently
             else send_to_hops untried_next_hops
   in
   send_to_hops t.next_hop_choices
 
-let do_send t ~config =
+let do_send t ~log ~config =
   with_file t (fun envelope ->
     t.status <- `Sending;
-    send_to_hops t ~config envelope
+    send_to_hops t ~log ~config envelope
     >>| function
     | `Done ->
       t.status <- `Delivered;
@@ -335,9 +368,9 @@ let do_send t ~config =
         Ok `Sync)
 ;;
 
-let send t ~config =
+let send t ~log ~config =
   match t.status with
-  | `Send_now | `Send_at _ -> do_send t ~config
+  | `Send_now | `Send_at _ -> do_send t ~log ~config
   | `Frozen ->
     return (Or_error.error_string
               "Spooled_message.send: message is frozen")

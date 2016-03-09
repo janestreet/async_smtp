@@ -1,5 +1,5 @@
-open Core.Std
-open Async.Std
+open! Core.Std
+open! Async.Std
 open Async_ssl.Std
 open Email_message.Std
 
@@ -79,22 +79,31 @@ module Envelope : sig
   val email             : t -> Email.t
   val id                : t -> Id.t
 
-  (* Header names are case-insensitive. *)
-  val get_headers : t -> name:string -> string list
-
+  val last_header : ?whitespace:Email_headers.Whitespace.t -> t -> Email_headers.Name.t -> Email_headers.Value.t option
+  val find_all_headers : ?whitespace:Email_headers.Whitespace.t -> t -> Email_headers.Name.t -> Email_headers.Value.t list
   (* See [Field_list.*] *)
-  val add_header : t -> name:string -> value:string -> t
-  val set_header : t -> name:string -> value:string -> t
-  val add_header_at_bottom : t -> name:string -> value:string -> t
-  val set_header_at_bottom : t -> name:string -> value:string -> t
+  val add_header : ?whitespace:Email_headers.Whitespace.t -> t -> name:string -> value:string -> t
+  val add_headers : ?whitespace:Email_headers.Whitespace.t -> t -> (string * string) list -> t
+  val set_header : ?whitespace:Email_headers.Whitespace.t -> t -> name:string -> value:string -> t
+  val add_header_at_bottom : ?whitespace:Email_headers.Whitespace.t -> t -> name:string -> value:string -> t
+  val add_headers_at_bottom : ?whitespace:Email_headers.Whitespace.t -> t -> (string * string) list -> t
+  val set_header_at_bottom : ?whitespace:Email_headers.Whitespace.t -> t -> name:string -> value:string -> t
 
   val modify_headers
     : t -> f:(Email_headers.t -> Email_headers.t) -> t
   val filter_headers
-    : t -> f:(name:Email_field_name.t -> value:string -> bool) -> t
+    : ?whitespace:Email_headers.Whitespace.t -> t -> f:(name:Email_headers.Name.t -> value:Email_headers.Value.t -> bool) -> t
+  val map_headers
+    : ?whitespace:Email_headers.Whitespace.t -> t -> f:(name:Email_headers.Name.t -> value:Email_headers.Value.t -> string) -> t
 
   val modify_email
     : t -> f:(Email.t -> Email.t) -> t
+end
+
+module Address : sig
+  type t = [`Inet of Host_and_port.t | `Unix of string] [@@deriving sexp, compare, bin_io]
+
+  val to_string : t -> string
 end
 
 module Envelope_with_next_hop : sig
@@ -102,7 +111,7 @@ module Envelope_with_next_hop : sig
     { envelope  : Envelope.t
     (* Next hops to try. If the first one fails, we are done, otherwise try
        sending to the second one, etc. *)
-    ; next_hop_choices : Host_and_port.t list
+    ; next_hop_choices : Address.t list
     ; retry_intervals  : Time.Span.t list
     } [@@deriving fields, sexp, bin_io, compare]
 
@@ -111,7 +120,7 @@ module Envelope_with_next_hop : sig
 
   val create
     :  envelope : Envelope.t
-    -> next_hop_choices : Host_and_port.t list
+    -> next_hop_choices : Address.t list
     -> retry_intervals : Time.Span.t list
     -> t
 
@@ -131,21 +140,20 @@ module Envelope_with_next_hop : sig
     -> t
 end
 
+
 module Session : sig
   type t =
-    { id : string
-    ; remote : Host_and_port.t
-    ; local : Host_and_port.t
+    { remote : Address.t
+    ; local : Address.t
     ; helo : string option
     ; tls : Ssl.Connection.t option
     } [@@deriving sexp_of, fields]
 
   val create
-    :  ?id:string
-    -> remote:Host_and_port.t
-    -> local:Host_and_port.t
-    -> ?helo:string
-    -> ?tls:Ssl.Connection.t
+    :  remote : Address.t
+    -> local : Address.t
+    -> ?helo : string
+    -> ?tls : Ssl.Connection.t
     -> unit
     -> t
 

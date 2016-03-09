@@ -6,7 +6,7 @@ let config =
  { Smtp_server.Config.
    spool_dir = "/tmp/spool-mailcore"
  ; tmp_dir = None
- ; ports = [ 2200; 2201 ]
+ ; where_to_listen = [`Port 2200; `Port 2201 ]
  ; max_concurrent_send_jobs = 1
  ; max_concurrent_receive_jobs_per_port = 1
  ; rpc_port = 2210
@@ -29,9 +29,9 @@ module Callbacks = struct
   include Smtp_server.Callbacks.Simple
 
   let destination =
-    Host_and_port.create ~host:"localhost" ~port:26
+    `Inet (Host_and_port.create ~host:"localhost" ~port:25)
 
-  let process_envelope ~session:_ envelope =
+  let process_envelope ~log:_ ~session:_ envelope =
     return (`Send
               [ Smtp_envelope_with_next_hop.create
                   ~envelope
@@ -45,11 +45,11 @@ let main () =
   Log.Global.info "creating %s" spool_dir;
   Unix.mkdir ~p:() spool_dir
   >>= fun () ->
-  Smtp_server.start ~config (module Callbacks : Smtp_server.Callbacks.S)
+  Smtp_server.start ~log:(Lazy.force Log.Global.log) ~config (module Callbacks : Smtp_server.Callbacks.S)
   >>| Or_error.ok_exn
   >>= fun server ->
   let ports =
-    Smtp_server.Config.ports config
+    Smtp_server.ports server
     |> List.map ~f:Int.to_string
     |> String.concat ~sep:", "
   in

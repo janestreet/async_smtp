@@ -1,3 +1,9 @@
+## 113.33.00
+
+- Allow an smtp\_client to connect to a local unix socket
+
+- Better logging
+
 ## 113.24.00
 
 - Switched to PPX.
@@ -6,8 +12,8 @@
 
 ## 113.00.00
 
-- Improve the async_smtp client interface so that it is suitable as a
-  replacement for Core_extended.Std.Sendmail.
+- Improve the async\_smtp client interface so that it is suitable as a
+  replacement for Core\_extended.Std.Sendmail.
 
 ## 112.17.00
 

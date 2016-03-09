@@ -96,15 +96,24 @@ let remove_command =
     remove
 ;;
 
-let recover ~msgids client =
-  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.recover client msgids
+let recover recover_info client =
+  Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.recover client recover_info
   >>| Or_error.ok_exn
 
 let recover_command =
   Command.rpc ~summary:"recover a removed message back into a frozen state"
     Command.Spec.(
-      step (fun m v -> m ~msgids:v)
+      step (fun m ~msgids ~quarantine ~remove  ->
+        match quarantine, remove with
+        | true, false -> m (`Quarantined msgids)
+        | false, true -> m (`Removed msgids)
+        | _ -> failwith "Must specify exactly one of -from-quarantine or -from-remove")
+      ++ step (fun m v -> m ~msgids:v)
       +> anon (sequence ("msg" %: msgid))
+      ++ step (fun m v -> m ~quarantine:v)
+      +> flag "from-quarantine" no_arg ~doc:" recover quarantined messages"
+      ++ step (fun m v -> m ~remove:v)
+      +> flag "from-remove" no_arg ~doc:" recover removed messages"
     )
     recover
 ;;

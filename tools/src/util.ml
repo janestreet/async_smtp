@@ -5,20 +5,38 @@ open Async_smtp.Std
 module Host_and_port = struct
   include Host_and_port
 
-  let arg_type_with_port port =
-    Command.Spec.Arg_type.create
-      (fun str ->
-         match String.rsplit2 ~on:':' str with
-         | None ->
-           Host_and_port.create ~host:str ~port
-         | Some (host,"") ->
-           Host_and_port.create ~host ~port
-         | Some (host,port) ->
-           let port = Int.of_string port in
-           Host_and_port.create ~host ~port)
+  let of_string ~port str =
+    match String.rsplit2 ~on:':' str with
+    | None ->
+      Host_and_port.create ~host:str ~port
+    | Some (host,"") ->
+      Host_and_port.create ~host ~port
+    | Some (host,port) ->
+      let port = Int.of_string port in
+      Host_and_port.create ~host ~port
 
   let inet_address addr =
     Tcp.to_host_and_port (host addr) (port addr)
+end
+
+module Address =struct
+  let arg_spec () =
+    Command.Spec.(
+      step (fun m inet unix dest ->
+          let dest =
+            if inet && unix then
+              failwithf "can't sepecify both -inet and -unix" ()
+            else if unix then `Unix dest
+            else if inet then `Inet (Host_and_port.of_string ~port:25 dest)
+            else if String.mem dest '/' then `Unix dest
+            else `Inet (Host_and_port.of_string ~port:25 dest)
+          in
+          m ~dest)
+      +> flag "-inet" no_arg
+        ~doc:" Intepret the address as a HOST[:PORT]"
+      +> flag "-unix" no_arg
+        ~doc:" Intepret the address as a FILE"
+      +> anon ("HOST[:PORT] | FILE" %: string))
 end
 
 module Smtp_client_config = struct
@@ -29,8 +47,8 @@ module Smtp_client_config = struct
 
   let load_sync path =
     match Core.Std.Sys.file_exists path with
-      | `Yes -> Some (Sexp.load_sexp_conv_exn path t_of_sexp)
-      | `No | `Unknown -> None
+    | `Yes -> Some (Sexp.load_sexp_conv_exn path t_of_sexp)
+    | `No | `Unknown -> None
 
   let default =
     match load_sync "./.js-smtp.sexp" with

@@ -1,21 +1,5 @@
-open Core.Std
-open Async.Std
-open Types
-
-val eof_error : Error.t
-
-val mlog :
-  severity:[ `Debug | `Error | `Info ]
-  -> ?message:Envelope.t
-  -> ?dir:[ `In | `Out ]
-  -> ('a, unit, string, unit) format4
-  -> 'a
-
-val exchange
-  :  Reader.t
-  -> Writer.t
-  -> string
-  -> [ `Ok of string | `Eof ] Deferred.t
+open! Core.Std
+open! Async.Std
 
 val is_accessible_directory
   :  ?create_if_missing:unit

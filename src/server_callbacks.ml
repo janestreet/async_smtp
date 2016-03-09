@@ -12,7 +12,8 @@ module type S = sig
        [`Disconnect maybe_reply] terminates the connection sending the given
        reply. disconnect is NOT called.  *)
   val session_connect
-    :  session:Session.t
+    :  log:Mail_log.t
+    -> session:Session.t
     -> [ `Accept of string
        | `Disconnect of (Reply.t option)
        ] Deferred.t
@@ -26,7 +27,8 @@ module type S = sig
       [`Disconnect maybe_reply] will send the given reply and close the session
       (disconnect is not called) *)
   val session_helo
-    :  session:Session.t
+    :  log:Mail_log.t
+    -> session:Session.t
     -> string
     -> [ `Continue
        | `Deny of Reply.t
@@ -39,21 +41,21 @@ module type S = sig
 
       [`Reject reply] will abort this message.  *)
   val process_sender
-    :  session:Session.t
+    :  log:Mail_log.t
+    -> session:Session.t
     -> Sender.t
     -> [ `Continue
        | `Reject of Reply.t
        ] Deferred.t
 
   (** [process_recipient] is called in the event of a "RCPT TO" SMTP command.
-
       [`Continue] augments the envelope in the pipeline and passes it on to the next phase.
-
       [`Reject reply] pass through an unmodified envelope to the next phase, omitting
       this address from the recipients list.
   *)
   val process_recipient
-    :  session:Session.t
+    :  log:Mail_log.t
+    -> session:Session.t
     -> sender:Sender.t
     -> Email_address.t
     -> [ `Continue
@@ -76,7 +78,8 @@ module type S = sig
       to a directory for manual inspection and pass through the given reply to the
       client. [reason] is used only internally to tell us what check failed. *)
   val process_envelope
-    :  session:Session.t
+    :  log:Mail_log.t
+    -> session:Session.t
     -> Envelope.t
     -> [ `Consume of string
        | `Reject of Reply.t
@@ -90,18 +93,18 @@ end
 (** [Simple] provides a basic plugin implementation of [S] to be used as the foundation
     for a plugin that overrides only specific callbacks. *)
 module Simple : S = struct
-  let session_connect ~session:_ =
+  let session_connect ~log:_ ~session:_ =
     return (`Accept
-              (sprintf "%s JSMTP 0.1 %s"
+              (sprintf "%s ocaml/mailcore 0.2 %s"
                  (Unix.gethostname ())
                  (Time.now () |> Time.to_string_abs ~zone:Time.Zone.utc)))
   ;;
 
-  let session_helo ~session:_ _helo                     = return `Continue
-  let process_sender ~session:_ _sender                 = return `Continue
-  let process_recipient ~session:_ ~sender:_ _recipient = return `Continue
+  let session_helo ~log:_ ~session:_ _helo                     = return `Continue
+  let process_sender ~log:_ ~session:_ _sender                 = return `Continue
+  let process_recipient ~log:_ ~session:_ ~sender:_ _recipient = return `Continue
 
-  let process_envelope ~session:_ envelope =
+  let process_envelope ~log:_ ~session:_ envelope =
     return (`Send
               [ Envelope_with_next_hop.create
                   ~envelope

@@ -1,7 +1,7 @@
-open Core.Std
-open Async.Std
-open Async_ssl.Std
+open! Core.Std
+open! Async.Std
 open Types
+
 
 module Peer_info : sig
   type t
@@ -9,22 +9,21 @@ module Peer_info : sig
   val greeting : t -> string option
   val hello    : t -> [`Simple of string | `Extended of string * Extension.t list] option
   val supports_extension : t -> Extension.t -> bool
+  val dest : t -> Address.t
 end
 
 type t
 
 val create
-  :  ?log:Log.t
-  -> session_id:string
-  -> dest:Host_and_port.t
+  :  ?flows:Mail_log.Flows.t
+  -> dest:Address.t
   -> Reader.t
   -> Writer.t
   -> Client_config.t
   -> t
 
 val create_bsmtp
-  :  ?log:Log.t
-  -> session_id:string
+  :  ?flows:Mail_log.Flows.t
   -> Writer.t
   (* Config must be set to not use TLS. *)
   -> Client_config.t
@@ -34,33 +33,48 @@ val config : t -> Client_config.t
 val info : t -> Peer_info.t option
 
 val is_using_tls : t -> bool
-val has_log : t -> bool
 
 val with_session
   :  t
+  -> log:Mail_log.t
+  -> component:Mail_log.Component.t
   -> f:(t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.Or_error.t
 
-val do_helo : t -> unit Deferred.Or_error.t
+val do_helo
+  :  t
+  -> log:Mail_log.t
+  -> component:Mail_log.Component.t
+  -> unit Deferred.Or_error.t
 
-val send : t -> Command.t -> unit Deferred.Or_error.t
+val send
+  :  t
+  -> log:Mail_log.t
+  -> ?flows:Mail_log.Flows.t
+  -> component:Mail_log.Component.t
+  -> here:Lexing.position
+  -> Command.t
+  -> unit Deferred.Or_error.t
 
 val receive
   :  ?timeout:Time.Span.t
+  -> ?flows:Mail_log.Flows.t
   -> t
+  -> log:Mail_log.t
+  -> component:Mail_log.Component.t
+  -> here:Lexing.position
   -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
 
 val send_receive
   :  ?timeout:Time.Span.t
   -> t
+  -> log:Mail_log.t
+  -> ?flows:Mail_log.Flows.t
+  -> component:Mail_log.Component.t
+  -> here:Lexing.position
   -> Command.t
   -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
 
 (* Low level access *)
 val writer : t -> Writer.t
 val reader : t -> Reader.t option
-
-module Log : sig
-  val debug : t -> ('a, unit, string, unit) format4 -> 'a
-  val error : t -> ('a, unit, string, unit) format4 -> 'a
-end

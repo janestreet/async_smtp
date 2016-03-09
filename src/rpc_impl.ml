@@ -27,10 +27,18 @@ module Monitor = struct
     in
     Log.Global.set_output (send_errors :: Log.Global.get_output ());
     Rpc.Pipe_rpc.implement Rpc_intf.Monitor.errors
-      (fun _ () ~aborted ->
+      (fun _ () ->
          Log.Global.debug "received error stream subscription";
-         let pipe = Bus.pipe1_exn (Bus.read_only error_stream) in
-         (aborted >>> fun () -> Pipe.close_read pipe);
+         let pipe = Bus.pipe1_exn (Bus.read_only error_stream) [%here] in
+         return (Ok pipe))
+  ;;
+end
+
+module Smtp_events = struct
+  let events () =
+    Rpc.Pipe_rpc.implement Rpc_intf.Smtp_events.events
+      (fun (_config, _spool, server_events) () ->
+         let pipe = Smtp_events.event_stream server_events in
          return (Ok pipe))
   ;;
 end
@@ -38,40 +46,39 @@ end
 module Spool = struct
   let status () =
     Rpc.Rpc.implement Rpc_intf.Spool.status
-      (fun (_config, spool) () -> return (Spool.status spool))
+      (fun (_config, spool, _server_events) () -> return (Spool.status spool))
   ;;
 
   let freeze () =
     Rpc.Rpc.implement Rpc_intf.Spool.freeze
-      (fun (_config, spool) msgids -> Spool.freeze spool msgids)
+      (fun (_config, spool, _server_events) msgids -> Spool.freeze spool msgids)
   ;;
 
   let send () =
     Rpc.Rpc.implement Rpc_intf.Spool.send
-      (fun (_config, spool) (retry_intervals, send_info) ->
+      (fun (_config, spool, _server_events) (retry_intervals, send_info) ->
          Spool.send ~retry_intervals spool send_info)
 
   let remove () =
     Rpc.Rpc.implement Rpc_intf.Spool.remove
-      (fun (_config, spool) msgids -> Spool.remove spool msgids)
+      (fun (_config, spool, _server_events) msgids -> Spool.remove spool msgids)
   ;;
 
   let recover () =
     Rpc.Rpc.implement Rpc_intf.Spool.recover
-      (fun (_config, spool) msgids -> Spool.recover spool msgids)
+      (fun (_config, spool, _server_events) info -> Spool.recover spool info)
   ;;
 
   let events () =
     Rpc.Pipe_rpc.implement Rpc_intf.Spool.events
-      (fun (_config, spool) () ~aborted ->
+      (fun (_config, spool, _server_events) () ->
          let pipe = Spool.event_stream spool in
-         (aborted >>> fun () -> Pipe.close_read pipe);
          return (Ok pipe))
   ;;
 
   let set_max_concurrent_send_jobs () =
     Rpc.Rpc.implement Rpc_intf.Spool.set_max_concurrent_send_jobs
-      (fun (_config, spool) n ->
+      (fun (_config, spool, _server_events) n ->
         Spool.set_max_concurrent_jobs spool n |> return)
   ;;
 end
@@ -109,9 +116,9 @@ module Gc = struct
 
   let stat_pipe () =
     Rpc.Pipe_rpc.implement Rpc_intf.Gc.stat_pipe
-      (fun _ () ~aborted ->
+      (fun _ () ->
          let r, w = Pipe.create () in
-         Clock.every' ~stop:aborted (Time.Span.of_sec 15.)
+         Clock.every' ~stop:(Pipe.closed w) (Time.Span.of_sec 15.)
            (fun () -> Pipe.write w (Gc.quick_stat ()));
          return (Ok r))
   ;;

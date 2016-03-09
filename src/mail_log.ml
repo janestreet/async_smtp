@@ -1,0 +1,449 @@
+open Core.Std
+open Async.Std
+open Email_message.Std
+open Types
+
+(* Level with a comparison function that has our desired behaviour *)
+module Level : Comparable.S with type t := Log.Level.t = struct
+  include Comparable.Make(struct
+      type t = Log.Level.t [@@deriving sexp]
+      let compare a b = match a, b with
+        | `Debug, `Debug -> 0
+        | `Debug, (`Info | `Error) -> -1
+        | `Info, `Debug -> 1
+        | `Info, `Info -> 0
+        | `Info, `Error -> -1
+        | `Error, (`Debug | `Info) -> 1
+        | `Error, `Error -> 0
+    end)
+
+  let%test _ = `Debug = `Debug
+  let%test _ = `Debug < `Info
+  let%test _ = `Debug < `Error
+  let%test _ = `Info > `Debug
+  let%test _ = `Info = `Info
+  let%test _ = `Info < `Error
+  let%test _ = `Error > `Debug
+  let%test _ = `Error > `Info
+  let%test _ = `Error = `Error
+end
+
+module Mail_fingerprint = struct
+  type t =
+    { headers : (string * string) list [@default []]
+    ; md5     : string sexp_option
+    ; parts   : t list [@default []]
+    } [@@deriving sexp, fields]
+
+  let rec of_email ~headers email =
+    let headers = headers @ Email_headers.to_list (Email.headers email) in
+    match Email.content email with
+    | Email.Content.Data content ->
+      { headers
+      ; md5 = Some (Octet_stream.to_string content
+                    |> Digest.string
+                    |> Digest.to_hex)
+      ; parts = []
+      }
+    | Email.Content.Message email ->
+      of_email ~headers email
+    | Email.Content.Multipart { Email.Multipart.parts; _ } ->
+      { headers
+      ; md5 = None
+      ; parts = List.map parts ~f:(of_email ~headers:[])
+      }
+
+  let of_email = of_email ~headers:[]
+end
+
+module Here = struct
+  let to_string (here:Lexing.position) =
+    sprintf "%s:%d" here.pos_fname here.pos_lnum
+end
+
+module Flows = struct
+  module Kind = struct
+    type t =
+      [ `Server_session
+      | `Client_session
+      | `Inbound_envelope
+      | `Outbound_envelope
+      ] [@@deriving sexp, bin_io]
+  end
+  module Id = struct
+    type t = string [@@deriving bin_io, sexp]
+    let tag = function
+      | `Server_session -> "srv#"
+      | `Client_session -> "cli#"
+      | `Inbound_envelope -> "in#"
+      | `Outbound_envelope -> "out#"
+    let create kind =
+      sprintf !"%s#%{Uuid}" (tag kind) (Uuid.create ())
+    let is t kind =
+      String.is_prefix t ~prefix:(tag kind)
+    let equal = String.equal
+  end
+  type t = Id.t list [@@deriving bin_io, sexp]
+  let none = []
+  let create kind = [ Id.create kind ]
+  let union = (@)
+  let extend t kind = Id.create kind :: t
+  let are_related a =
+    List.exists ~f:(List.mem a ~equal:Id.equal)
+end
+
+module Component = struct
+  module T = struct
+    let module_name = "Async_smtp.Mail_log.Component"
+    type t = string list [@@deriving sexp, bin_io, compare]
+    let hash = Hashtbl.hash
+    let to_string = String.concat ~sep:"/"
+    let of_string = String.split ~on:'/'
+  end
+  include T
+  include Identifiable.Make(T)
+
+  let parts t = t
+
+  let join a b =
+    a @ b
+
+  let is_parent ~parent t =
+    let rec loop = function
+      | ([], _) -> true
+      | ((ph::pt),(th::tt)) when String.equal ph th ->
+        loop (pt,tt)
+      | _ -> false
+    in
+    loop (parent, t)
+
+  let unknown = []
+
+  let is_unknown t =
+    t = unknown
+end
+
+module Message = struct
+  module Action = (String : Identifiable.S with type t = string)
+  module Sender = struct
+    type t = [ Sender.t | `String of string ]
+    let to_string : t -> string = function
+      | `String str -> str
+      | (#Sender.t as sender) -> Sender.to_string sender
+    let of_string str : t =
+      match Sender.of_string str with
+      | Ok sender -> (sender :> t)
+      | Error _ -> `String str
+  end
+
+  module Recipient = struct
+    type t = [ `Email of Email_address.t | `String of string ]
+    let to_string : t -> string = function
+      | `String str -> str
+      | `Email email -> Email_address.to_string email
+    let of_string str : t =
+      match Email_address.of_string str with
+      | Ok email -> `Email email
+      | Error _ -> `String str
+  end
+
+  module Tag = struct
+    let component         = "component"
+    let spool_id          = "spool-id"
+    let rfc822_id         = "rfc822-id"
+    let local_id          = "local-id"
+    let sender            = "sender"
+    let recipient         = "recipient"
+    let email_fingerprint = "email-fingerprint"
+    let local_address     = "local-address"
+    let remote_address    = "remote-address"
+    let command           = "command"
+    let reply             = "reply"
+    let flow              = "flow"
+    let location          = "location"
+  end
+
+  type 'a with_info
+    =  flows:Flows.t
+    -> component:Component.t
+    -> here:Lexing.position
+    -> ?local_address:Address.t
+    -> ?remote_address:Address.t
+    -> ?email:[ `Fingerprint of Mail_fingerprint.t
+              | `Email of Email.t
+              | `Envelope of Envelope.t
+              ]
+    -> ?rfc822_id:string
+    -> ?local_id:Envelope.Id.t
+    -> ?sender:Sender.t
+    -> ?recipients:Recipient.t list
+    -> ?spool_id:string
+    -> ?command:Command.t
+    -> ?reply:Reply.t
+    -> ?tags:(string * string) list
+    -> 'a
+  ;;
+
+  let with_info ~f ~flows ~component ~here ?local_address ?remote_address
+      ?email ?rfc822_id ?local_id ?sender ?recipients ?spool_id
+      ?command ?reply ?(tags=[]) =
+    let tags = match reply with
+      | Some reply -> (Tag.reply, Reply.to_string reply) :: tags
+      | None -> tags
+    in
+    let tags = match command with
+      | Some command -> (Tag.command, Command.to_string command) :: tags
+      | None -> tags
+    in
+    let tags = match spool_id with
+      | Some spool_id -> (Tag.spool_id, spool_id) :: tags
+      | None -> tags
+    in
+    let recipients = match recipients with
+      | Some recipients -> Some (recipients)
+      | None -> match email with
+        | Some (`Envelope envelope) ->
+          Some (List.map (Envelope.recipients envelope) ~f:(fun e -> `Email e))
+        | _ -> None
+    in
+    let recipients = match recipients with
+      | None -> []
+      (* Ensure that the empty list of recipients is specially encoded *)
+      | Some [] -> [`String ""]
+      | Some recipients -> recipients
+    in
+    let tags =
+      List.map recipients ~f:(function t -> Tag.recipient, Recipient.to_string t) @ tags
+    in
+    let sender = match sender with
+      | Some _ -> sender
+      | None -> match email with
+        | Some (`Envelope envelope) -> Some (Envelope.sender envelope :> Sender.t)
+        | _ -> None
+    in
+    let tags = match sender with
+      | Some sender -> (Tag.sender, Sender.to_string sender) :: tags
+      | None -> tags
+    in
+    let email_fingerprint = match email with
+      | Some (`Envelope envelope) -> Some (Mail_fingerprint.of_email (Envelope.email envelope))
+      | Some (`Email email) -> Some (Mail_fingerprint.of_email email)
+      | Some (`Fingerprint fingerprint) -> Some fingerprint
+      | None -> None
+    in
+    let tags = match email_fingerprint with
+      | Some fingerprint -> (Tag.email_fingerprint, sprintf !"%{sexp:Mail_fingerprint.t}" fingerprint) :: tags
+      | None -> tags
+    in
+    let local_id = match local_id with
+      | Some _ -> local_id
+      | None -> match email with
+        | Some (`Envelope envelope) -> Some (Envelope.id envelope)
+        | _ -> None
+    in
+    let tags = match local_id with
+      | Some local_id -> (Tag.local_id, Envelope.Id.to_string local_id) :: tags
+      | None -> tags
+    in
+    let rfc822_id = match rfc822_id with
+      | Some _ -> rfc822_id
+      | None -> match email with
+        | Some (`Envelope envelope) ->
+          Email_headers.last (Envelope.email envelope |> Email.headers) "Message-Id"
+        | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
+        | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
+          Email_headers.last (Email_headers.of_list ~whitespace:`Keep headers) "Message-Id"
+        | None -> None
+    in
+    let tags = match rfc822_id with
+      | Some rfc822_id -> (Tag.rfc822_id, rfc822_id) :: tags
+      | None -> tags
+    in
+    let tags = match remote_address with
+      | Some remote_address -> (Tag.remote_address, Address.to_string remote_address) :: tags
+      | None -> tags
+    in
+    let tags = match local_address with
+      | Some local_address -> (Tag.local_address, Address.to_string local_address) :: tags
+      | None -> tags
+    in
+    let tags = List.map flows ~f:(fun f -> Tag.flow, f) @ tags in
+    let tags = (Tag.location, Here.to_string here) :: tags in
+    let tags = (Tag.component, Component.to_string component) :: tags in
+    f tags
+
+  type t = Log.Message.t
+
+  let create =
+    with_info ~f:(fun tags action ->
+        Log.Message.create ~tags (`String action))
+
+  let debugf ~flows =
+    with_info ~flows ~f:(fun tags fmt ->
+        ksprintf (fun msg ->
+            Log.Message.create ~tags (`String msg)) fmt)
+
+  let of_error =
+    with_info ~f:(fun tags error ->
+        Log.Message.create ~tags (`Sexp (Error.sexp_of_t error)))
+
+  let info =
+    with_info ~f:(fun tags () ->
+        Log.Message.create ~tags (`String "INFO"))
+
+  let with_flow_and_component ~flows ~component t =
+    let tags = Log.Message.tags t in
+    let tags =
+      if List.is_empty component then
+        tags
+      else
+        match List.find tags ~f:(fun (k,_) -> k = Tag.component) with
+        | None -> [ Tag.component, Component.to_string component ] @ tags
+        | Some (_,base_component) ->
+          let tags = List.filter tags ~f:(fun (k,_) -> k <> Tag.component) in
+          [ Tag.component, Component.to_string (base_component :: component) ] @ tags
+    in
+    let tags =
+      List.map flows ~f:(fun f -> Tag.flow, f) @ tags
+    in
+    Log.Message.create
+      ~time:(Log.Message.time t)
+      ?level:(Log.Message.level t)
+      ~tags
+      (Log.Message.raw_message t)
+
+  let level t = Log.Message.level t |> Option.value ~default:`Info
+
+  let time = Log.Message.time
+
+  let action = Log.Message.message
+
+  let component t =
+    List.find_map (Log.Message.tags t) ~f:(fun (k,v) ->
+        Option.some_if (k = Tag.component) v)
+    |> Option.value_map ~f:Component.of_string ~default:Component.unknown
+
+  let find_tag' t ~tag ~f =
+    List.find_map (Log.Message.tags t) ~f:(fun (k, v) ->
+        if k = tag then
+          Option.try_with (fun () ->
+              f v)
+        else None)
+
+  let find_tag = find_tag' ~f:ident
+
+  let rfc822_id = find_tag ~tag:Tag.rfc822_id
+
+  let local_id = find_tag' ~tag:Tag.local_id ~f:Envelope.Id.of_string
+
+  let spool_id = find_tag ~tag:Tag.spool_id
+
+  let of_string str ~of_sexp =
+    Sexp.of_string_conv_exn str of_sexp
+
+  let sender = find_tag' ~tag:Tag.sender ~f:Sender.of_string
+
+  let recipients t =
+    let recipients =
+      List.filter_map (Log.Message.tags t) ~f:(fun (k,v) ->
+        if k = Tag.recipient then
+          Option.try_with (fun () -> Recipient.of_string v)
+        else
+          None)
+    in
+    match recipients with
+    | [] -> None
+    (* Special case to distinguish the empty list from omitting this *)
+    | [`String ""] -> Some []
+    | recipients -> Some recipients
+
+  let email = find_tag' ~tag:Tag.email_fingerprint ~f:(of_string ~of_sexp:Mail_fingerprint.t_of_sexp)
+
+  let local_address = find_tag' ~tag:Tag.local_address ~f:Host_and_port.of_string
+
+  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Host_and_port.of_string
+
+  let command = find_tag' ~tag:Tag.command ~f:Command.of_string
+
+  let reply = find_tag' ~tag:Tag.reply ~f:Reply.of_string
+
+  let flows t = List.filter_map (Log.Message.tags t) ~f:(fun (k,v) ->
+      Option.some_if (k=Tag.flow) v)
+
+end
+
+type t = Log.t
+
+let message' t ~level msg =
+  if Level.(<=) (Log.level t) level &&
+    Level.(<=) level (Option.value (Log.Message.level msg) ~default:level) then
+    let msg =
+      if Log.Message.level msg = Some level then
+        msg
+      else
+        Log.Message.set_level msg (Some level)
+    in
+    Log.message t msg
+
+let message t ~level msg =
+  if Level.(<=) (Log.level t) level then
+    let msg = Lazy.force msg in
+    let msg =
+      if Log.Message.level msg = Some level then
+        msg
+      else
+        Log.Message.set_level msg (Some level)
+    in
+    Log.message t msg
+
+let debug = message ~level:`Debug
+let info = message ~level:`Info
+let error = message ~level:`Error
+
+let null_log =
+  Log.create
+    ~level:`Error
+    ~output:[ Log.Output.create (fun _ -> Deferred.unit) ]
+    ~on_error:(`Call ignore)
+
+let with_flow_and_component ~flows ~component t =
+  Log.create
+    ~level:(Log.level t)
+    ~output:[ Log.Output.create (fun msgs ->
+        Queue.iter msgs ~f:(fun msg ->
+            let level = Message.level msg in
+            if Level.(<=) (Log.level t) level then
+              message ~level t
+                (lazy (Message.with_flow_and_component ~flows ~component msg)));
+        Log.flushed t) ]
+    ~on_error:(`Call (fun err ->
+        Log.Global.sexp
+          ~level:`Error
+          ~tags:([ Message.Tag.component, sprintf !"%{Component}" (component @ ["_LOG"]) ]
+                 @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
+          (Error.sexp_of_t err)))
+
+let adjust_log_levels ?(minimum_level=`Debug) ?(remap_info_to=`Info) ?(remap_error_to=`Error) t =
+  let minimum_level = Level.max (Log.level t) minimum_level in
+  if Level.(<) remap_info_to minimum_level && Level.(<) remap_error_to minimum_level then
+    null_log
+  else if minimum_level = Log.level t && remap_info_to = `Info && remap_error_to = `Error then
+    t
+  else
+    Log.create
+      ~level:minimum_level
+      ~output:[ Log.Output.create (fun msgs ->
+          Queue.iter msgs ~f:(fun msg ->
+              let level = match Log.Message.level msg with
+                | None | Some `Info -> remap_info_to
+                | Some `Error -> remap_error_to
+                | Some `Debug -> `Debug
+              in
+              if Level.(<=) minimum_level level then
+                message' ~level t msg);
+          Log.flushed t) ]
+      ~on_error:(`Call (fun err ->
+          Log.Global.sexp
+            ~level:`Error
+            ~tags:[Message.Tag.component, "_LOG"]
+            (Error.sexp_of_t err)))

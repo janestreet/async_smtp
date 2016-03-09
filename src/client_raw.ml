@@ -3,11 +3,13 @@ open Async.Std
 open Async_ssl.Std
 open Types
 
+module Log = Mail_log
+
 module Config = Client_config
 
 module Peer_info = struct
   type t =
-    { dest : Host_and_port.t
+    { dest : Address.t
     ; greeting : string Set_once.t
     ; hello : [`Simple of string | `Extended of string * (Extension.t list) ] Set_once.t
     } [@@deriving sexp, fields]
@@ -36,9 +38,6 @@ module Peer_info = struct
     match extensions t with
     | None -> false
     | Some extensions -> List.mem extensions extension
-
-  let domain t =
-    Host_and_port.host t.dest
 
   let greeting t =
     Set_once.get t.greeting
@@ -81,8 +80,7 @@ end
    us to forget the info, so we are making it less likely that we forget to forget. *)
 type t =
   { config : Config.t
-  ; session_id : string
-  ; log : Log.t option
+  ; flows : Log.Flows.t
   (* The only allowed transition is from Plain to Tls. *)
   ; mutable mode : [ `Bsmtp of Bsmtp.t
                    | `Plain of Plain.t
@@ -90,46 +88,37 @@ type t =
                    ]
   } [@@deriving fields]
 
-(* Debug stuff *)
-let has_log t = Option.is_some (log t)
-module Log = struct
-  let debug t =
-    ksprintf (fun msg ->
-      let session_id = session_id t in
-      match log t with
-      | Some log ->
-        Log.debug ~tags:["session_id",session_id] log "[%s] %s" session_id msg
-      | None ->
-        ())
-
-  let error t =
-    ksprintf (fun msg ->
-      let session_id = session_id t in
-      match log t with
-      | Some log ->
-        Log.error ~tags:["session_id",session_id] log "[%s] %s" session_id msg
-      | None ->
-        ())
-end
+let remote_address t =
+  match t.mode with
+  | `Bsmtp _ -> None
+  | `Plain { Plain.info; _ }
+  | `Tls { Tls.info; _ } -> Some info.Peer_info.dest
+;;
 
 let create
-      ?log
-      ~session_id
-      ~dest
-      reader
-      writer
-      config =
+    ?flows
+    ~dest
+    reader
+    writer
+    config =
   let info = Peer_info.create ~dest () in
+  let flows = match flows with
+    | Some flows -> flows
+    | None -> Log.Flows.create `Client_session
+  in
   let mode = `Plain (Plain.create ~reader ~writer ~info) in
-  { mode; session_id; log; config }
+  { mode; flows; config }
 
 let create_bsmtp
-      ?log
-      ~session_id
-      writer
-      config =
+    ?flows
+    writer
+    config =
+  let flows = match flows with
+    | Some flows -> flows
+    | None -> Log.Flows.create `Client_session
+  in
   let mode = `Bsmtp (Bsmtp.create ~writer) in
-  { mode; session_id; log; config }
+  { mode; flows; config }
 
 let reader t =
   match t.mode with
@@ -169,8 +158,8 @@ let read_reply reader =
   let rec loop partial =
     Reader.read_line reader
     >>| (function
-      | `Ok line -> Ok line
-      | `Eof -> Or_error.error_string "Unexpected EOF")
+        | `Ok line -> Ok line
+        | `Eof -> Or_error.error_string "Unexpected EOF")
     >>=? fun line ->
     match Reply.parse ?partial line with
     | `Done reply -> Deferred.Or_error.return reply
@@ -179,7 +168,13 @@ let read_reply reader =
   Deferred.Or_error.try_with_join
     (fun () -> loop None)
 
-let receive ?timeout t =
+(* entry point *)
+let receive ?timeout ?flows t ~log ~component ~here =
+  let flows = match flows with
+    | None -> t.flows
+    | Some flows -> Log.Flows.union t.flows flows
+  in
+  let component = component @ [ "receive" ] in
   let timeout =
     Option.value timeout ~default:(Config.send_receive_timeout t.config)
   in
@@ -189,26 +184,48 @@ let receive ?timeout t =
     Clock.with_timeout timeout (read_reply reader)
     >>| function
     | `Result (Ok v) ->
-      if has_log t then Log.debug t !"<- %{Reply}" v;
+      Log.debug log (lazy (Log.Message.create ~here ~flows ~component ~reply:v "<-"));
       Ok (`Received v)
-    | `Result (Error e) -> Error e
+    | `Result (Error e) ->
+      Log.error log (lazy (Log.Message.of_error ~here ~flows ~component e));
+      Error e
     | `Timeout ->
-      Or_error.error_string
-        (sprintf !"Timeout %{Time.Span} waiting for reply" timeout)
+      let e = Error.createf !"Timeout %{Time.Span} waiting for reply" timeout in
+      Log.error log (lazy (Log.Message.of_error ~here ~flows ~component e));
+      Error e
 
-let send t cmd =
+
+(* entry point *)
+let send t ~log ?flows ~component ~here cmd =
+  let flows = match flows with
+    | None -> t.flows
+    | Some flows -> Log.Flows.union t.flows flows
+  in
   Deferred.Or_error.try_with (fun () ->
-    if has_log t then Log.debug t !"-> %{Command}" cmd;
-    Writer.write_line (writer t) (Command.to_string cmd);
-    Writer.flushed (writer t))
+      Log.debug log (lazy (Log.Message.create
+                             ~here
+                             ~flows
+                             ~component
+                             ~command:cmd
+                             "->"));
+      Writer.write_line (writer t) (Command.to_string cmd);
+      Writer.flushed (writer t))
 
-let send_receive ?timeout t cmd =
-  send t cmd >>=? fun () -> receive ?timeout t
+(* entry point *)
+let send_receive ?timeout t ~log ?flows ~component ~here cmd =
+  send t ~log ?flows ~component ~here cmd >>=? fun () -> receive ?timeout t ~log ?flows ~component ~here
 
-let do_quit t =
+let do_quit t ~log ~component =
+  let component = component @ ["quit"] in
+  Log.info log (lazy (Log.Message.create
+                        ~here:[%here]
+                        ~flows:t.flows
+                        ~component
+                        ?remote_address:(remote_address t)
+                        "INFO"));
   if Writer.is_closed (writer t) then return (Ok ())
   else begin
-    send_receive t Command.Quit
+    send_receive t ~log ~component ~here:[%here] Command.Quit
     >>= function
     | Error e ->
       return (Error (Error.tag e "Error sending QUIT"))
@@ -231,15 +248,22 @@ let cleanup t =
     Ssl.Connection.close (Tls.tls tls);
     Ssl.Connection.closed (Tls.tls tls)
 
-let quit_and_cleanup t =
-  do_quit t
+let quit_and_cleanup t ~log ~component =
+  do_quit t ~log ~component
   >>= fun quit_result ->
   cleanup t
   >>= fun cleanup_result ->
   return (Or_error.combine_errors_unit [quit_result; cleanup_result])
 
-let do_greeting t =
-  receive t
+let do_greeting t ~log ~component =
+  let component = component @ ["greeting"] in
+  Log.info log (lazy (Log.Message.create
+                        ~here:[%here]
+                        ~flows:t.flows
+                        ~component
+                        ?remote_address:(remote_address t)
+                        "INFO"));
+  receive t ~log ~component ~here:[%here]
   >>=? function
   | `Bsmtp -> return (Ok ())
   | `Received (Service_ready_220 greeting) ->
@@ -251,8 +275,8 @@ let greeting t =
   let config = config t in
   Option.value config.greeting ~default:(Unix.gethostname ())
 
-let do_helo t =
-  send_receive t (Command.Hello (greeting t))
+let do_helo t  ~log ~component =
+  send_receive t ~log ~component ~here:[%here] (Command.Hello (greeting t))
   >>=? function
   | `Bsmtp -> return (Ok ())
   | `Received (Reply.Ok_completed_250 helo) ->
@@ -260,8 +284,8 @@ let do_helo t =
   | `Received reply ->
     return (Or_error.errorf !"Unexpected response to HELO: %{Reply}" reply)
 
-let do_ehlo t =
-  send_receive t (Command.Extended_hello (greeting t))
+let do_ehlo ~log ~component t =
+  send_receive t ~log ~component ~here:[%here] (Command.Extended_hello (greeting t))
   >>=? function
   | `Bsmtp -> return (Ok ())
   | `Received reply ->
@@ -276,22 +300,23 @@ let do_ehlo t =
       end
     | Reply.Command_not_recognized_500 _
     | Reply.Command_not_implemented_502 _ ->
-      do_helo t
+      do_helo t ~log ~component
     | reply ->
       return (Or_error.errorf !"Unexpected response to EHLO: %{Reply}" reply)
 
-let do_start_tls t tls_options =
+let do_start_tls t ~log ~component tls_options =
+  let component = component @ ["starttls"] in
   match t.mode with
   | `Bsmtp _ ->
-    failwithf
-      "[%s] do_start_tls: Cannot switch from bsmtp to TLS"
-      t.session_id ()
+    failwith "do_start_tls: Cannot switch from bsmtp to TLS"
   | `Tls _ ->
-    failwithf
-      "[%s] do_start_tls: TLS is already negotiated"
-      t.session_id ()
+    failwith "do_start_tls: TLS is already negotiated"
   | `Plain plain ->
-    if has_log t then Log.debug t "Starting TLS negotiation";
+    Log.debug log (lazy (Log.Message.create
+                           ~here:[%here]
+                           ~flows:t.flows
+                           ~component
+                           "starting tls negotiation"));
     let old_reader = Plain.reader plain in
     let old_writer = Plain.writer plain in
     let reader_pipe_r,reader_pipe_w = Pipe.create () in
@@ -313,13 +338,17 @@ let do_start_tls t tls_options =
     >>= fun new_reader ->
     Writer.of_pipe (Info.of_string "SMTP/TLS") writer_pipe_w
     >>= fun (new_writer, _) ->
-    if has_log t then Log.debug t "Finished TLS negotiation";
+    Log.debug log (lazy (Log.Message.create
+                           ~here:[%here]
+                           ~flows:t.flows
+                           ~component
+                           "finished tls negotiation"));
     (* Make sure we forget all of the peer info except the host and port we talk
        to. *)
     let dest = Peer_info.dest (Plain.info plain) in
     let info = Peer_info.create ~dest () in
     t.mode <- `Tls (Tls.create ~reader:new_reader ~writer:new_writer ~tls ~info);
-    do_ehlo t
+    do_ehlo t ~log ~component
 
 (* The correctness of our security relies on the correctness of this
    function. The rest of the code in this module does not need to be trusted.
@@ -331,67 +360,76 @@ let check_tls_security t =
     if not (Config.has_tls config) then Ok ()
     else Or_error.errorf "No TLS allowed in Bsmtp mode."
   | `Plain plain ->
-    let domain = Peer_info.domain (Plain.info plain) in
-    begin match Config.match_tls_domain config domain with
-    | None -> Ok ()
-    | Some tls ->
-      match Config.Tls.mode tls with
-      | `Always_try | `If_available -> Ok ()
-      | `Required ->
-        Or_error.errorf "TLS Required for %s but not negotiated" domain
+    begin match Peer_info.dest (Plain.info plain) with
+    | `Unix _file -> Ok ()
+    | `Inet hp ->
+      let host, port = Host_and_port.tuple hp in
+      match Config.match_tls_domain config host with
+      | None -> Ok ()
+      | Some tls ->
+        match Config.Tls.mode tls with
+        | `Always_try | `If_available -> Ok ()
+        | `Required ->
+          Or_error.errorf "TLS Required for %s:%d but not negotiated" host port
     end
   | `Tls tls ->
-    let domain = Peer_info.domain (Tls.info tls) in
-    match Config.match_tls_domain config domain with
-    | None ->
-      Or_error.errorf "TLS forbidden for %s but still negotiated" domain
-    | Some tls_config ->
-      let certificate_mode = Config.Tls.certificate_mode tls_config in
-      let certificate = Ssl.Connection.peer_certificate (Tls.tls tls) in
-      let check_domain cert =
-        Ssl.Certificate.subject cert
-        |> List.find ~f:(fun (sn, _) -> sn = "CN")
-        |> function
-        | None -> Or_error.errorf "No CN in certificate for %s" domain
-        | Some (_, cn) ->
-          if cn = domain then Ok ()
-          else Or_error.errorf "Certificate for '%s' has CN = '%s'" domain cn
-      in
-      let no_cert_error () =
-        Or_error.errorf "Certificate required, but not sent by peer: %s" domain
-      in
-      match certificate_mode, certificate with
-      | `Ignore, _                -> Ok ()
-      | `Verify, None             -> no_cert_error ()
-      | `Verify, (Some (Error e)) -> Error e
-      | `Verify, (Some (Ok cert)) -> check_domain cert
+    match Peer_info.dest (Tls.info tls) with
+    | `Unix file ->
+      Or_error.errorf "TLS forbidden for unix socket %s but still negotiated" file
+    | `Inet hp ->
+      let host, port = Host_and_port.tuple hp in
+      match Config.match_tls_domain config host with
+      | None ->
+        Or_error.errorf "TLS forbidden for %s:%d but still negotiated" host port
+      | Some tls_config ->
+        let certificate_mode = Config.Tls.certificate_mode tls_config in
+        let certificate = Ssl.Connection.peer_certificate (Tls.tls tls) in
+        let check_domain cert =
+          Ssl.Certificate.subject cert
+          |> List.find ~f:(fun (sn, _) -> sn = "CN")
+          |> function
+          | None -> Or_error.errorf "No CN in certificate for %s:%d" host port
+          | Some (_, cn) ->
+            if cn = host then Ok ()
+            else Or_error.errorf "Certificate for '%s:%d' has CN = '%s'" host port cn
+        in
+        let no_cert_error () =
+          Or_error.errorf "Certificate required, but not sent by peer: %s:%d" host port
+        in
+        match certificate_mode, certificate with
+        | `Ignore, _                -> Ok ()
+        | `Verify, None             -> no_cert_error ()
+        | `Verify, (Some (Error e)) -> Error e
+        | `Verify, (Some (Ok cert)) -> check_domain cert
 
 let should_try_tls t : Config.Tls.t option =
   match t.mode with
   | `Bsmtp _ | `Tls _ -> None
   | `Plain plain ->
-    let domain = Peer_info.domain (Plain.info plain) in
-    match Config.match_tls_domain (config t) domain with
-    | None -> None
-    | Some tls ->
-      match Config.Tls.mode tls with
-      | `Always_try | `Required -> Some tls
-      | `If_available ->
-        if supports_extension t Extension.Start_tls then Some tls else None
+    match Peer_info.dest (Plain.info plain) with
+    | `Unix _file -> None
+    | `Inet hp ->
+      match Config.match_tls_domain (config t) (Host_and_port.host hp) with
+      | None -> None
+      | Some tls ->
+        match Config.Tls.mode tls with
+        | `Always_try | `Required -> Some tls
+        | `If_available ->
+          if supports_extension t Extension.Start_tls then Some tls else None
 
 (* Will fail if negotiated security level is lower than that required by the
    config. *)
-let maybe_start_tls t =
+let maybe_start_tls t ~log ~component =
   begin match should_try_tls t with
   | None -> return (Ok ())
   | Some tls_options ->
-    send_receive t Command.Start_tls
+    send_receive t ~log ~component ~here:[%here] Command.Start_tls
     >>=? function
     | `Bsmtp -> return (Ok ())
     | `Received reply ->
       match reply with
       | Reply.Service_ready_220 _ ->
-        do_start_tls t tls_options
+        do_start_tls t ~log  ~component tls_options
       | Reply.Command_not_recognized_500 _
       | Reply.Command_not_implemented_502 _
       | Reply.Parameter_not_implemented_504 _ ->
@@ -402,22 +440,29 @@ let maybe_start_tls t =
   >>=? fun () ->
   return (check_tls_security t)
 
-let with_quit t ~f =
+let with_quit t ~log ~component ~f =
+  let component = component @ ["quit"] in
   let quit_and_cleanup_with_log t =
-    quit_and_cleanup t
-    >>| Result.iter_error ~f:(fun err ->
-      Log.error t "%s" (Error.to_string_hum err))
+    quit_and_cleanup t ~log ~component
+    >>| function
+    | Ok () -> ()
+    | Error err ->
+      Log.error log (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
   in
   Monitor.protect f ~finally:(fun () -> quit_and_cleanup_with_log t)
 
-let with_session t ~f =
+(* Entry point *)
+let with_session t ~log ~component ~f =
+  let component = component @ [ "session" ] in
+  Log.info log (lazy (Log.Message.info ~component ~here:[%here]  ~flows:t.flows
+                        ?remote_address:(remote_address t) ()));
   (* The RFC prescribes that we send QUIT if we are not happy with the reached
      level of TLS security. *)
-  with_quit t ~f:(fun () ->
-    do_greeting t
+  with_quit t ~log ~component ~f:(fun () ->
+    do_greeting t ~log ~component
     >>=? fun () ->
-    do_ehlo t
+    do_ehlo t ~log ~component:(component @ ["helo"])
     >>=? fun () ->
-    maybe_start_tls t
+    maybe_start_tls t ~log ~component:(component @ ["starttls"])
     >>=? fun () ->
     f t)

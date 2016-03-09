@@ -1,11 +1,12 @@
-open Core.Std
-open Async.Std
-open Async_smtp.Std
+open! Core.Std
+open! Async.Std
+open! Email_message.Std
+open! Async_smtp.Std
 
 module Config : sig
   module Header_cond : sig
     type t =
-      { name : Email_message.Field_name.t;
+      { name : Email_headers.Name.t;
         if_  : [ `Contains of string ] sexp_option;
       } [@@deriving sexp]
     ;;
@@ -13,7 +14,7 @@ module Config : sig
 
   module Listed_header_cond : sig
     type t =
-      { name : Email_message.Field_name.t;
+      { name : Email_headers.Name.t;
         if_ : [ `Contains of string ] sexp_option;
         remove_duplicates : unit sexp_option;
       } [@@deriving sexp]
@@ -41,7 +42,7 @@ module Config : sig
 end
 
 module Header : sig
-  type t = (Email_message.Field_name.t * string) [@@deriving compare]
+  type t = (Email_headers.Name.t * Email_headers.Value.t) [@@deriving compare]
 end
 
 val transform : Config.t -> Smtp_envelope.t -> Smtp_envelope.t

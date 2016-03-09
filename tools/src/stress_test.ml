@@ -2,6 +2,10 @@ open Core.Std
 open Async.Std
 open Async_smtp.Std
 
+let log =
+  Lazy.force Async.Std.Log.Global.log
+  |> Async_smtp.Mail_log.adjust_log_levels ~remap_info_to:`Debug
+
 module Config = struct
   type t =
     { dir : string
@@ -102,7 +106,7 @@ module Config = struct
       { Smtp_server.Config.
         spool_dir
       ; tmp_dir = None
-      ; ports = [ t.port ]
+      ; where_to_listen = [`Port t.port]
       ; max_concurrent_send_jobs = 1 (* not used *)
       ; max_concurrent_receive_jobs_per_port = 1
       ; rpc_port = 0 (* not used *)
@@ -126,10 +130,10 @@ let send ~config ~client_config envelope =
   don't_wait_for (
     Smtp_client.Tcp.with_
       ~log:(Lazy.force Log.Global.log)
-      (Host_and_port.create ~host ~port)
+      (`Inet (Host_and_port.create ~host ~port))
       ~config:client_config
       ~f:(fun client ->
-          Smtp_client.send_envelope client envelope
+          Smtp_client.send_envelope client ~log envelope
           >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
           >>| Or_error.join
           >>|? ignore
@@ -166,15 +170,15 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~message_from_stdin () =
   >>= fun (server_config,client_config) ->
   let module Callbacks : Smtp_server.Callbacks.S = struct
     include Smtp_server.Callbacks.Simple
-    let process_envelope ~session:_ envelope =
+    let process_envelope ~log:_ ~session:_ envelope =
       begin
         if !counter = Config.send_n_messages config
         then Ivar.fill finished ()
         else send ~config ~client_config envelope
       end;
-      return (`Consume "")
+      return (`Consume (sprintf "stress-test:%d" !counter))
   end in
-  Smtp_server.start ~config:server_config (module Callbacks)
+  Smtp_server.start ~log ~config:server_config (module Callbacks)
   >>| Or_error.ok_exn
   >>= fun server ->
   send ~config ~client_config envelope;

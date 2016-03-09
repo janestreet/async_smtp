@@ -3,7 +3,8 @@ open Async.Std
 
 let implementations () =
   let open Rpc_impl in
-  [ Spool.status ()
+  [ Smtp_events.events ()
+  ; Spool.status ()
   ; Spool.freeze ()
   ; Spool.send ()
   ; Spool.remove ()
@@ -22,8 +23,10 @@ let implementations () =
   ]
 ;;
 
-let start (config, spool) ~plugin_rpcs =
-  let initial_connection_state = (fun _socket_addr _connection -> (config, spool)) in
+let start (config, spool, server_events) ~plugin_rpcs =
+  let initial_connection_state =
+    (fun _socket_addr _connection -> (config, spool, server_events))
+  in
   let where_to_listen = Tcp.on_port (Server_config.rpc_port config) in
   let implementations =
     implementations ()

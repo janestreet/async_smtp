@@ -1,5 +1,5 @@
-open Core.Std
-open Async.Std
+open! Core.Std
+open! Async.Std
 open Types
 
 (** SMTP client API. Includes TLS support: http://tools.ietf.org/html/rfc3207
@@ -14,8 +14,8 @@ open Types
     should not be used thereafter.
 
     This client logs aggressively; while this produces a lot of garbage it is extremely
-    helpful when debugging issues down the line. The client includes a [Log.t] and
-    [session_id] that can be set when creating the client.  The [session_id] is extended
+    helpful when debugging issues down the line. The client includes a [session_id]
+    that can be set when creating the client.  The [session_id] is extended
     with additional information about the client state.
 
     See [Client_raw] if you need a lower-level interface.
@@ -57,16 +57,19 @@ end
 (** Perform all required commands to send an SMTP evelope *)
 val send_envelope
   :  t
+  -> log:Mail_log.t
+  -> ?flows:Mail_log.Flows.t
+  -> ?component:Mail_log.Component.t
   -> Envelope.t
   -> Envelope_status.t Deferred.Or_error.t
 
 (** Standard SMTP over tcp *)
 module Tcp : sig
   val with_
-    : (?log:Log.t
-       -> ?session_id:string
-       -> ?config:Client_config.t
-       -> Host_and_port.t
+    : (?config:Client_config.t
+       -> log:Mail_log.t
+       -> ?component:Mail_log.Component.t
+       -> Address.t
        -> f:(t -> 'a Deferred.Or_error.t)
        -> 'a Deferred.Or_error.t
       ) Tcp.with_connect_options
@@ -76,6 +79,9 @@ end
 module Bsmtp : sig
   val write
     :  ?skip_prelude_and_prologue:bool
+    -> ?log:Mail_log.t (* = Mail_log.quiet *)
+    -> ?flows:Mail_log.Flows.t
+    -> ?component:Mail_log.Component.t
     -> Writer.t
     -> Envelope.t Pipe.Reader.t
     -> unit Deferred.Or_error.t

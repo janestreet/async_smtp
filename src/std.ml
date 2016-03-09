@@ -8,10 +8,13 @@ module Smtp_client = struct
   module Raw    = Client_raw
   module Simple = Client_simple
 end
+module Address                     = Types.Address
 module Smtp_spool                  = Spool
 module Smtp_rpc_intf               = Rpc_intf
+module Smtp_events                 = Smtp_events
 module Email                       = Email_message.Email
 module Email_address               = Types.Email_address
+module Email_headers               = Email_message.Headers
 module Smtp_envelope               = Types.Envelope
 module Smtp_envelope_with_next_hop = Types.Envelope_with_next_hop
 module Smtp_envelope_selector      = Envelope_selector

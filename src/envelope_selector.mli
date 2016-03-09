@@ -1,4 +1,4 @@
-open Core.Std
+open! Core.Std
 open Email_message.Std
 open Types
 open Re2

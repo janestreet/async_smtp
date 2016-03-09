@@ -1,5 +1,5 @@
-open Core.Std
-open Async.Std
+open! Core.Std
+open! Async.Std
 open Async_ssl.Std
 
 module Tls : sig
@@ -13,10 +13,14 @@ module Tls : sig
     } [@@deriving fields, sexp]
 end
 
+module Where_to_listen : sig
+  type t = [ `Port of int | `File of string ] [@@deriving sexp]
+end
+
 type t =
   { spool_dir                            : string
   ; tmp_dir                              : string option
-  ; ports                                : int list
+  ; where_to_listen                      : Where_to_listen.t list
   ; max_concurrent_send_jobs             : int
   ; max_concurrent_receive_jobs_per_port : int
   ; rpc_port                             : int

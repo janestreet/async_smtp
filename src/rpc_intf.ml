@@ -67,10 +67,13 @@ let bool         = binable (module Bool)
 let time_span    = binable (module Time.Span)
 let error        = binable (module Error)
 
+let smtp_event = binable (module Smtp_events.Event)
+
 let id           = binable (module Spool.Spooled_message_id)
 let spool_status = binable (module Spool.Status)
-let event        = binable (module Spool.Event)
+let spool_event  = binable (module Spool.Event)
 let send_info    = binable (module Spool.Send_info)
+let recover_info = binable (module Spool.Recover_info)
 
 let gc_stat      = binable (module Gc.Stat)
 let pid          = binable (module Pid)
@@ -79,6 +82,12 @@ module Monitor = struct
   (* Including a sequence number. We broadcast a heartbeat message (with error =
      None) every 10 seconds..  *)
   let errors = pipe_rpc ~name:"errors" unit (pair (int, option error)) error
+end
+
+module Smtp_events = struct
+  let prefix = "server"
+
+  let events = pipe_rpc ~name:(prefix ^- "envelope-received") unit smtp_event (or_error unit)
 end
 
 module Spool = struct
@@ -94,13 +103,13 @@ module Spool = struct
 
   let remove     = rpc ~name:(prefix ^- "remove") (list id) (or_error unit)
 
-  let recover    = rpc ~name:(prefix ^- "recover") (list id) (or_error unit)
+  let recover    = rpc ~name:(prefix ^- "recover") (recover_info) (or_error unit)
 
   let send_now   = rpc ~name:(prefix ^- "send-now")
                      (pair (list id, list time_span))
                      (or_error unit)
 
-  let events     = pipe_rpc ~name:(prefix ^- "events") unit event error
+  let events     = pipe_rpc ~name:(prefix ^- "events") unit spool_event error
 
   let set_max_concurrent_send_jobs =
     rpc ~name:(prefix ^- "set-max-send-jobs") int unit

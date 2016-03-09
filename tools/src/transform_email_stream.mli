@@ -1,5 +1,5 @@
-open Core.Std
-open Async.Std
+open! Core.Std
+open! Async.Std
 open Async_smtp.Std
 
 module Config : sig

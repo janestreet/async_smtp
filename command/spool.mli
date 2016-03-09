@@ -1,5 +1,5 @@
-open Core.Std
-open Async.Std
+open! Core.Std
+open! Async.Std
 open Async_smtp.Std
 open Common
 
@@ -32,12 +32,12 @@ val send
   -> unit Deferred.t
 
 val remove
-  : msgids:Smtp_spool.Spooled_message_id.t list
+  :  msgids:Smtp_spool.Spooled_message_id.t list
   -> Rpc.Connection.t
   -> unit Deferred.t
 
 val recover
-  : msgids:Smtp_spool.Spooled_message_id.t list
+  :  Smtp_spool.Recover_info.t
   -> Rpc.Connection.t
   -> unit Deferred.t
 

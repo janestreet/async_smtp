@@ -45,8 +45,8 @@
    [1] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-how_exim_receives_and_delivers_mail.html
    [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
 *)
-open Core.Std
-open Async.Std
+open! Core.Std
+open! Async.Std
 open Types
 
 module Spooled_message_id : Identifiable
@@ -58,6 +58,7 @@ type t
     system. *)
 val create
   :  config:Server_config.t
+  -> log:Mail_log.t
   -> unit
   -> t Deferred.Or_error.t
 
@@ -66,6 +67,7 @@ val create
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
+  -> flows:Mail_log.Flows.t
   -> original_msg:Envelope.t
   -> Envelope_with_next_hop.t list
   -> Envelope.Id.t Deferred.Or_error.t
@@ -75,6 +77,7 @@ val add
 val quarantine
   :  t
   -> reason: string
+  -> flows:Mail_log.Flows.t
   -> original_msg:Envelope.t
   -> Envelope_with_next_hop.t list
   -> unit Deferred.Or_error.t
@@ -120,9 +123,15 @@ val remove
   -> Spooled_message_id.t list
   -> unit Deferred.Or_error.t
 
+module Recover_info : sig
+  type t =
+    [ `Removed of Spooled_message_id.t list
+    | `Quarantined of Spooled_message_id.t list ] [@@deriving bin_io]
+end
+
 val recover
   :  t
-  -> Spooled_message_id.t list
+  -> Recover_info.t
   -> unit Deferred.Or_error.t
 
 module Spooled_message_info : sig
@@ -179,8 +188,8 @@ module Event : sig
            | `Frozen        of Spooled_message_id.t
            | `Removed       of Spooled_message_id.t
            | `Unfrozen      of Spooled_message_id.t
-           | `Recovered     of Spooled_message_id.t
-           | `Quarantined   of Spooled_message_id.t * string
+           | `Recovered     of Spooled_message_id.t * [`From_quarantined | `From_removed]
+           | `Quarantined   of Spooled_message_id.t * [`Reason of string]
            | `Ping ]
   [@@deriving sexp, bin_io]
 
