@@ -22,6 +22,7 @@ depends: [
   "cryptokit"
   "email_message"
   "fieldslib"
+  "js-build-tools"  {build}
   "ppx_assert"
   "ppx_bench"
   "ppx_driver"
