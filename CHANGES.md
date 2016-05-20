@@ -1,3 +1,8 @@
+## 113.43.00
+
+- Use the ~log argument passed to `Client_simple.start` rather than
+  `Log.Global.log` in one spot.
+
 ## 113.33.00
 
 - Allow an smtp\_client to connect to a local unix socket
