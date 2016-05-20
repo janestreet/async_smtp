@@ -384,10 +384,8 @@ let send t ~log ~config =
     return (Or_error.error_string
               "Spooled_message.send: message is already being sent")
   | `Delivered ->
-    (* Not returning an error here because calling [Spool.send] will enqueue the
-       message without changing what was previously queued, so we will attempt
-       to deliver twice. *)
-    return (Ok ())
+    return (Or_error.error_string
+              "Spooled_message.send: message is delivered")
 
 let size_of_file t =
   match file t with

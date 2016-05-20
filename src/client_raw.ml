@@ -24,7 +24,7 @@ module Peer_info = struct
     match Set_once.set (Field.get field t) value with
     | Ok () -> Ok ()
     | Error s ->
-      Error (Error.tag (Error.of_string s) (Field.name field))
+      Error (Error.tag (Error.of_string s) ~tag:(Field.name field))
 
   let set_greeting = set Fields.greeting
   let set_hello = set Fields.hello
@@ -154,22 +154,24 @@ let tls t =
 let is_using_tls t =
   Option.is_some (tls t)
 
-let read_reply reader =
+let read_reply ?on_eof reader =
   let rec loop partial =
     Reader.read_line reader
-    >>| (function
-        | `Ok line -> Ok line
-        | `Eof -> Or_error.error_string "Unexpected EOF")
-    >>=? fun line ->
-    match Reply.parse ?partial line with
-    | `Done reply -> Deferred.Or_error.return reply
-    | `Partial partial -> loop (Some partial)
+    >>= function
+    | `Ok line -> begin match Reply.parse ?partial line with
+        | `Done reply -> Deferred.Or_error.return reply
+        | `Partial partial -> loop (Some partial)
+      end
+    | `Eof ->  begin match on_eof with
+        | Some on_eof -> on_eof ?partial ()
+        | None -> Deferred.Or_error.error_string "Unexpected EOF"
+      end
   in
   Deferred.Or_error.try_with_join
     (fun () -> loop None)
 
 (* entry point *)
-let receive ?timeout ?flows t ~log ~component ~here =
+let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
   let flows = match flows with
     | None -> t.flows
     | Some flows -> Log.Flows.union t.flows flows
@@ -181,7 +183,7 @@ let receive ?timeout ?flows t ~log ~component ~here =
   match reader t with
   | None -> Deferred.Or_error.return `Bsmtp
   | Some reader ->
-    Clock.with_timeout timeout (read_reply reader)
+    Clock.with_timeout timeout (read_reply ?on_eof reader)
     >>| function
     | `Result (Ok v) ->
       Log.debug log (lazy (Log.Message.create ~here ~flows ~component ~reply:v "<-"));
@@ -212,8 +214,10 @@ let send t ~log ?flows ~component ~here cmd =
       Writer.flushed (writer t))
 
 (* entry point *)
-let send_receive ?timeout t ~log ?flows ~component ~here cmd =
-  send t ~log ?flows ~component ~here cmd >>=? fun () -> receive ?timeout t ~log ?flows ~component ~here
+let send_receive ?on_eof ?timeout t ~log ?flows ~component ~here cmd =
+  send t ~log ?flows ~component ~here cmd
+  >>=? fun () ->
+  receive ?on_eof ?timeout t ~log ?flows ~component ~here
 
 let do_quit t ~log ~component =
   let component = component @ ["quit"] in
@@ -225,10 +229,18 @@ let do_quit t ~log ~component =
                         "INFO"));
   if Writer.is_closed (writer t) then return (Ok ())
   else begin
-    send_receive t ~log ~component ~here:[%here] Command.Quit
+    (* Errors when we send a QUIT command are tolerable. Don't raise unnecessary noise to
+       our monitor. *)
+    let on_eof ?partial:_ () =
+      Log.info log (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component (Error.of_string "Unexpected EOF during QUIT")));
+      Deferred.Or_error.return Reply.Closing_connection_221
+    in
+    send_receive ~on_eof t ~log ~component ~here:[%here] Command.Quit
     >>= function
     | Error e ->
-      return (Error (Error.tag e "Error sending QUIT"))
+      let error = Error.tag e ~tag:"Error sending QUIT" in
+      Log.info log (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component error));
+      return (Ok ())
     | Ok result ->
       match result with
       | `Bsmtp -> return (Ok ())

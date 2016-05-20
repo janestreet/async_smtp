@@ -23,7 +23,7 @@ let is_accessible_directory ?create_if_missing dir =
         | Ok ()     -> Ok ()
         | Error exn ->
           Error.tag (Error.of_exn exn)
-            (sprintf "%s is not writable, readable, and executable by running user" dir)
+            ~tag:(sprintf "%s is not writable, readable, and executable by running user" dir)
           |> fun e ->
           Error e
       end

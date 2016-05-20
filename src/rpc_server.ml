@@ -23,7 +23,7 @@ let implementations () =
   ]
 ;;
 
-let start (config, spool, server_events) ~plugin_rpcs =
+let start (config, spool, server_events) ~log ~plugin_rpcs =
   let initial_connection_state =
     (fun _socket_addr _connection -> (config, spool, server_events))
   in
@@ -37,6 +37,6 @@ let start (config, spool, server_events) ~plugin_rpcs =
   in
   Rpc.Connection.serve ~implementations ~where_to_listen ~initial_connection_state ()
   >>= fun _tcp_server ->
-  Log.Global.info "RPC server listening on %d" (Server_config.rpc_port config);
+  Log.info log "RPC server listening on %d" (Server_config.rpc_port config);
   Deferred.unit
 ;;

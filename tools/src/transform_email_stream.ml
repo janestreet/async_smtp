@@ -174,7 +174,7 @@ let sort config pipe =
     match config.Config.messages.Envelopes.sort with
     | [] -> pipe
     | order ->
-      Pipe.init (fun out ->
+      Pipe.create_reader ~close_on_exception:true (fun out ->
         Pipe.to_list pipe
         >>| List.stable_sort ~cmp:(compare_message order)
         >>= Deferred.List.iter ~f:(Pipe.write out)

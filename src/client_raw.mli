@@ -57,7 +57,8 @@ val send
   -> unit Deferred.Or_error.t
 
 val receive
-  :  ?timeout:Time.Span.t
+  :  ?on_eof:(?partial:Reply.partial -> unit -> Reply.t Deferred.Or_error.t)
+  -> ?timeout:Time.Span.t
   -> ?flows:Mail_log.Flows.t
   -> t
   -> log:Mail_log.t
@@ -66,7 +67,8 @@ val receive
   -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
 
 val send_receive
-  :  ?timeout:Time.Span.t
+  :  ?on_eof:(?partial:Reply.partial -> unit -> Reply.t Deferred.Or_error.t)
+  -> ?timeout:Time.Span.t
   -> t
   -> log:Mail_log.t
   -> ?flows:Mail_log.Flows.t

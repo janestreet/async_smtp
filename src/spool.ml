@@ -178,29 +178,36 @@ let rec enqueue ?at t spooled_msg =
                                ~spool_id:(Spooled_message_id.to_string msgid)
                                "enqueuing message"));
       Adjustable_throttle.enqueue t.send_throttle (fun () ->
-        Spooled_message.send spooled_msg ~log:t.log ~config:t.client
-        >>| function
-        | Error e ->
-          Log.error t.log (lazy (Log.Message.of_error
-                                   ~here:[%here]
-                                   ~flows:(Spooled_message.flows spooled_msg)
-                                   ~component:["spool";"send"]
-                                   ~spool_id:(Spooled_message_id.to_string msgid)
-                                   e))
-        | Ok () ->
-          match Spooled_message.status spooled_msg with
-          | `Delivered ->
-            remove_message t spooled_msg;
-            delivered_event t ~here:[%here] spooled_msg
-          | `Send_now ->
-            enqueue t spooled_msg
-          | `Send_at at ->
-            enqueue ~at t spooled_msg
-          | `Sending ->
-            failwithf !"Message has status Sending after returning from \
-                        Spooled_message.send: %{Spooled_message.Id}"
-              (Spooled_message.id spooled_msg) ()
-          | `Frozen | `Removed | `Quarantined _ -> ())
+        match Spooled_message.status spooled_msg with
+        | `Delivered ->
+          (* Do nothing here because calling [Spool.send] enqueues a message without
+             changing what was previously queued, so this code can be run multiple times
+             for the same message *)
+          return ()
+        | _ ->
+          Spooled_message.send spooled_msg ~log:t.log ~config:t.client
+          >>| function
+          | Error e ->
+            Log.error t.log (lazy (Log.Message.of_error
+                                     ~here:[%here]
+                                     ~flows:(Spooled_message.flows spooled_msg)
+                                     ~component:["spool";"send"]
+                                     ~spool_id:(Spooled_message_id.to_string msgid)
+                                     e))
+          | Ok () ->
+            match Spooled_message.status spooled_msg with
+            | `Delivered ->
+              remove_message t spooled_msg;
+              delivered_event t ~here:[%here] spooled_msg
+            | `Send_now ->
+              enqueue t spooled_msg
+            | `Send_at at ->
+              enqueue ~at t spooled_msg
+            | `Sending ->
+              failwithf !"Message has status Sending after returning from \
+                          Spooled_message.send: %{Spooled_message.Id}"
+                (Spooled_message.id spooled_msg) ()
+            | `Frozen | `Removed | `Quarantined _ -> ())
     end)
 ;;
 
@@ -402,7 +409,7 @@ let recover t info =
     Throttle.enqueue t.file_throttle (fun () -> Spooled_message.load path)
     >>= function
     | Error e ->
-      let e = Error.tag e "Failed to recover message" in
+      let e = Error.tag e ~tag:"Failed to recover message" in
       Log.error t.log (lazy (Log.Message.of_error
                                ~here:[%here]
                                ~flows:Log.Flows.none

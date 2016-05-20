@@ -726,7 +726,8 @@ let start ~config ~log (module Cb : Callbacks.S) =
   >>=? fun spool ->
   tcp_servers ~spool ~config ~log ~server_events (module Cb)
   >>| fun servers ->
-  don't_wait_for (Rpc_server.start (config, spool, server_events) ~plugin_rpcs:Cb.rpcs);
+  don't_wait_for
+    (Rpc_server.start (config, spool, server_events) ~log ~plugin_rpcs:Cb.rpcs);
   Ok { config; servers; spool }
 ;;
 
@@ -758,7 +759,7 @@ let bsmtp_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
 
 let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
   let server_events = Smtp_events.create () in
-  Pipe.init (fun out ->
+  Pipe.create_reader ~close_on_exception:true (fun out ->
       let session_flows = Log.Flows.create `Server_session in
       let module Cb : Callbacks.S = struct
         include Callbacks.Simple
@@ -847,5 +848,5 @@ let read_mbox ?(log=Lazy.force mbox_log) reader =
       >>= fun () ->
       read_msgs out
   in
-  Pipe.init read_msgs
+  Pipe.create_reader ~close_on_exception:true read_msgs
 ;;
