@@ -2,7 +2,7 @@ OASISFormat:           0.4
 OCamlVersion:          >= 4.02.3
 FindlibVersion:        >= 1.3.2
 Name:                  async_smtp
-Version:               113.43+70
+Version:               113.44+128
 Synopsis:              SMTP client and server
 Authors:               Jane Street Group, LLC <opensource@janestreet.com>
 Copyrights:            (C) 2005-2016 Jane Street Group LLC <opensource@janestreet.com>
@@ -56,6 +56,7 @@ Library async_smtp
                 ppx_assert.runtime-lib,
                 ppx_bench.runtime-lib,
                 ppx_expect.collector,
+                ppx_hash.runtime-lib,
                 ppx_inline_test.runtime-lib,
                 re2,
                 sexplib,
@@ -79,6 +80,7 @@ Library async_smtp_command
                 ppx_assert.runtime-lib,
                 ppx_bench.runtime-lib,
                 ppx_expect.collector,
+                ppx_hash.runtime-lib,
                 ppx_inline_test.runtime-lib,
                 re2,
                 sexplib,
@@ -107,6 +109,7 @@ Library async_smtp_tools
                 ppx_assert.runtime-lib,
                 ppx_bench.runtime-lib,
                 ppx_expect.collector,
+                ppx_hash.runtime-lib,
                 ppx_inline_test.runtime-lib,
                 re2,
                 sexplib,
