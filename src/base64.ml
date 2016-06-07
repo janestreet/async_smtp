@@ -219,11 +219,25 @@ let decode enc_str =
 ;;
 
 let encode_float ?(length=6) f =
-  let encode_int i = encode_int_exn (i % 64) |> Char.to_string in
-  let rec loop nchars result v =
-    let result = (encode_int (Float.to_int v)) ^ result in
-    if Int.equal nchars 1 then result
-    else loop (nchars - 1) result (v /. 64.)
-  in
-  loop length "" f
+  match Int64.of_float f with
+  | exception _ -> invalid_arg "cannot encode a float that does not fit in an Int64"
+  | n ->
+    let n = ref n in
+    let s = String.make length 'A' in
+    for i = length - 1 downto 0 do
+      s.[i] <- encode_int_exn Int64.(to_int_exn (!n % 64L));
+      n := Int64.(!n / 64L);
+    done;
+    s
 ;;
+
+let%test_unit _ =
+  [%test_result: string] (encode_float 1234.1235453123) ~expect:"AAAATS"
+let%test_unit _ =
+  [%test_result: string] (encode_float 1234.) ~expect:"AAAATS"
+let%test_unit _ =
+  [%test_result: string] (encode_float 1235.) ~expect:"AAAATT"
+let%test_unit _ =
+  [%test_result: string] (encode_float 123456.) ~expect:"AAAeJA"
+let%test_unit _ =
+  [%test_result: string] (encode_float Int64.(to_float (max_value - 1024L))) ~expect:"____wA"
