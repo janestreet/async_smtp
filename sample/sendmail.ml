@@ -9,9 +9,9 @@ let command =
   Command.async_or_error ~summary:"simple demo of Async_smtp.Std.Simplemail.send"
     Command.Spec.(
       empty
-      ++ step (fun m v -> m ?server:(Option.map ~f:Host_and_port.of_string v))
+      ++ step (fun m v -> m ?server:v)
       +> flag "server" ~doc:"HOST:PORT server to send mail to"
-           (optional string)
+           (optional host_and_port)
       ++ step (fun m v -> m ?from:v)
       +> flag "from" ~doc:"EMAIL sender of the email"
            (optional email_address)

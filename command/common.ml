@@ -28,8 +28,6 @@ end = struct
     | Error exn -> raise exn
   ;;
 
-  let host_and_port_arg = Command.Spec.Arg_type.create Host_and_port.of_string
-
   let rpc_server_or_config_flag () =
     let open Command.Spec in
     step (fun m rpc_server config_path ->
@@ -48,7 +46,7 @@ end = struct
             Host_and_port.create ~host:"localhost" ~port
         in
         m ~rpc_server ~config)
-    +> flag "rpc-server" (optional host_and_port_arg)
+    +> flag "rpc-server" (optional host_and_port)
       ~doc:"HOST:PORT mailcore instance to query"
     +> flag "config" (optional file) ~doc:"CONFIG Async_smtp config file"
   ;;
