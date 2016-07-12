@@ -3,46 +3,80 @@ open! Async.Std
 open Async_smtp.Std
 open Common
 
-val msgid  : Smtp_spool.Spooled_message_id.t Command.Spec.Arg_type.t
-val format : [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] Command.Spec.Arg_type.t
+module Status : sig
+  type format = [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] [@@deriving sexp]
 
-val status
-  :  format : [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
-  -> Rpc.Connection.t
-  -> unit Deferred.t
+  val spec : unit -> (format:format -> 'a, 'a) Command.Spec.t
+  val dispatch
+    :  format : [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
+    -> Rpc.Connection.t
+    -> unit Deferred.t
+end
 
-val count
-  :  Rpc.Connection.t
-  -> unit Deferred.t
+module Count : sig
+  val spec : unit -> ('a, 'a) Command.Spec.t
 
-val set_max_send_jobs
-  :  num:int
-  -> Rpc.Connection.t
-  -> unit Deferred.t
+  val dispatch
+    :  Rpc.Connection.t
+    -> unit Deferred.t
+end
 
-val freeze
-  :  msgids:Smtp_spool.Spooled_message_id.t list
-  -> Rpc.Connection.t
-  -> unit Deferred.t
+module Set_max_send_jobs : sig
+  val spec : unit -> (num:int -> 'a, 'a) Command.Spec.t
 
-val send
-  :  ?retry_intervals:Time.Span.t list
-  -> Smtp_spool.Send_info.t
-  -> Rpc.Connection.t
-  -> unit Deferred.t
+  val dispatch
+    :  num:int
+    -> Rpc.Connection.t
+    -> unit Deferred.t
+end
 
-val remove
-  :  msgids:Smtp_spool.Spooled_message_id.t list
-  -> Rpc.Connection.t
-  -> unit Deferred.t
+module Freeze : sig
+  val spec : unit -> (msgids:Smtp_spool.Spooled_message_id.t list -> 'a, 'a) Command.Spec.t
 
-val recover
-  :  Smtp_spool.Recover_info.t
-  -> Rpc.Connection.t
-  -> unit Deferred.t
+  val dispatch
+    :  msgids:Smtp_spool.Spooled_message_id.t list
+    -> Rpc.Connection.t
+    -> unit Deferred.t
+end
 
-val events
-  :  Rpc.Connection.t
-  -> unit Deferred.t
+module Send : sig
+  val spec :
+    unit ->
+    (?retry_intervals:Core.Span.t list -> Smtp_spool.Send_info.t -> 'a, 'a)
+      Common.Command.Spec.t
+
+  val dispatch
+    :  ?retry_intervals:Time.Span.t list
+    -> Smtp_spool.Send_info.t
+    -> Rpc.Connection.t
+    -> unit Deferred.t
+end
+
+module Remove : sig
+  val spec : unit -> (msgids:Smtp_spool.Spooled_message_id.t list -> 'a, 'a) Command.Spec.t
+
+  val dispatch
+    :  msgids:Smtp_spool.Spooled_message_id.t list
+    -> Rpc.Connection.t
+    -> unit Deferred.t
+end
+
+
+module Recover : sig
+  val spec : unit -> (Smtp_spool.Recover_info.t -> 'a, 'a) Command.Spec.t
+
+  val dispatch
+    :  Smtp_spool.Recover_info.t
+    -> Rpc.Connection.t
+    -> unit Deferred.t
+end
+
+module Events : sig
+  val spec : unit -> ('a, 'a) Command.Spec.t
+
+  val dispatch
+    :  Rpc.Connection.t
+    -> unit Deferred.t
+end
 
 val command : Command.t

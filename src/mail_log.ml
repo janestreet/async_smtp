@@ -45,8 +45,6 @@ module Mail_fingerprint = struct
                     |> Digest.to_hex)
       ; parts = []
       }
-    | Email.Content.Message email ->
-      of_email ~headers email
     | Email.Content.Multipart { Email.Multipart.parts; _ } ->
       { headers
       ; md5 = None
@@ -71,17 +69,24 @@ module Flows = struct
       ] [@@deriving sexp, bin_io]
   end
   module Id = struct
-    type t = string [@@deriving bin_io, sexp]
-    let tag = function
-      | `Server_session -> "srv#"
-      | `Client_session -> "cli#"
-      | `Inbound_envelope -> "in#"
-      | `Outbound_envelope -> "out#"
-    let create kind =
-      sprintf !"%s#%{Uuid}" (tag kind) (Uuid.create ())
-    let is t kind =
-      String.is_prefix t ~prefix:(tag kind)
-    let equal = String.equal
+    module T = struct
+      type t = string [@@deriving bin_io, sexp]
+      let tag = function
+        | `Server_session -> "srv#"
+        | `Client_session -> "cli#"
+        | `Inbound_envelope -> "in#"
+        | `Outbound_envelope -> "out#"
+      let create kind =
+        sprintf !"%s#%{Uuid}" (tag kind) (Uuid.create ())
+      let is t kind =
+        String.is_prefix t ~prefix:(tag kind)
+      let equal = String.equal
+
+      let hash = String.hash
+      let compare = String.compare
+    end
+    include T
+    include Hashable.Make(T)
   end
   type t = Id.t list [@@deriving bin_io, sexp]
   let none = []
@@ -123,6 +128,19 @@ module Component = struct
     t = unknown
 end
 
+module Session_marker = struct
+  type t =
+    [ `Connected
+    | `Mail_from
+    | `Rcpt_to
+    | `Data
+    | `Sending
+    ] [@@deriving sexp]
+
+  let of_string s = t_of_sexp (Sexp.of_string s)
+  let to_string t = Sexp.to_string (sexp_of_t t)
+end
+
 module Message = struct
   module Action = (String : Identifiable.S with type t = string)
   module Sender = struct
@@ -158,7 +176,9 @@ module Message = struct
     let local_address     = "local-address"
     let remote_address    = "remote-address"
     let command           = "command"
+    let dest              = "dest"
     let reply             = "reply"
+    let session_marker    = "session_marker"
     let flow              = "flow"
     let location          = "location"
   end
@@ -178,21 +198,27 @@ module Message = struct
     -> ?sender:Sender.t
     -> ?recipients:Recipient.t list
     -> ?spool_id:string
+    -> ?dest:Address.t
     -> ?command:Command.t
     -> ?reply:Reply.t
+    -> ?session_marker:Session_marker.t
     -> ?tags:(string * string) list
     -> 'a
   ;;
 
   let with_info ~f ~flows ~component ~here ?local_address ?remote_address
       ?email ?rfc822_id ?local_id ?sender ?recipients ?spool_id
-      ?command ?reply ?(tags=[]) =
+      ?dest ?command ?reply ?session_marker ?(tags=[]) =
     let tags = match reply with
       | Some reply -> (Tag.reply, Reply.to_string reply) :: tags
       | None -> tags
     in
     let tags = match command with
       | Some command -> (Tag.command, Command.to_string command) :: tags
+      | None -> tags
+    in
+    let tags = match dest with
+      | Some dest -> (Tag.dest, Address.to_string dest) :: tags
       | None -> tags
     in
     let tags = match spool_id with
@@ -252,7 +278,7 @@ module Message = struct
           Email_headers.last (Envelope.email envelope |> Email.headers) "Message-Id"
         | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
         | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
-          Email_headers.last (Email_headers.of_list ~whitespace:`Keep headers) "Message-Id"
+          Email_headers.last (Email_headers.of_list ~whitespace:`Raw headers) "Message-Id"
         | None -> None
     in
     let tags = match rfc822_id with
@@ -267,12 +293,16 @@ module Message = struct
       | Some local_address -> (Tag.local_address, Address.to_string local_address) :: tags
       | None -> tags
     in
+    let tags = match session_marker with
+      | Some event -> (Tag.session_marker, Session_marker.to_string event) :: tags
+      | None -> tags
+    in
     let tags = List.map flows ~f:(fun f -> Tag.flow, f) @ tags in
     let tags = (Tag.location, Here.to_string here) :: tags in
     let tags = (Tag.component, Component.to_string component) :: tags in
     f tags
 
-  type t = Log.Message.t
+  type t = Log.Message.t [@@deriving sexp_of]
 
   let create =
     with_info ~f:(fun tags action ->
@@ -317,6 +347,7 @@ module Message = struct
   let time = Log.Message.time
 
   let action = Log.Message.message
+  let tags = Log.Message.tags
 
   let component t =
     List.find_map (Log.Message.tags t) ~f:(fun (k,v) ->
@@ -337,6 +368,8 @@ module Message = struct
   let local_id = find_tag' ~tag:Tag.local_id ~f:Envelope.Id.of_string
 
   let spool_id = find_tag ~tag:Tag.spool_id
+
+  let dest = find_tag' ~tag:Tag.dest ~f:Address.of_string
 
   let of_string str ~of_sexp =
     Sexp.of_string_conv_exn str of_sexp
@@ -359,13 +392,15 @@ module Message = struct
 
   let email = find_tag' ~tag:Tag.email_fingerprint ~f:(of_string ~of_sexp:Mail_fingerprint.t_of_sexp)
 
-  let local_address = find_tag' ~tag:Tag.local_address ~f:Host_and_port.of_string
+  let local_address = find_tag' ~tag:Tag.local_address ~f:Address.of_string
 
-  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Host_and_port.of_string
+  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Address.of_string
 
   let command = find_tag' ~tag:Tag.command ~f:Command.of_string
 
   let reply = find_tag' ~tag:Tag.reply ~f:Reply.of_string
+
+  let session_marker = find_tag' ~tag:Tag.session_marker ~f:Session_marker.of_string
 
   let flows t = List.filter_map (Log.Message.tags t) ~f:(fun (k,v) ->
       Option.some_if (k=Tag.flow) v)

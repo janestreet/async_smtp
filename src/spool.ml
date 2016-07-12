@@ -179,12 +179,13 @@ let rec enqueue ?at t spooled_msg =
                                "enqueuing message"));
       Adjustable_throttle.enqueue t.send_throttle (fun () ->
         match Spooled_message.status spooled_msg with
-        | `Delivered ->
-          (* Do nothing here because calling [Spool.send] enqueues a message without
-             changing what was previously queued, so this code can be run multiple times
-             for the same message *)
+        | `Delivered  | `Sending | `Frozen | `Removed | `Quarantined _ ->
+          (* Only actually call [send] if the status is [`Send_now]. Between the time an
+             async job was scheduled and the time it gets run, the status of the message
+             can change. We make sure not to try to send if we have manually intervened,
+             causing a permanent status change. *)
           return ()
-        | _ ->
+        | `Send_now  | `Send_at _ ->
           Spooled_message.send spooled_msg ~log:t.log ~config:t.client
           >>| function
           | Error e ->
@@ -392,13 +393,16 @@ let remove t ids =
 
 module Recover_info = struct
   type t =
-    [ `Removed of Spooled_message_id.t list
-    | `Quarantined of Spooled_message_id.t list ] [@@deriving bin_io]
+    { msgs :
+        [ `Removed of Spooled_message_id.t list
+        | `Quarantined of Spooled_message_id.t list ]
+    ; wrapper : Email_message.Wrapper.t option
+    } [@@deriving bin_io]
 end
 
-let recover t info =
+let recover t (info : Recover_info.t) =
   let msgids, from_where, dir =
-    match info with
+    match info.msgs with
     | `Quarantined msgids ->
       msgids, `From_quarantined, Spool_directory.quarantine_dir t.spool_dir
     | `Removed msgids ->
@@ -418,6 +422,11 @@ let recover t info =
                                e));
       return (Error e)
     | Ok msg ->
+      Option.value_map info.wrapper ~default:Deferred.Or_error.ok_unit ~f:(fun wrapper ->
+        Throttle.enqueue t.file_throttle
+          (fun () -> Spooled_message.map_envelope msg ~f:(fun envelope ->
+             Envelope.modify_email envelope ~f:(Email_message.Wrapper.add wrapper))))
+      >>=? fun () ->
       Throttle.enqueue t.file_throttle (fun () -> Spooled_message.freeze msg ~log:t.log)
       >>=? fun () ->
       add_message t msg;

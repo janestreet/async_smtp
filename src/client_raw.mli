@@ -80,3 +80,4 @@ val send_receive
 (* Low level access *)
 val writer : t -> Writer.t
 val reader : t -> Reader.t option
+val remote_address : t -> Address.t option

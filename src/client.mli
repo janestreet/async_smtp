@@ -68,6 +68,7 @@ module Tcp : sig
   val with_
     : (?config:Client_config.t
        -> log:Mail_log.t
+       -> ?flows:Mail_log.Flows.t
        -> ?component:Mail_log.Component.t
        -> Address.t
        -> f:(t -> 'a Deferred.Or_error.t)

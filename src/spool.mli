@@ -125,8 +125,11 @@ val remove
 
 module Recover_info : sig
   type t =
-    [ `Removed of Spooled_message_id.t list
-    | `Quarantined of Spooled_message_id.t list ] [@@deriving bin_io]
+    { msgs :
+        [ `Removed of Spooled_message_id.t list
+        | `Quarantined of Spooled_message_id.t list ]
+    ; wrapper : Email_message.Wrapper.t option
+    } [@@deriving bin_io]
 end
 
 val recover

@@ -52,6 +52,9 @@ val load_with_envelope : string -> (t * Envelope.t) Or_error.t Deferred.t
    for which the call previously returned [`Done]. *)
 val send : t -> log:Mail_log.t -> config:Client_config.t -> unit Or_error.t Deferred.t
 
+(* Map an envelope that is saved on disk. *)
+val map_envelope : t -> f:(Envelope.t -> Envelope.t) -> unit Or_error.t Deferred.t
+
 val freeze
   :  t
   -> log:Mail_log.t

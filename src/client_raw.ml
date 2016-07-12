@@ -221,7 +221,7 @@ let send_receive ?on_eof ?timeout t ~log ?flows ~component ~here cmd =
 
 let do_quit t ~log ~component =
   let component = component @ ["quit"] in
-  Log.info log (lazy (Log.Message.create
+  Log.debug log (lazy (Log.Message.create
                         ~here:[%here]
                         ~flows:t.flows
                         ~component
@@ -233,7 +233,7 @@ let do_quit t ~log ~component =
        our monitor. *)
     let on_eof ?partial:_ () =
       Log.info log (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component (Error.of_string "Unexpected EOF during QUIT")));
-      Deferred.Or_error.return Reply.Closing_connection_221
+      Deferred.Or_error.return Reply.closing_connection_221
     in
     send_receive ~on_eof t ~log ~component ~here:[%here] Command.Quit
     >>= function
@@ -244,8 +244,9 @@ let do_quit t ~log ~component =
     | Ok result ->
       match result with
       | `Bsmtp -> return (Ok ())
-      | `Received Reply.Closing_connection_221 -> return (Ok ())
-      | `Received reply ->
+      | `Received { Reply.code=`Closing_connection_221; _ } ->
+        return (Ok ())
+      | `Received reply->
         return (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Reply}" reply))
   end
 
@@ -269,7 +270,7 @@ let quit_and_cleanup t ~log ~component =
 
 let do_greeting t ~log ~component =
   let component = component @ ["greeting"] in
-  Log.info log (lazy (Log.Message.create
+  Log.debug log (lazy (Log.Message.create
                         ~here:[%here]
                         ~flows:t.flows
                         ~component
@@ -278,8 +279,8 @@ let do_greeting t ~log ~component =
   receive t ~log ~component ~here:[%here]
   >>=? function
   | `Bsmtp -> return (Ok ())
-  | `Received (Service_ready_220 greeting) ->
-    return (Peer_info.set_greeting (info_exn t) greeting)
+  | `Received { Reply.code=`Service_ready_220; raw_message } ->
+    return (Peer_info.set_greeting (info_exn t) (String.concat ~sep:"\n" raw_message))
   | `Received reply ->
     return (Or_error.errorf !"Unexpected greeting: %{Reply}" reply)
 
@@ -291,8 +292,8 @@ let do_helo t  ~log ~component =
   send_receive t ~log ~component ~here:[%here] (Command.Hello (greeting t))
   >>=? function
   | `Bsmtp -> return (Ok ())
-  | `Received (Reply.Ok_completed_250 helo) ->
-    return (Peer_info.set_hello (info_exn t) (`Simple helo))
+  | `Received { Reply.code = `Ok_completed_250; raw_message } ->
+    return (Peer_info.set_hello (info_exn t) (`Simple (String.concat ~sep:"\n" raw_message)))
   | `Received reply ->
     return (Or_error.errorf !"Unexpected response to HELO: %{Reply}" reply)
 
@@ -300,21 +301,18 @@ let do_ehlo ~log ~component t =
   send_receive t ~log ~component ~here:[%here] (Command.Extended_hello (greeting t))
   >>=? function
   | `Bsmtp -> return (Ok ())
-  | `Received reply ->
-    match reply with
-    | Reply.Ok_completed_250 ehlo_greeting ->
-      begin match String.split_lines ehlo_greeting with
+  | `Received { Reply.code =`Ok_completed_250; raw_message } ->
+      begin match raw_message with
       | ehlo_greeting :: extensions ->
         let extensions = List.map ~f:Extension.of_string extensions in
         Peer_info.set_hello (info_exn t) (`Extended (ehlo_greeting, extensions))
         |> return
       | [] -> failwith "IMPOSSIBLE: EHLO greeting expected, got empty response"
       end
-    | Reply.Command_not_recognized_500 _
-    | Reply.Command_not_implemented_502 _ ->
-      do_helo t ~log ~component
-    | reply ->
-      return (Or_error.errorf !"Unexpected response to EHLO: %{Reply}" reply)
+  | `Received { Reply.code = (`Command_not_recognized_500 | `Command_not_implemented_502); _ } ->
+    do_helo t ~log ~component
+  | `Received reply ->
+    return (Or_error.errorf !"Unexpected response to EHLO: %{Reply}" reply)
 
 let do_start_tls t ~log ~component tls_options =
   let component = component @ ["starttls"] in
@@ -438,16 +436,16 @@ let maybe_start_tls t ~log ~component =
     send_receive t ~log ~component ~here:[%here] Command.Start_tls
     >>=? function
     | `Bsmtp -> return (Ok ())
+    | `Received { Reply.code = `Service_ready_220; _ } ->
+      do_start_tls t ~log  ~component tls_options
+    | `Received { Reply.code = ( `Command_not_recognized_500
+                               | `Command_not_implemented_502
+                               | `Parameter_not_implemented_504
+                               | `Tls_temporarily_unavailable_454
+                               ); _ } ->
+      return (Ok ())
     | `Received reply ->
-      match reply with
-      | Reply.Service_ready_220 _ ->
-        do_start_tls t ~log  ~component tls_options
-      | Reply.Command_not_recognized_500 _
-      | Reply.Command_not_implemented_502 _
-      | Reply.Parameter_not_implemented_504 _ ->
-        return (Ok ())
-      | reply ->
-        return (Or_error.errorf !"Unexpected respose to STARTTLS: %{Reply}" reply)
+      return (Or_error.errorf !"Unexpected respose to STARTTLS: %{Reply}" reply)
   end
   >>=? fun () ->
   return (check_tls_security t)
@@ -466,7 +464,7 @@ let with_quit t ~log ~component ~f =
 (* Entry point *)
 let with_session t ~log ~component ~f =
   let component = component @ [ "session" ] in
-  Log.info log (lazy (Log.Message.info ~component ~here:[%here]  ~flows:t.flows
+  Log.debug log (lazy (Log.Message.info ~component ~here:[%here]  ~flows:t.flows
                         ?remote_address:(remote_address t) ()));
   (* The RFC prescribes that we send QUIT if we are not happy with the reached
      level of TLS security. *)

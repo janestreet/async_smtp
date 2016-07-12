@@ -14,7 +14,7 @@ let with_reset t ~log ~flows ~component ~f =
     send_receive t ~log ~flows ~component ~here:[%here] Command.Reset
     >>=? function
     | `Bsmtp -> return (Ok ())
-    | `Received (Reply.Ok_completed_250 _) -> return (Ok ())
+    | `Received { Reply.code = `Ok_completed_250; _ } -> return (Ok ())
     | `Received reject ->
       return (Or_error.errorf !"Unexpected response to RESET: %{Reply}" reject)
   in
@@ -117,18 +117,20 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                             ~flows
                             ~component
                             ~email:(`Envelope envelope)
+                            ?dest:(remote_address t)
+                            ~session_marker:`Sending
                             "sending"));
       send_receive t ~log ~flows ~component:(component @ ["sender"]) ~here:[%here]
         (Command.Sender (Envelope.sender envelope |> Sender.to_string))
       >>=? begin function
         | `Bsmtp -> return (Ok (Ok ()))
-        | `Received (Reply.Ok_completed_250 _) -> return (Ok (Ok ()))
+        | `Received { Reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
         | `Received reply ->
           Log.info log (lazy (Log.Message.create
                                 ~here:[%here]
                                 ~flows
                                 ~component:(component @ ["sender"])
-                                ~reply "rejected"));
+                                ~reply "send rejected"));
           return (Ok (Error (`Rejected_sender reply)))
       end
       >>=?? fun () ->
@@ -140,13 +142,13 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                 (Command.Recipient (recipient |> Email_address.to_string))
               >>|? function
               | `Bsmtp -> `Fst recipient
-              | `Received (Reply.Ok_completed_250 _) -> `Fst recipient
+              | `Received { Reply.code = `Ok_completed_250; _ } -> `Fst recipient
               | `Received reply ->
                 Log.info log (lazy (Log.Message.create
                                       ~here:[%here]
                                       ~flows
                                       ~component:(component @ ["recipient"])
-                                      ~reply "rejected"));
+                                      ~reply "send rejected"));
                 `Snd (recipient, reply))
         >>|? List.partition_map ~f:ident
         >>|? function
@@ -159,13 +161,13 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
       send_receive t ~log ~flows ~component:(component @ ["data"]) ~here:[%here] Command.Data
       >>=? begin function
         | `Bsmtp -> return (Ok (Ok ()))
-        | `Received (Reply.Start_mail_input_354) -> return (Ok (Ok ()))
+        | `Received { Reply.code = `Start_mail_input_354; _ } -> return (Ok (Ok ()))
         | `Received reply ->
           Log.info log (lazy (Log.Message.create
                                 ~here:[%here]
                                 ~flows
                                 ~component:(component @ ["data"])
-                                ~reply "rejected"));
+                                ~reply "send rejected"));
           return (Ok (Error (`Rejected_sender_and_recipients (reply,
                                                               rejected_recipients))))
       end
@@ -219,7 +221,8 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                    ~flows
                                    ~component:(component @ ["data"])
                                    "finishing transmitting body"));
-            receive t ~log ~flows ~component ~here:[%here]
+            receive t ~timeout:(Config.final_ok_timeout (config t))
+              ~log ~flows ~component ~here:[%here]
             >>|? function
             | `Bsmtp ->
               Log.info log (lazy (Log.Message.create
@@ -229,13 +232,15 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                     ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                                     "delivered"));
               Ok ("bsmtp", rejected_recipients)
-            | `Received (Reply.Ok_completed_250 remote_id) ->
+            | `Received { Reply.code = `Ok_completed_250; raw_message } ->
+              let remote_id = String.concat ~sep:"\n" raw_message in
               Log.info log (lazy (Log.Message.create
                                     ~here:[%here]
                                     ~flows
                                     ~component
                                     ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
-                                    ~tags:["remote-id",remote_id]
+                                    ?dest:(remote_address t)
+                                    ~tags:[ "remote-id",remote_id ]
                                     "sent"));
               Ok (remote_id, rejected_recipients)
             | `Received reply ->
@@ -245,7 +250,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                     ~component
                                     ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                                     ~reply
-                                    "rejected"));
+                                    "send rejected"));
               Error (`Rejected_body (reply, rejected_recipients)))
       end)
 
@@ -253,10 +258,11 @@ module Tcp = struct
   let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout
       ?(config = Config.default)
       ~log
+      ?(flows=Log.Flows.none)
       ?(component=[])
       dest
       ~f =
-    let flows = Log.Flows.create `Client_session in
+    let flows = Log.Flows.extend flows `Client_session in
     let component = component @ ["smtp-client"] in
     let with_connection address f =
       Deferred.Or_error.try_with_join (fun () ->

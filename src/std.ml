@@ -22,4 +22,5 @@ module Smtp_session                = Types.Session
 module Smtp_reply                  = Types.Reply
 module Smtp_sender                 = Types.Sender
 module Smtp_command                = Types.Command
+module Smtp_mail_log               = Mail_log
 module Simplemail                  = Smtp_client.Simple

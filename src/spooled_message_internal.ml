@@ -104,7 +104,7 @@ module On_disk = struct
 
   type t =
     { mutable meta : meta
-    ; envelope : Envelope.t
+    ; mutable envelope : Envelope.t
     } [@@deriving fields, sexp, bin_io]
 
   let create = Fields.create
@@ -142,7 +142,7 @@ module On_disk = struct
          return (Or_error.error error t sexp_of_t)
 end
 
-let create spool_dir ~log ~initial_status envelope_with_next_hop ~flows ~original_msg =
+let create spool_dir ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_msg =
   let parent_id = Envelope.id original_msg in
   let id = Id.create ~envelope_with_next_hop ~original_msg in
   let next_hop_choices =
@@ -167,14 +167,6 @@ let create spool_dir ~log ~initial_status envelope_with_next_hop ~flows ~origina
       ~id
       ~flows
   in
-  Log.info log (lazy (Log.Message.create
-                        ~here:[%here]
-                        ~flows
-                        ~component:["spool";"enqueue"]
-                        ~spool_id:id
-                        ~tags:(List.map next_hop_choices
-                                 ~f:(fun c -> "next-hop", Address.to_string c))
-                        "spooling"));
   let on_disk = On_disk.create ~meta:t ~envelope in
   On_disk.save on_disk
   >>|? fun () ->
@@ -194,7 +186,7 @@ let last_relay_attempt t =
   List.hd t.relay_attempts
 
 let with_file t
-    (f : Envelope.t -> [`Sync | `Unlink] Or_error.t Deferred.t)
+    (f : Envelope.t -> [`Sync of Envelope.t | `Unlink] Or_error.t Deferred.t)
     : unit Or_error.t Deferred.t
     =
   Locks.lock t.id
@@ -236,8 +228,9 @@ let with_file t
     begin match action with
     | `Unlink ->
       Common.unlink from_file_bak
-    | `Sync   ->
+    | `Sync envelope'  ->
       on_disk.meta <- t;
+      on_disk.envelope <- envelope';
       On_disk.save on_disk
       >>=? fun () ->
       Common.unlink from_file_bak
@@ -249,8 +242,14 @@ let with_file t
   Locks.release t.id;
   return result
 
+let map_envelope t ~f =
+  with_file t (fun envelope ->
+    let envelope' = f envelope in
+    return (Ok (`Sync envelope')))
+;;
+
 let freeze t ~log =
-  with_file t (fun _envelope ->
+  with_file t (fun envelope ->
       Log.info log (lazy (Log.Message.create
                             ~here:[%here]
                             ~flows:t.flows
@@ -258,11 +257,11 @@ let freeze t ~log =
                             ~spool_id:t.id
                             "frozen"));
       t.status <- `Frozen;
-      return (Ok `Sync))
+      return (Ok (`Sync envelope)))
 ;;
 
 let mark_for_send_now ~retry_intervals t ~log =
-  with_file t (fun _envelope ->
+  with_file t (fun envelope ->
     Log.info log (lazy (Log.Message.create
                           ~here:[%here]
                           ~flows:t.flows
@@ -271,19 +270,19 @@ let mark_for_send_now ~retry_intervals t ~log =
                           "send_now"));
     t.status <- `Send_now;
     t.retry_intervals <- retry_intervals @ t.retry_intervals;
-    return (Ok `Sync))
+    return (Ok (`Sync envelope)))
 ;;
 
 let remove t ~log =
-  with_file t (fun _envelope ->
+  with_file t (fun envelope ->
       Log.info log (lazy (Log.Message.create
                             ~here:[%here]
                             ~flows:t.flows
                             ~component:["spool"]
                             ~spool_id:t.id
-                            "deleting"));
+                            "removing"));
       t.status <- `Removed;
-      return (Ok `Sync))
+      return (Ok (`Sync envelope)))
 ;;
 
 (* We are being conservative here for simplicity - if we get a permanent error
@@ -361,11 +360,11 @@ let do_send t ~log ~config =
       match fail, t.retry_intervals with
       | `Fail_permanently, _ | _, [] ->
         t.status <- `Frozen;
-        Ok `Sync
+        Ok (`Sync envelope)
       | `Try_later, r :: rs ->
         t.status <- `Send_at (Time.add (Time.now ()) r);
         t.retry_intervals <- rs;
-        Ok `Sync)
+        Ok (`Sync envelope))
 ;;
 
 let send t ~log ~config =

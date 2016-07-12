@@ -44,6 +44,8 @@ module Flows : sig
     type t = private string [@@deriving sexp, bin_io]
     val is : t -> Kind.t -> bool
     val equal : t -> t -> bool
+
+    include Hashable.S with type t := t
   end
   (* Represents a set of opaque flow ids.
      The internal list representation is exposed for use when analysing logs, however
@@ -81,6 +83,17 @@ module Component : sig
   val is_unknown : t -> bool
 end
 
+(** Special tags that are used by the mailcoregrep utility in order to parse the log messages *)
+module Session_marker : sig
+  type t =
+    [ `Connected
+    | `Mail_from
+    | `Rcpt_to
+    | `Data
+    | `Sending
+    ]
+end
+
 (** Wrapper arround Log.Message.t that allows access to various standardised tag names. *)
 module Message : sig
 
@@ -102,14 +115,16 @@ module Message : sig
    -> ?sender:[ Sender.t | `String of string ]
    -> ?recipients:[ `Email of Email_address.t | `String of string ] list
    -> ?spool_id:string
+   -> ?dest:Address.t
    -> ?command:Command.t
    -> ?reply:Reply.t
+   -> ?session_marker:Session_marker.t
    -> ?tags:(string * string) list
    -> 'a
   ;;
 
 
-  type t = Log.Message.t
+  type t = Log.Message.t [@@deriving sexp_of]
   ;;
 
   val create : (Action.t -> t) with_info
@@ -143,12 +158,16 @@ module Message : sig
   val find_tag' : t -> tag:string -> f:(string -> 'a) -> 'a option
   val find_tag : t -> tag:string -> string option
 
+  val tags : t -> (string * string) list
+
   (* tag 'rfc822-id' *)
   val rfc822_id : t -> string option
   (* tag 'local-id' *)
   val local_id : t -> Envelope.Id.t option
   (* tag 'spool-id' *)
   val spool_id : t -> string option
+  (* tag 'dest' *)
+  val dest : t -> Address.t option
   (* tag 'sender'. [`String _] if the value doesn't parse *)
   val sender : t -> [ Sender.t | `String of string ] option
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
@@ -158,13 +177,15 @@ module Message : sig
   (* tag 'email-fingerprint' *)
   val email : t -> Mail_fingerprint.t option
   (* tag 'local-address' *)
-  val local_address : t -> Host_and_port.t option
+  val local_address : t -> Address.t option
   (* tag 'remote-address' *)
-  val remote_address : t -> Host_and_port.t option
+  val remote_address : t -> Address.t option
   (* tag 'command' *)
   val command : t -> Command.t option
   (* tag 'reply' *)
   val reply : t -> Reply.t option
+  (* tag 'session-marker' *)
+  val session_marker : t -> Session_marker.t option
 end
 
 type t = Log.t

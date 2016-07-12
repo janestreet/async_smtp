@@ -88,40 +88,38 @@ let rec start_session
     write_reply reply
   in
   let bad_sequence_of_commands ~here ~flows ~component cmd =
-    let msg = Command.to_string cmd in
-    write_reply ~here ~flows ~component (Reply.Bad_sequence_of_commands_503 msg)
+    write_reply ~here ~flows ~component (Reply.bad_sequence_of_commands_503 cmd)
   in
   let closing_connection ~here ~flows ~component () =
-    write_reply ~here ~flows ~component Reply.Closing_connection_221
+    write_reply ~here ~flows ~component Reply.closing_connection_221
   in
   let command_not_implemented ~here ~flows ~component cmd =
-    let msg = Command.to_string cmd in
-    write_reply ~here ~flows ~component (Reply.Command_not_implemented_502 msg)
+    write_reply ~here ~flows ~component (Reply.command_not_implemented_502 cmd)
   in
   let command_not_recognized ~here ~flows ~component msg =
-    write_reply ~here ~flows ~component (Reply.Command_not_recognized_500 msg)
+    write_reply ~here ~flows ~component (Reply.command_not_recognized_500 msg)
   in
   let ok_completed ~here ~flows ~component ?(extra=[]) msg =
     let msg = String.concat ~sep:"\n" (msg :: extra) in
-    write_reply ~here ~flows ~component (Reply.Ok_completed_250 msg)
+    write_reply ~here ~flows ~component (Reply.ok_completed_250 msg)
   in
   let ok_continue ~here ~flows ~component () =
     ok_completed ~here ~flows ~component "continue"
   in
   let service_ready ~here ~flows ~component msg =
-    write_reply ~here ~flows ~component (Reply.Service_ready_220 msg)
+    write_reply ~here ~flows ~component (Reply.service_ready_220 msg)
   in
   let service_unavailable ~here ~flows ~component () =
-    write_reply ~here ~flows ~component Reply.Service_unavailable_421
+    write_reply ~here ~flows ~component Reply.service_unavailable_421
   in
   let start_mail_input ~here ~flows ~component () =
-    write_reply ~here ~flows ~component Reply.Start_mail_input_354
+    write_reply ~here ~flows ~component Reply.start_mail_input_354
   in
   let syntax_error ~here ~flows ~component msg =
-    write_reply ~here ~flows ~component (Reply.Syntax_error_501 msg)
+    write_reply ~here ~flows ~component (Reply.syntax_error_501 msg)
   in
   let transaction_failed ~here ~flows ~component msg =
-    write_reply ~here ~flows ~component (Reply.Transaction_failed_554 msg)
+    write_reply ~here ~flows ~component (Reply.transaction_failed_554 msg)
   in
   (* This is kind of like a state machine.
      [next] is the node the machine is on
@@ -136,11 +134,11 @@ let rec start_session
       Reader.read_line reader
       >>= function
       | `Eof ->
-        Log.debug log (lazy (Log.Message.create
+        Log.info log (lazy (Log.Message.create
                                ~here:[%here]
                                ~flows
                                ~component
-                               "Got Eof on reader"));
+                               "DISCONNECTED"));
         return ()
       | `Ok input ->
         match Option.try_with (fun () -> Command.of_string input) with
@@ -221,7 +219,8 @@ let rec start_session
                             ~here:[%here]
                             ~flows
                             ~component
-                            "accepted"));
+                            ~tags:["extended", Bool.to_string extended; "helo", helo]
+                            "session_helo:accepted"));
       top ~session
     | Ok (`Deny reply) ->
       Log.info log (lazy (Log.Message.create
@@ -229,7 +228,8 @@ let rec start_session
                             ~flows
                             ~component
                             ~reply
-                            "deny"));
+                            ~tags:["extended", Bool.to_string extended; "helo", helo]
+                            "session_helo:deny"));
       write_reply ~here:[%here] ~flows ~component reply
       >>= fun () ->
       top ~session
@@ -238,7 +238,8 @@ let rec start_session
                             ~here:[%here]
                             ~flows
                             ~component
-                            "disconnect"));
+                            ~tags:["extended", Bool.to_string extended; "helo", helo]
+                            "session_helo:disconnect"));
       return ()
     | Ok (`Disconnect (Some reply)) ->
       Log.info log (lazy (Log.Message.create
@@ -246,14 +247,16 @@ let rec start_session
                             ~flows
                             ~component
                             ~reply
-                            "disconnect"));
+                            ~tags:["extended", Bool.to_string extended; "helo", helo]
+                            "session_helo:disconnect"));
       write_reply ~here:[%here] ~flows ~component reply
     | Error err ->
       Log.error log (lazy (Log.Message.of_error
                              ~here:[%here]
                              ~flows
                              ~component:(component @ ["plugin"; "session_helo"])
-                             err));
+                            ~tags:["extended", Bool.to_string extended; "helo", helo]
+                             (Error.tag err ~tag:"session_helo")));
       service_unavailable ~here:[%here] ~flows ~component ()
   and top_start_tls ~flows ~session tls_options =
     let component = ["smtp-server"; "session"; "starttls"] in
@@ -335,7 +338,13 @@ let rec start_session
     let flows = Log.Flows.extend flows `Inbound_envelope in
     let component = ["smtp-server"; "session"; "envelope"; "sender"] in
     match Sender.of_string sender_str with
-    | Error _err ->
+    | Error err ->
+      Log.info log (lazy (Log.Message.of_error
+                            ~here:[%here]
+                            ~flows
+                            ~component
+                            ~sender:(`String sender_str)
+                            (Error.tag err ~tag:"cannot parse sender")));
       syntax_error ~here:[%here] ~flows ~component (sprintf "Cannot parse '%s'" sender_str)
       >>= fun () ->
       top ~session
@@ -353,17 +362,17 @@ let rec start_session
                               ~component
                               ~sender:(`String sender_str)
                               ~reply:reject
-                              "REJECTED"));
+                              "mail_from:REJECTED"));
         write_reply ~here:[%here] ~flows ~component reject
         >>= fun () ->
         top ~session
       | Error err ->
-        Log.info log (lazy (Log.Message.of_error
+        Log.error log (lazy (Log.Message.of_error
                               ~here:[%here]
                               ~flows
                               ~component:(component @ ["plugin"; "process_sender"])
                               ~sender:(`String sender_str)
-                              err));
+                              (Error.tag err ~tag:"mail_from")));
         service_unavailable ~here:[%here] ~flows ~component ()
         >>= fun () ->
         top ~session
@@ -373,6 +382,7 @@ let rec start_session
                               ~flows
                               ~component
                               ~sender:(`String sender_str)
+                              ~session_marker:`Mail_from
                               "MAIL FROM"));
         ok_continue ~here:[%here] ~flows ~component ()
         >>= fun () ->
@@ -401,11 +411,17 @@ let rec start_session
         | (Command.Help) as cmd ->
           command_not_implemented ~here:[%here] ~flows ~component cmd
           >>= fun () -> envelope ~session ~flows ~sender ~recipients ~rejected_recipients)
-  and envelope_recipient ~session ~flows ~sender ~recipients ~rejected_recipients recipient =
+  and envelope_recipient ~session ~flows ~sender ~recipients ~rejected_recipients recipient_str =
     let component = ["smtp-server"; "session"; "envelope"; "recipient"] in
-    match Email_address.of_string recipient with
-    | Error _ ->
-      syntax_error ~here:[%here] ~flows ~component (sprintf "Cannot parse %s" recipient)
+    match Email_address.of_string recipient_str with
+    | Error err ->
+      Log.info log (lazy (Log.Message.of_error
+                            ~here:[%here]
+                            ~flows
+                            ~component
+                            ~recipients:[`String recipient_str]
+                            (Error.tag err ~tag:"cannot parse recipient")));
+      syntax_error ~here:[%here] ~flows ~component (sprintf "Cannot parse %s" recipient_str)
       >>= fun () ->
       envelope ~session ~flows ~sender ~recipients ~rejected_recipients
     | Ok recipient ->
@@ -423,7 +439,7 @@ let rec start_session
                               ~component
                               ~recipients:[`Email recipient]
                               ~reply:reject
-                              "REJECTED"));
+                              "rcpt_to:REJECTED"));
         write_reply ~here:[%here] ~flows ~component reject
         >>= fun () ->
         envelope ~session ~flows ~sender ~recipients ~rejected_recipients
@@ -434,7 +450,7 @@ let rec start_session
                                ~flows
                                ~component:(component @ ["plugin"; "process_recipient"])
                                ~recipients:[`Email recipient]
-                               err));
+                               (Error.tag err ~tag:"rcpt_to")));
         service_unavailable ~here:[%here] ~flows ~component ()
         >>= fun () ->
         envelope ~session ~flows ~sender ~recipients ~rejected_recipients
@@ -445,6 +461,7 @@ let rec start_session
                               ~flows
                               ~component
                               ~recipients:[`Email recipient]
+                              ~session_marker:`Rcpt_to
                               "RCPT TO"));
         ok_continue ~here:[%here] ~flows ~component ()
         >>= fun () ->
@@ -456,7 +473,7 @@ let rec start_session
     read_data ~max_size:config.Config.max_message_size reader
     >>= function
     | `Too_much_data ->
-      write_reply ~here:[%here] ~flows ~component Reply.Exceeded_storage_allocation_552
+      write_reply ~here:[%here] ~flows ~component Reply.exceeded_storage_allocation_552
       >>= fun () ->
       top ~session
     | `Ok data ->
@@ -477,7 +494,7 @@ let rec start_session
                                  error));
           match config.Config.malformed_emails with
           | `Reject ->
-            Error (Reply.Syntax_error_501 "Malformed Message")
+            Error (Reply.syntax_error_501 "Malformed Message")
           | `Wrap ->
             let data = data |> Bigbuffer.contents in
             Ok (Email.Simple.Content.text
@@ -499,6 +516,7 @@ let rec start_session
                               ~flows
                               ~component
                               ~email:(`Envelope original_msg)
+                              ~session_marker:`Data
                               "DATA"));
         let component = ["smtp-server"; "session"; "envelope"; "routing"] in
         Deferred.Or_error.try_with (fun () ->
@@ -513,7 +531,7 @@ let rec start_session
                                 ~flows
                                 ~component
                                 ~reply:reject
-                                "REJECTED"));
+                                "process_envelope:REJECTED"));
           write_reply ~here:[%here] ~flows ~component reject
           >>= fun () ->
           top ~session
@@ -522,7 +540,7 @@ let rec start_session
                                  ~here:[%here]
                                  ~flows
                                  ~component:(component @ ["plugin"; "process_envelope"])
-                                 err));
+                                 (Error.tag err ~tag:"process_envelope")));
           service_unavailable ~here:[%here] ~flows ~component ()
           >>= fun () ->
           top ~session
@@ -532,7 +550,7 @@ let rec start_session
                                 ~flows
                                 ~component
                                 ~tags:["consumed-id", ok]
-                                "CONSUMED"));
+                                "process_envelope:CONSUMED"));
           ok_completed ~here:[%here] ~flows ~component ok
           >>= fun () ->
           top ~session
@@ -550,20 +568,23 @@ let rec start_session
                                          ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
                                          ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
                                                   ~f:(fun c -> "next-hop",Address.to_string c))
-                                       err)));
+                                       (Error.tag err ~tag:"quarantining"))));
               transaction_failed ~here:[%here] ~flows ~component "error spooling"
               >>= fun () ->
               top ~session
             | Ok () ->
               List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                  Log.info log (lazy (Log.Message.create
-                                        ~here:[%here]
-                                        ~flows
-                                        ~component
-                                        ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
-                                        ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
-                                                 ~f:(fun c -> "next-hop",Address.to_string c))
-                                        "QUARANTINED")));
+                let msg_id =
+                  Envelope_with_next_hop.envelope envelope_with_next_hops
+                  |> Envelope.id |> Envelope.Id.to_string
+                in
+                Log.info log (lazy (Log.Message.create
+                                      ~here:[%here]
+                                      ~flows
+                                      ~component
+                                      ~spool_id:msg_id
+                                      ~tags:["quarantine-reason",reason]
+                                      "QUARANTINED")));
               write_reply ~here:[%here] ~flows ~component reply
               >>= fun () ->
               top ~session
@@ -581,7 +602,7 @@ let rec start_session
                                        ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
                                        ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
                                                 ~f:(fun c -> "next-hop",Address.to_string c))
-                                       err)));
+                                       (Error.tag err ~tag:"spooling"))));
             transaction_failed ~here:[%here] ~flows ~component "error spooling"
             >>= fun () ->
             top ~session
@@ -601,16 +622,17 @@ let rec start_session
   in
   let component = [ "smtp-server"; "session"; "init" ] in
   let flows = session_flows in
-  Log.info log (lazy (Log.Message.create
-                        ~here:[%here]
-                        ~flows
-                        ~component
-                        ~remote_address:session.Session.remote
-                        ~local_address:session.Session.local
-                        "CONNECTED"));
   if is_protocol_upgrade
   then top ~session
   else begin
+    Log.info log (lazy (Log.Message.create
+                          ~here:[%here]
+                          ~flows
+                          ~component
+                          ~remote_address:session.Session.remote
+                          ~local_address:session.Session.local
+                          ~session_marker:`Connected
+                          "CONNECTED"));
     Deferred.Or_error.try_with (fun () ->
         Cb.session_connect ~session
           ~log:(Log.with_flow_and_component log
@@ -622,7 +644,7 @@ let rec start_session
                             ~here:[%here]
                             ~flows
                             ~component
-                            "disconnect"));
+                            "session_connect:disconnect"));
       return ()
     | Ok (`Disconnect (Some reply)) ->
       Log.info log (lazy (Log.Message.create
@@ -630,14 +652,14 @@ let rec start_session
                             ~flows
                             ~component
                             ~reply
-                            "disconnect"));
+                            "session_connect:disconnect"));
       write_reply ~here:[%here] ~flows ~component reply
     | Error err ->
       Log.info log (lazy (Log.Message.of_error
                             ~here:[%here]
                             ~flows
                             ~component
-                            err));
+                            (Error.tag err ~tag:"session_connect")));
       service_unavailable ~here:[%here] ~flows ~component ()
     | Ok (`Accept hello) ->
       Log.info log (lazy (Log.Message.create
@@ -645,7 +667,7 @@ let rec start_session
                             ~flows
                             ~component
                             ~tags:["greeting",hello]
-                            "accepted"));
+                            "session_connect:accepted"));
       service_ready ~here:[%here] ~flows ~component hello
       >>= fun () ->
       top ~session

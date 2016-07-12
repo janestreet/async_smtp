@@ -29,6 +29,12 @@ module Sender : sig
 
   include Comparable.S with type t := t
   include Hashable.S with type t := t
+
+  module Caseless : sig
+    type nonrec t = t
+    include Comparable.S with type t := t
+    include Hashable.S with type t := t
+  end
 end
 
 module Envelope : sig
@@ -103,7 +109,7 @@ end
 module Address : sig
   type t = [`Inet of Host_and_port.t | `Unix of string] [@@deriving sexp, compare, bin_io]
 
-  val to_string : t -> string
+  include Stringable.S with type t := t
 end
 
 module Envelope_with_next_hop : sig
@@ -177,41 +183,51 @@ module Command : sig
 end
 
 module Reply : sig
-  type forward_path = string
 
-  type t =
-    (* Ok *)
-    | System_status_211 of string
-    | Help_214 of string list
-    | Service_ready_220 of string
-    | Closing_connection_221
-    | Ok_completed_250 of string
-    | Will_forward_251 of forward_path
-    | Will_attempt_252
-    | Start_mail_input_354
-
-    (* Transient Errors *)
-    | Service_unavailable_421
-    | Mailbox_unavailable_450 of string
-    | Local_error_451 of string
-    | Insufficient_storage_452
-    | Unable_to_accommodate_455 of string
-
-    (* Permanent Errors *)
-    | Command_not_recognized_500 of string
-    | Syntax_error_501 of string
-    | Command_not_implemented_502 of string
-    | Bad_sequence_of_commands_503 of string
-    | Parameter_not_implemented_504 of string
-    | Mailbox_unavailable_550 of string
-    | User_not_local_551 of string
-    | Exceeded_storage_allocation_552
-    | Mailbox_name_not_allowed_553 of string
-    | Transaction_failed_554 of string
-    | From_to_parameters_bad_555 of string
-  [@@deriving sexp]
+  type t = private
+    { code :
+        [ `Service_ready_220
+        | `Closing_connection_221
+        | `Ok_completed_250
+        | `Start_mail_input_354
+        | `Service_unavailable_421
+        | `Local_error_451
+        | `Message_rate_exceeded_452
+        | `Tls_temporarily_unavailable_454
+        | `Unable_to_accommodate_455
+        | `Command_not_recognized_500
+        | `Syntax_error_501
+        | `Command_not_implemented_502
+        | `Bad_sequence_of_commands_503
+        | `Parameter_not_implemented_504
+        | `Mailbox_unavailable_550
+        | `Exceeded_storage_allocation_552
+        | `Transaction_failed_554
+        | `From_to_parameters_bad_555
+        | `Other of int
+        ]
+    ; raw_message : string list
+    } [@@deriving sexp]
 
   val code : t -> int
+
+  val service_ready_220 : string -> t
+  val closing_connection_221 : t
+  val ok_completed_250 : string -> t
+  val start_mail_input_354 : t
+  val service_unavailable_421 : t
+  val local_error_451 : string -> t
+  val message_rate_exceeded_452 : t
+  val unable_to_accommodate_455 : string -> t
+  val command_not_recognized_500 : string -> t
+  val syntax_error_501 : string -> t
+  val command_not_implemented_502 : Command.t -> t
+  val bad_sequence_of_commands_503 : Command.t -> t
+  val mailbox_unavailable_550 : string -> t
+  val exceeded_storage_allocation_552 : t
+  val transaction_failed_554 : string -> t
+  val from_to_parameters_bad_555 : string -> t
+
   val is_ok : t -> bool
   val is_permanent_error : t -> bool
 

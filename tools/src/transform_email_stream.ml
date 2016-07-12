@@ -44,11 +44,11 @@ module Bodies = struct
         if not (Re2.Regex.matches re (Email.to_string email)) then email
         else begin
           let headers = Email.headers email in
-          let email = Email.Simple.Expert.content ~whitespace:`Keep ~extra_headers:[] ~encoding:`Quoted_printable "" in
+          let email = Email.Simple.Expert.content ~whitespace:`Raw ~extra_headers:[] ~encoding:`Quoted_printable "" in
           Email.set_headers
             email
-            (List.fold ~init:headers (Email.headers email |> Email_headers.to_list ~whitespace:`Keep)
-               ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Keep headers ~name ~value))
+            (List.fold ~init:headers (Email.headers email |> Email_headers.to_list ~whitespace:`Raw)
+               ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Raw headers ~name ~value))
         end)
 
   let hash_fun data =
@@ -83,11 +83,11 @@ module Bodies = struct
       Envelope.modify_email ~f:(fun email ->
         let headers = Email.headers email in
         let body = hash_body email in
-        let email = Email.Simple.Expert.content ~whitespace:`Keep ~encoding:`Quoted_printable ~extra_headers:[] body in
+        let email = Email.Simple.Expert.content ~whitespace:`Raw ~encoding:`Quoted_printable ~extra_headers:[] body in
         Email.set_headers
           email
-          (List.fold ~init:headers (Email.headers email |> Email_headers.to_list ~whitespace:`Keep)
-             ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Keep headers ~name ~value)))
+          (List.fold ~init:headers (Email.headers email |> Email_headers.to_list ~whitespace:`Raw)
+             ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Raw headers ~name ~value)))
 
   let transform t =
     let mask_body = mask_body t in
@@ -146,7 +146,7 @@ let compare_message_body =
 
 let compare_message_headers =
   List.compare Headers.Header.compare
-  |> Compare.map ~f:(Email_headers.to_list ~whitespace:`Keep)
+  |> Compare.map ~f:(Email_headers.to_list ~whitespace:`Raw)
   |> Compare.map ~f:Email.headers
   |> Compare.map ~f:Envelope.email
 ;;

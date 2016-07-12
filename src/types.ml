@@ -45,6 +45,23 @@ module Sender = struct
   include Hashable.Make(T)
   include Comparable.Make(T)
   include Sexpable.Of_stringable(T)
+
+  module Caseless = struct
+    module T = struct
+      type nonrec t = t [@@deriving bin_io, sexp]
+      let compare a b = match a,b with
+        | `Null, `Null -> 0
+        | `Email a, `Email b -> Email_address.Caseless.compare a b
+        | `Null, `Email _ -> -1
+        | `Email _, `Null -> 1
+      let hash = function
+        | `Null -> 0
+        | `Email a -> Email_address.Caseless.hash a
+    end
+    include T
+    include Comparable.Make(T)
+    include Hashable.Make(T)
+  end
 end
 
 module Envelope = struct
@@ -216,6 +233,7 @@ module Address = struct
     | _ -> `Inet (Host_and_port.t_of_sexp sexp)
 
   let to_string t = sexp_of_t t |> Sexp.to_string
+  let of_string str = Sexp.of_string str |> t_of_sexp
 end
 
 module Envelope_with_next_hop = struct
@@ -286,23 +304,24 @@ module Command = struct
     | Help
     | Noop
     | Start_tls
+    [@@deriving variants, sexp]
 
   let of_string = function
-    | str when String.is_prefix str ~prefix:"HELO " ->
+    | str when String.Caseless.is_prefix str ~prefix:"HELO " ->
       Hello (String.drop_prefix str 5 |> String.lstrip)
-    | str when String.is_prefix str ~prefix:"EHLO " ->
+    | str when String.Caseless.is_prefix str ~prefix:"EHLO " ->
       Extended_hello (String.drop_prefix str 5 |> String.lstrip)
-    | str when String.is_prefix str ~prefix:"MAIL FROM:" ->
+    | str when String.Caseless.is_prefix str ~prefix:"MAIL FROM:" ->
       Sender (String.drop_prefix str 10 |> String.lstrip)
-    | str when String.is_prefix str ~prefix:"RCPT TO:" ->
+    | str when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
       Recipient (String.drop_prefix str 8 |> String.lstrip)
-    | "DATA"     -> Data
-    | "RESET"    -> Reset
-    | "QUIT"     -> Quit
-    | "HELP"     -> Help
-    | "NOOP"     -> Noop
-    | "STARTTLS" -> Start_tls
-    | str        -> failwithf "Unrecognized command: %s" str ()
+    | str when String.Caseless.equal str "DATA"     -> Data
+    | str when String.Caseless.equal str "RESET"    -> Reset
+    | str when String.Caseless.equal str "QUIT"     -> Quit
+    | str when String.Caseless.equal str "HELP"     -> Help
+    | str when String.Caseless.equal str "NOOP"     -> Noop
+    | str when String.Caseless.equal str "STARTTLS" -> Start_tls
+    | str -> failwithf "Unrecognized command: %s" str ()
 
   let to_string = function
     | Hello string -> "HELO " ^ string
@@ -315,137 +334,306 @@ module Command = struct
     | Help -> "HELP"
     | Noop -> "NOOP"
     | Start_tls -> "STARTTLS"
+
+  (* Test parsing of commands to server *)
+  let%test_unit _ =
+    let check a b = [%test_eq:t] (of_string a) b in
+    Variants.iter
+      ~hello:(fun _ ->
+          check "HELO hi" (Hello "hi");
+          check "helo hi" (Hello "hi")
+        )
+      ~extended_hello:(fun _ ->
+          check "EHLO hi" (Extended_hello "hi");
+          check "ehlo hi" (Extended_hello "hi")
+        )
+      ~help:(fun _ ->
+          check "HELP" Help;
+          check "help" Help
+        )
+      ~sender:(fun _ ->
+          check "MAIL FROM:hi" (Sender "hi");
+          check "mail from:hi" (Sender "hi")
+        )
+      ~recipient:(fun _ ->
+          check "RCPT TO:hi" (Recipient "hi");
+          check "rcpt to:hi" (Recipient "hi")
+        )
+      ~data:(fun _ ->
+          check "DATA" Data;
+          check "data" Data
+        )
+      ~reset:(fun _ ->
+          check "RESET" Reset;
+          check "reset" Reset
+        )
+      ~quit:(fun _ ->
+          check "QUIT" Quit;
+          check "quit" Quit
+        )
+      ~noop:(fun _ ->
+          check "NOOP" Noop;
+          check "noop" Noop
+        )
+      ~start_tls:(fun _ ->
+          check "STARTTLS" Start_tls;
+          check "starttls" Start_tls
+        )
+
+      (* Test to_string and of_string functions for symmetry *)
+  let%test_unit _ =
+    let check c = [%test_eq:t] c (of_string (to_string c)) in
+    Variants.iter
+      ~hello:(fun _ ->
+          check (Hello "Helo World!~")
+        )
+      ~extended_hello:(fun _ ->
+          check (Extended_hello "Helo World!~")
+        )
+      ~help:(fun _ ->
+          check Help
+        )
+      ~sender:(fun _ ->
+          check (Sender "Helo World!~")
+        )
+      ~recipient:(fun _ ->
+          check (Recipient "Helo World!~")
+        )
+      ~data:(fun _ ->
+          check Data
+        )
+      ~reset:(fun _ ->
+          check Reset
+        )
+      ~quit:(fun _ ->
+          check Quit
+        )
+      ~noop:(fun _ ->
+          check Noop
+        )
+      ~start_tls:(fun _ ->
+          check Start_tls
+        )
+
+      (* Mechanical sanity checks *)
+  let%test_unit _ =
+    let check_to_str a b = [%test_eq:string] a (to_string b) in
+    let check_of_str a b = [%test_eq:t] a (of_string b) in
+    let check_round a b =
+      check_to_str a b;
+      check_of_str b a;
+      check_to_str a (of_string a);
+      check_of_str b (to_string b)
+    in
+    Variants.iter
+      ~hello:(fun _ ->
+          check_round "HELO Helo World!~" (Hello "Helo World!~");
+          check_of_str (Hello "Helo World!~") "helo Helo World!~"
+        )
+      ~extended_hello:(fun _ ->
+          check_round "EHLO Helo World!~" (Extended_hello "Helo World!~");
+          check_of_str (Extended_hello "Helo World!~") "ehlo Helo World!~"
+        )
+      ~sender:(fun _ ->
+          check_round "MAIL FROM: Helo World!~" (Sender "Helo World!~");
+          check_of_str (Sender "Helo World!~") "mail from: Helo World!~"
+        )
+      ~recipient:(fun _ ->
+          check_round "RCPT TO: Helo World!~" (Recipient "Helo World!~");
+          check_of_str (Recipient "Bye World!~") "RCPT TO:Bye World!~";
+          check_of_str (Recipient "Bye World!~") "rcpt to:Bye World!~")
+      ~data:(fun _ ->
+          check_round "DATA" Data;
+          check_of_str Data "data"
+        )
+      ~reset:(fun _ ->
+          check_round "RESET" Reset;
+          check_of_str Data "data"
+        )
+      ~quit:(fun _ ->
+          check_round "QUIT" Quit;
+          check_of_str Quit "quit"
+        )
+      ~help:(fun _ ->
+          check_round "HELP" Help;
+          check_of_str Help "help"
+        )
+      ~noop:(fun _ ->
+          check_round "NOOP" Noop;
+          check_of_str Noop "noop")
+      ~start_tls:(fun _ ->
+          check_round "STARTTLS" Start_tls;
+          check_of_str Start_tls "starttls")
 end
 
 module Reply = struct
-  type forward_path = string [@@deriving sexp]
+  module Code = struct
+    type 'a t_ =
+      [ `Service_ready_220
+      | `Closing_connection_221
+      | `Ok_completed_250
+      | `Start_mail_input_354
+      | `Service_unavailable_421
+      | `Local_error_451
+      | `Message_rate_exceeded_452
+      | `Tls_temporarily_unavailable_454
+      | `Unable_to_accommodate_455
+      | `Command_not_recognized_500
+      | `Syntax_error_501
+      | `Command_not_implemented_502
+      | `Bad_sequence_of_commands_503
+      | `Parameter_not_implemented_504
+      | `Mailbox_unavailable_550
+      | `Exceeded_storage_allocation_552
+      | `Transaction_failed_554
+      | `From_to_parameters_bad_555
+      | `Other of 'a
+      ] [@@deriving sexp, enumerate]
+
+    type t = int t_ [@@deriving sexp]
+
+    let of_int = function
+      | 220 -> `Service_ready_220
+      | 221 -> `Closing_connection_221
+      | 250 -> `Ok_completed_250
+      | 354 -> `Start_mail_input_354
+      | 421 -> `Service_unavailable_421
+      | 451 -> `Local_error_451
+      | 452 -> `Message_rate_exceeded_452
+      | 454 -> `Tls_temporarily_unavailable_454
+      | 455 -> `Unable_to_accommodate_455
+      | 500 -> `Command_not_recognized_500
+      | 501 -> `Syntax_error_501
+      | 502 -> `Command_not_implemented_502
+      | 503 -> `Bad_sequence_of_commands_503
+      | 504 -> `Parameter_not_implemented_504
+      | 550 -> `Mailbox_unavailable_550
+      | 552 -> `Exceeded_storage_allocation_552
+      | 554 -> `Transaction_failed_554
+      | 555 -> `From_to_parameters_bad_555
+      | i -> `Other i
+
+    let to_int = function
+      | `Service_ready_220 -> 220
+      | `Closing_connection_221 -> 221
+      | `Ok_completed_250 -> 250
+      | `Start_mail_input_354 -> 354
+      | `Service_unavailable_421 -> 421
+      | `Local_error_451 -> 451
+      | `Message_rate_exceeded_452 -> 452
+      | `Tls_temporarily_unavailable_454 -> 454
+      | `Unable_to_accommodate_455 -> 455
+      | `Command_not_recognized_500 -> 500
+      | `Syntax_error_501 -> 501
+      | `Command_not_implemented_502 -> 502
+      | `Bad_sequence_of_commands_503 -> 503
+      | `Parameter_not_implemented_504 -> 504
+      | `Mailbox_unavailable_550 -> 550
+      | `Exceeded_storage_allocation_552 -> 552
+      | `Transaction_failed_554 -> 554
+      | `From_to_parameters_bad_555 -> 555
+      | `Other i -> i
+
+    let all = lazy begin
+      List.range 100 999
+      |> List.filter ~f:(fun i -> of_int i = `Other i)
+      |> all_of_t_
+    end
+
+      (* Check that every int maps uniquely to a code, and back to itself *)
+    let%test_unit _ =
+      List.range 100 999
+      |> List.iter ~f:([%test_pred:int] (fun i -> to_int (of_int i) = i))
+
+        (* Check that every code maps to an int and back to itself *)
+    let%test_unit _ =
+      Lazy.force all
+      |> List.iter ~f:([%test_pred:t] (fun c -> of_int (to_int c) = c))
+  end
 
   type t =
-    (* Ok *)
-    | System_status_211 of string
-    | Help_214 of string list
-    | Service_ready_220 of string
-    | Closing_connection_221
-    | Ok_completed_250 of string
-    | Will_forward_251 of forward_path
-    | Will_attempt_252
-    | Start_mail_input_354
+    { code : Code.t
+    ; raw_message : string list
+    }
 
-    (* Transient Errors *)
-    | Service_unavailable_421
-    | Mailbox_unavailable_450 of string
-    | Local_error_451 of string
-    | Insufficient_storage_452
-    | Unable_to_accommodate_455 of string
+  include Sexpable.Of_sexpable(struct
+      type t = int * string list [@@deriving sexp]
+    end )(struct
+      type nonrec t = t
+      let of_sexpable (code, raw_message) = { code = Code.of_int code; raw_message }
+      let to_sexpable { code; raw_message } = (Code.to_int code, raw_message)
+    end)
 
-    (* Permanent Errors *)
-    | Command_not_recognized_500 of string
-    | Syntax_error_501 of string
-    | Command_not_implemented_502 of string
-    | Bad_sequence_of_commands_503 of string
-    | Parameter_not_implemented_504 of string
-    | Mailbox_unavailable_550 of string
-    | User_not_local_551 of string
-    | Exceeded_storage_allocation_552
-    | Mailbox_name_not_allowed_553 of string
-    | Transaction_failed_554 of string
-    | From_to_parameters_bad_555 of string
-  [@@deriving sexp]
+  let code t = Code.to_int t.code
 
   let my_name = Unix.gethostname ()
 
-  let to_string code =
+  let create code fmt =
+    ksprintf (fun raw_message ->
+        { code; raw_message = String.split_lines raw_message }) fmt
+
+  let service_ready_220 greeting =
+    create `Service_ready_220 "%s" greeting
+
+  let closing_connection_221 =
+    create `Closing_connection_221 "%s closing connection" my_name
+
+  let ok_completed_250 msg =
+    create `Ok_completed_250 "Ok: %s" msg
+
+  let start_mail_input_354 =
+    create `Start_mail_input_354 "Enter message, ending with \".\" on a line by iteself"
+
+  let service_unavailable_421 =
+    create `Service_unavailable_421 "%s Service not available, closing transmission channel" my_name
+
+  let local_error_451 msg =
+    create `Local_error_451 "Local error: %s" msg
+
+  let message_rate_exceeded_452 =
+    create `Message_rate_exceeded_452 "Message rate exceeded"
+
+  let unable_to_accommodate_455 msg =
+    create `Unable_to_accommodate_455 "Unable to accomodate: %s" msg
+
+  let command_not_recognized_500 command =
+    create `Command_not_recognized_500 !"Unrecognized command: %s" command
+
+  let syntax_error_501 error =
+    create `Syntax_error_501 "Syntax error in parameters or arguments: %s" error
+
+  let command_not_implemented_502 command =
+    create `Command_not_implemented_502 !"Command not implemented: %{Command}" command
+
+  let bad_sequence_of_commands_503 command =
+    create `Bad_sequence_of_commands_503 !"Bad sequence of commands: %{Command}" command
+
+  let mailbox_unavailable_550 reason =
+    create `Mailbox_unavailable_550 "Mailbox unavailable: %s" reason
+
+  let exceeded_storage_allocation_552 =
+    create `Exceeded_storage_allocation_552 "Exeeded storage allocation"
+
+  let transaction_failed_554 message =
+    create `Transaction_failed_554 !"Transaction failed: %s" message
+
+  let from_to_parameters_bad_555 msg =
+    create `From_to_parameters_bad_555 !"From to To parameters bad: %s" msg
+
+  let to_string t =
+    let code = code t in
     let rec to_string_lines acc = function
       | [] -> assert(false)
       | [s] -> ((sprintf "%d %s" code s) :: acc) |> List.rev
       | s::ss ->
         to_string_lines ((sprintf "%d-%s" code s) :: acc) ss
     in
-    ksprintf (fun message ->
-        String.split_lines message
-        |> List.map ~f:String.strip
-        |> to_string_lines []
-        |> String.concat ~sep:"\n")
+    to_string_lines [] t.raw_message
+    |> String.concat ~sep:"\n"
 
-  let to_string = function
-    | System_status_211 s ->
-      to_string 211 "System status: %s" s
-    | Help_214 commands ->
-      to_string 214 "Commands supported:\n%s" (String.concat ~sep:"\n" commands)
-    | Service_ready_220 greeting ->
-      to_string 220 "%s" greeting
-    | Closing_connection_221 ->
-      to_string 221 "%s closing connection" my_name
-    | Ok_completed_250 msg ->
-      to_string 250 "Ok: %s" msg
-    | Will_forward_251 path ->
-      to_string 251 "User not local; will forward to %s" path
-    | Will_attempt_252 ->
-      to_string 252 "Cannot VRFY user, but will accept message and attempt"
-    | Start_mail_input_354 ->
-      to_string 354 "Enter message, ending with \".\" on a line by iteself"
-    | Service_unavailable_421 ->
-      to_string 421 "%s Service not available, closing transmission channel" my_name
-    | Mailbox_unavailable_450 e ->
-      to_string 450 "Mailbox unavailbale: %s" e
-    | Local_error_451 e ->
-      to_string 451 "Local error: %s" e
-    | Insufficient_storage_452 ->
-      to_string 452 "Insufficient storage"
-    | Unable_to_accommodate_455 e ->
-      to_string 455 "Unable to accomodate: %s" e
-    | Command_not_recognized_500 e ->
-      to_string 500 "Unrecognized command: %s" e
-    | Syntax_error_501 e ->
-      to_string 501 "Syntax error in parameters or arguments: %s" e
-    | Command_not_implemented_502 e ->
-      to_string 502 "Command not implemented: %s" e
-    | Bad_sequence_of_commands_503 e->
-      to_string 503 "Bad sequence of commands %s" e
-    | Parameter_not_implemented_504 e ->
-      to_string 504 "Command parameter not implemented: " ^ e
-    | Mailbox_unavailable_550 e ->
-      to_string 550 "Mailbox unavailable: %s" e
-    | User_not_local_551 e ->
-      to_string 551 "User not local: %s" e
-    | Exceeded_storage_allocation_552 ->
-      to_string 552 "Exeeded storage allocation"
-    | Mailbox_name_not_allowed_553 e ->
-      to_string 553 "Mailbox name not allowed: %s" e
-    | Transaction_failed_554 e ->
-      to_string 554 "Transaction failed: %s" e
-    | From_to_parameters_bad_555 e ->
-      to_string 555 "From to To parameters bad: %s" e
-
-  let of_code_message reply_code msg =
-    match reply_code with
-    | 211 -> System_status_211 msg
-    | 214 -> Help_214 (String.split_lines msg |> List.tl_exn)
-    | 220 -> Service_ready_220 msg
-    | 221 -> Closing_connection_221
-    | 250 -> Ok_completed_250 msg
-    | 251 -> Will_forward_251 msg
-    | 252 -> Will_attempt_252
-    | 354 -> Start_mail_input_354
-
-    | 421 -> Service_unavailable_421
-    | 450 -> Mailbox_unavailable_450 msg
-    | 451 -> Local_error_451 msg
-    | 452 -> Insufficient_storage_452
-    | 455 -> Unable_to_accommodate_455 msg
-
-    | 500 -> Command_not_recognized_500 msg
-    | 501 -> Syntax_error_501 msg
-    | 502 -> Command_not_implemented_502 msg
-    | 503 -> Bad_sequence_of_commands_503 msg
-    | 504 -> Parameter_not_implemented_504 msg
-    | 550 -> Mailbox_unavailable_550 msg
-    | 551 -> User_not_local_551 msg
-    | 552 -> Exceeded_storage_allocation_552
-    | 553 -> Mailbox_name_not_allowed_553 msg
-    | 554 -> Transaction_failed_554 msg
-    | 555 -> From_to_parameters_bad_555 msg
-    | x -> failwiths "Invalid reply code" x Int.sexp_of_t
+  let of_code_message code raw_message =
+    let code = Code.of_int code in
+    { code; raw_message }
 
   type partial = string * int * (string list)
 
@@ -456,8 +644,7 @@ module Reply = struct
       let rev_msg = (String.slice str (i+1) (String.length str)) :: rev_msg in
       match d with
       | ' ' ->
-        let msg = List.rev rev_msg |> String.concat ~sep:"\n" in
-        `Done (of_code_message code msg)
+        `Done (of_code_message code (List.rev rev_msg))
       | '-' ->
         `Partial (prefix, code, rev_msg)
       | _ -> assert(false)
@@ -499,161 +686,53 @@ module Reply = struct
     of_string (Bigstring.to_string bs)
   ;;
 
-  let code = function
-    | System_status_211 _             -> 211
-    | Help_214 _                      -> 214
-    | Service_ready_220 _             -> 220
-    | Closing_connection_221          -> 221
-    | Ok_completed_250 _              -> 250
-    | Will_forward_251 _              -> 251
-    | Will_attempt_252                -> 252
-    | Start_mail_input_354            -> 354
-    | Service_unavailable_421         -> 421
-    | Mailbox_unavailable_450 _       -> 450
-    | Local_error_451 _               -> 451
-    | Insufficient_storage_452        -> 452
-    | Unable_to_accommodate_455 _     -> 455
-    | Command_not_recognized_500 _    -> 500
-    | Syntax_error_501 _              -> 501
-    | Command_not_implemented_502 _   -> 502
-    | Bad_sequence_of_commands_503 _  -> 503
-    | Parameter_not_implemented_504 _ -> 504
-    | Mailbox_unavailable_550 _       -> 550
-    | User_not_local_551 _            -> 551
-    | Exceeded_storage_allocation_552 -> 552
-    | Mailbox_name_not_allowed_553 _  -> 553
-    | Transaction_failed_554 _        -> 554
-    | From_to_parameters_bad_555 _    -> 555
+  let is_ok t =
+    let code = code t in
+    (200 <= code && code <= 299)
+    || (300 <= code && code <= 399)
 
-  let is_ok = function
-    | System_status_211 _             -> true
-    | Help_214 _                      -> true
-    | Service_ready_220 _             -> true
-    | Closing_connection_221          -> true
-    | Ok_completed_250 _              -> true
-    | Will_forward_251 _              -> true
-    | Will_attempt_252                -> true
-    | Start_mail_input_354            -> true
-    | Service_unavailable_421         -> false
-    | Mailbox_unavailable_450 _       -> false
-    | Local_error_451 _               -> false
-    | Insufficient_storage_452        -> false
-    | Unable_to_accommodate_455 _     -> false
-    | Command_not_recognized_500 _    -> false
-    | Syntax_error_501 _              -> false
-    | Command_not_implemented_502 _   -> false
-    | Bad_sequence_of_commands_503 _  -> false
-    | Parameter_not_implemented_504 _ -> false
-    | Mailbox_unavailable_550 _       -> false
-    | User_not_local_551 _            -> false
-    | Exceeded_storage_allocation_552 -> false
-    | Mailbox_name_not_allowed_553 _  -> false
-    | Transaction_failed_554 _        -> false
-    | From_to_parameters_bad_555 _    -> false
+  let is_permanent_error t =
+    let code = code t in
+    (500 <= code && code <= 599)
 
-  let is_permanent_error = function
-    | System_status_211 _             -> false
-    | Help_214 _                      -> false
-    | Service_ready_220 _             -> false
-    | Closing_connection_221          -> false
-    | Ok_completed_250 _              -> false
-    | Will_forward_251 _              -> false
-    | Will_attempt_252                -> false
-    | Start_mail_input_354            -> false
-    | Service_unavailable_421         -> false
-    | Mailbox_unavailable_450 _       -> false
-    | Local_error_451 _               -> false
-    | Insufficient_storage_452        -> false
-    | Unable_to_accommodate_455 _     -> false
-    | Command_not_recognized_500 _    -> true
-    | Syntax_error_501 _              -> true
-    | Command_not_implemented_502 _   -> true
-    | Bad_sequence_of_commands_503 _  -> true
-    | Parameter_not_implemented_504 _ -> true
-    | Mailbox_unavailable_550 _       -> true
-    | User_not_local_551 _            -> true
-    | Exceeded_storage_allocation_552 -> true
-    | Mailbox_name_not_allowed_553 _  -> true
-    | Transaction_failed_554 _        -> true
-    | From_to_parameters_bad_555 _    -> true
+  let%test_module _ =
+    (module struct
+      let check reply =
+        [%test_eq:t] reply (of_string (to_string reply))
+      ;;
 
-  let%test_module _ = (module struct
-    let check reply =
-      let r = of_string (to_string reply) in
-      code r = code reply
-    ;;
+      let%test_unit _ =
+        List.iter (Lazy.force Code.all)
+          ~f:(fun code ->
+              check { code; raw_message = [ "test" ] };
+              check { code; raw_message = [ "test0"; "test2"; "test3" ] }
+            )
 
-    let%test _ = check (System_status_211 "test")
-    let%test _ = check (Service_ready_220 "test")
-    let%test _ = check Closing_connection_221
-    let%test _ = check (Ok_completed_250 "test")
-    let%test _ = check (Will_forward_251 "test")
-    let%test _ = check Will_attempt_252
-    let%test _ = check Start_mail_input_354
-    let%test _ = check Service_unavailable_421
-    let%test _ = check (Mailbox_unavailable_450 "test")
-    let%test _ = check (Local_error_451 "test")
-    let%test _ = check Insufficient_storage_452
-    let%test _ = check (Unable_to_accommodate_455 "test")
-    let%test _ = check (Command_not_recognized_500 "test")
-    let%test _ = check (Syntax_error_501 "test")
-    let%test _ = check (Command_not_implemented_502 "test")
-    let%test _ = check (Bad_sequence_of_commands_503 "test")
-    let%test _ = check (Parameter_not_implemented_504 "test")
-    let%test _ = check (Mailbox_unavailable_550 "test")
-    let%test _ = check (User_not_local_551 "test")
-    let%test _ = check Exceeded_storage_allocation_552
-    let%test _ = check (Mailbox_name_not_allowed_553 "test")
-    let%test _ = check (Transaction_failed_554 "test")
-    let%test _ = check (From_to_parameters_bad_555 "test")
+      let%test_unit _ = check (service_ready_220 "test")
+      let%test_unit _ = check closing_connection_221
+      let%test_unit _ = check (ok_completed_250 "test")
+      let%test_unit _ = check start_mail_input_354
+      let%test_unit _ = check service_unavailable_421
+      let%test_unit _ = check (local_error_451 "test")
+      let%test_unit _ = check (command_not_recognized_500 "test")
+      let%test_unit _ = check (syntax_error_501 "test")
+      let%test_unit _ = check (command_not_implemented_502 (Command.Hello "Test"))
+      let%test_unit _ = check (bad_sequence_of_commands_503 (Command.Hello "Test"))
+      let%test_unit _ = check exceeded_storage_allocation_552
+      let%test_unit _ = check (transaction_failed_554 "test")
 
-    let check_multiline a b =
-      let a' = of_string a in
-      Poly.equal a' b
+      let check_multiline a b =
+        [%test_eq:t] b (of_string a)
 
-    let%test _ = check_multiline "250-test1\n250-test2\n250 test3" (Ok_completed_250 "test1\ntest2\ntest3")
-  end)
+      let%test_unit _ = check_multiline "250-Ok: test1\n250-test2\n250 test3" (ok_completed_250 "test1\ntest2\ntest3")
+    end)
 end
-
-(* Test parsing of commands to server *)
-let%test_module _ = (module struct
-  let check str comm =
-    let c = Command.of_string str in
-    Polymorphic_compare.equal c comm
-
-  let%test _ = check "HELO hi" (Command.Hello "hi")
-  let%test _ = check "EHLO hi" (Command.Extended_hello "hi")
-  let%test _ = check "HELP" Command.Help
-  let%test _ = check "MAIL FROM:hi" (Command.Sender "hi")
-  let%test _ = check "RCPT TO:hi" (Command.Recipient "hi")
-  let%test _ = check "DATA" Command.Data
-  let%test _ = check "QUIT" Command.Quit
-  let%test _ = check "NOOP" Command.Noop
-  let%test _ = check "STARTTLS" Command.Start_tls
-end)
-
-(* Test to_string and of_string functions for symmetry *)
-let%test_module _ = (module struct
-  let check comm =
-    let c = Command.of_string (Command.to_string comm) in
-    Polymorphic_compare.equal comm c
-
-  let%test _ = check (Command.Hello "Helo World!~")
-  let%test _ = check (Command.Extended_hello "Helo World!~")
-  let%test _ = check (Command.Sender "Helo World!~")
-  let%test _ = check (Command.Recipient "Helo World!~")
-  let%test _ = check Command.Data
-  let%test _ = check Command.Quit
-  let%test _ = check Command.Help
-  let%test _ = check Command.Noop
-  let%test _ = check Command.Start_tls
-end)
 
 module Extension = struct
   type t =
     | Start_tls
     | Other of string
-  [@@deriving sexp]
+    [@@deriving sexp]
 
   let of_string str =
     let t =
