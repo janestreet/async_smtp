@@ -16,27 +16,27 @@ let client_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
 module Expert = struct
   include Email.Simple.Expert
 
-  let send' ?(log=Lazy.force client_log) ?(server=default_server) ~sender ~recipients email =
-    let message = Envelope.create ~sender ~recipients ~rejected_recipients:[] ~email () in
+  let send' ?(log=Lazy.force client_log) ?(server=default_server) ~sender ?sender_args ~recipients email =
+    let message = Envelope.create ~sender ?sender_args ~recipients ~rejected_recipients:[] ~email () in
     Client.Tcp.with_ server ~log ~f:(fun client ->
         Client.send_envelope client ~log message)
 
-  let send ?log ?server ~sender ~recipients email =
-    send' ?log ?server ~sender ~recipients email
+  let send ?log ?server ~sender ?sender_args ~recipients email =
+    send' ?log ?server ~sender ?sender_args ~recipients email
     >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
     >>| Or_error.join
     >>| Or_error.ignore
 end
 
-let send' ?log ?server ?(from=Email_address.local_address ()) ~to_ ?(cc=[]) ?(bcc=[]) ~subject ?id ?date ?extra_headers ?attachments content =
+let send' ?log ?server ?(from=Email_address.local_address ()) ?sender_args ~to_ ?(cc=[]) ?(bcc=[]) ~subject ?id ?date ?extra_headers ?attachments content =
   let email = create ~from ~to_ ~cc ~subject ?id ?date ?extra_headers ?attachments content in
   let recipients = to_ @ cc @ bcc in
   let sender = `Email from in
   let server = Option.map server ~f:(fun hp -> `Inet hp) in
-  Expert.send' ?log ?server ~sender ~recipients email
+  Expert.send' ?log ?server ~sender ?sender_args ~recipients email
 
-let send ?log ?server ?from ~to_ ?cc ?bcc ~subject ?id ?date ?extra_headers ?attachments content =
-  send' ?log ?server ?from ~to_ ?cc ?bcc ~subject ?id ?date ?extra_headers ?attachments content
+let send ?log ?server ?from ?sender_args ~to_ ?cc ?bcc ~subject ?id ?date ?extra_headers ?attachments content =
+  send' ?log ?server ?from ?sender_args ~to_ ?cc ?bcc ~subject ?id ?date ?extra_headers ?attachments content
     >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
     >>| Or_error.join
     >>| Or_error.ignore

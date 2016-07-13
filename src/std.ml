@@ -9,6 +9,7 @@ module Smtp_client = struct
   module Simple = Client_simple
 end
 module Address                     = Types.Address
+module Smtp_credentials            = Types.Credentials
 module Smtp_spool                  = Spool
 module Smtp_rpc_intf               = Rpc_intf
 module Smtp_events                 = Smtp_events
@@ -21,6 +22,7 @@ module Smtp_envelope_selector      = Envelope_selector
 module Smtp_session                = Types.Session
 module Smtp_reply                  = Types.Reply
 module Smtp_sender                 = Types.Sender
+module Smtp_sender_argument        = Types.Argument
 module Smtp_command                = Types.Command
 module Smtp_mail_log               = Mail_log
 module Simplemail                  = Smtp_client.Simple

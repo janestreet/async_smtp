@@ -7,10 +7,10 @@ module type S = sig
   (** [session_connect] is called when a client first connects, before any messages are
       accepted.
 
-       [`Accept greeting] initiates a session state and sends the given greeting.
+      [`Accept greeting] initiates a session state and sends the given greeting.
 
-       [`Disconnect maybe_reply] terminates the connection sending the given
-       reply. disconnect is NOT called.  *)
+      [`Disconnect maybe_reply] terminates the connection sending the given
+      reply. disconnect is NOT called.  *)
   val session_connect
     :  log:Mail_log.t
     -> session:Session.t
@@ -20,7 +20,8 @@ module type S = sig
 
   (** [session_helo] is called in response to initial handshakes (i.e. HELO or EHLO).
 
-      [`Continue] will update the session state.
+      [`Continue advertise_auth] will update the session state and optionally advertise
+      "AUTH LOGIN" as an extension
 
       [`Deny reply] will send the given reply but leave the session open.
 
@@ -30,7 +31,7 @@ module type S = sig
     :  log:Mail_log.t
     -> session:Session.t
     -> string
-    -> [ `Continue
+    -> [ `Continue of [`Advertise_auth of bool]
        | `Deny of Reply.t
        | `Disconnect of Reply.t option
        ] Deferred.t
@@ -44,6 +45,7 @@ module type S = sig
     :  log:Mail_log.t
     -> session:Session.t
     -> Sender.t
+    -> sender_args:Argument.t list
     -> [ `Continue
        | `Reject of Reply.t
        ] Deferred.t
@@ -57,6 +59,7 @@ module type S = sig
     :  log:Mail_log.t
     -> session:Session.t
     -> sender:Sender.t
+    -> sender_args:Argument.t list
     -> Email_address.t
     -> [ `Continue
        | `Reject of Reply.t
@@ -87,6 +90,20 @@ module type S = sig
        | `Quarantine of Envelope_with_next_hop.t list * Reply.t * string
        ] Deferred.t
 
+  (** [check_authentication_credentials] is called to check if the credentials that the
+      client has provided are valid.
+
+      [`Allow] means that the client's credentials are valid.
+
+      [`Deny] means that the client's credentials are not valid. *)
+  val check_authentication_credentials
+    :  log:Mail_log.t
+    -> username:string
+    -> password:string
+    -> [ `Allow
+       | `Deny
+       ] Deferred.t
+
   val rpcs : unit Rpc.Implementation.t list
 end
 
@@ -100,9 +117,9 @@ module Simple : S = struct
                  (Time.now () |> Time.to_string_abs ~zone:Time.Zone.utc)))
   ;;
 
-  let session_helo ~log:_ ~session:_ _helo                     = return `Continue
-  let process_sender ~log:_ ~session:_ _sender                 = return `Continue
-  let process_recipient ~log:_ ~session:_ ~sender:_ _recipient = return `Continue
+  let session_helo ~log:_ ~session:_ _helo = return (`Continue (`Advertise_auth false))
+  let process_sender ~log:_ ~session:_ _sender  ~sender_args:_                = return `Continue
+  let process_recipient ~log:_ ~session:_ ~sender:_ ~sender_args:_ _recipient = return `Continue
 
   let process_envelope ~log:_ ~session:_ envelope =
     return (`Send
@@ -112,6 +129,8 @@ module Simple : S = struct
                   ~retry_intervals:[]
               ])
   ;;
+
+  let check_authentication_credentials ~log:_ ~username:_ ~password:_ = return `Deny
 
   let rpcs = []
 end

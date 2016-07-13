@@ -112,7 +112,7 @@ module Message : sig
              ]
    -> ?rfc822_id:string
    -> ?local_id:Envelope.Id.t
-   -> ?sender:[ Sender.t | `String of string ]
+   -> ?sender:[ `Sender of Sender.t | `String of string ]
    -> ?recipients:[ `Email of Email_address.t | `String of string ] list
    -> ?spool_id:string
    -> ?dest:Address.t
@@ -169,7 +169,7 @@ module Message : sig
   (* tag 'dest' *)
   val dest : t -> Address.t option
   (* tag 'sender'. [`String _] if the value doesn't parse *)
-  val sender : t -> [ Sender.t | `String of string ] option
+  val sender : t -> [ `Sender of Sender.t | `String of string ] option
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
     nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
   *)

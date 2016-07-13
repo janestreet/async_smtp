@@ -2,7 +2,7 @@ OASISFormat:           0.4
 OCamlVersion:          >= 4.02.3
 FindlibVersion:        >= 1.3.2
 Name:                  async_smtp
-Version:               114.01+04
+Version:               114.01+24
 Synopsis:              SMTP client and server
 Authors:               Jane Street Group, LLC <opensource@janestreet.com>
 Copyrights:            (C) 2005-2016 Jane Street Group LLC <opensource@janestreet.com>
@@ -33,6 +33,8 @@ Library async_smtp
                 Common,
                 Envelope_selector,
                 Fake_spool,
+                Mail_from_lexer,
+                Mail_from_lexer_types,
                 Mail_log,
                 Rpc_impl,
                 Rpc_intf,

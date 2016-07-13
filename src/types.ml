@@ -7,29 +7,121 @@ module Headers = Email_headers
 
 module Email_address = Email_address
 
+module Smtp_extension = struct
+  type t =
+    | Start_tls
+    | Auth_login
+    | Mime_8bit_transport
+    | Other of string
+  [@@deriving sexp]
+
+  let of_string str =
+    let t =
+      match String.uppercase str with
+      | "STARTTLS" -> Start_tls
+      | "AUTH LOGIN" -> Auth_login
+      | "8BITMIME" -> Mime_8bit_transport
+      | str -> Other str
+    in
+    t
+
+  let to_string = function
+    | Start_tls -> "STARTTLS"
+    | Auth_login -> "AUTH LOGIN"
+    | Mime_8bit_transport -> "8BITMIME"
+    | Other str -> str
+end
+
+module Argument = struct
+  open Or_error.Monad_infix
+  type t =
+    | Auth of Email_address.t option
+    | Body of [`Mime_8bit | `Mime_7bit ]
+    [@@deriving bin_io, sexp, compare]
+
+  let of_string = function
+    | "AUTH=<>" -> Ok (Auth None)
+    | str when String.is_prefix str ~prefix:"AUTH=" -> begin
+        let email_address = (String.drop_prefix str 5 |> String.strip) in
+        match Email_address.of_string email_address with
+        | Ok email_address -> Ok (Auth (Some email_address))
+        | Error _ ->
+          Log.Global.info "Unparsable argument to AUTH: %s" email_address;
+          Ok (Auth None)
+      end
+    | "BODY=8BITMIME" -> Ok (Body `Mime_8bit)
+    | "BODY=7BIT" -> Ok (Body `Mime_7bit)
+    | str -> Or_error.errorf "Unrecognized extension to mail command: %s" str
+
+  let to_string = function
+    | Body `Mime_8bit -> "BODY=8BITMIME"
+    | Body `Mime_7bit -> "BODY=7BIT"
+    | Auth email_address ->
+      match email_address with
+      | None -> "AUTH=<>"
+      | Some email_address -> "AUTH=" ^ (Email_address.to_string email_address)
+
+  let to_smtp_extension = function
+    | Auth _ -> Smtp_extension.Auth_login
+    | Body _ -> Smtp_extension.Mime_8bit_transport
+
+  let list_of_string ~allowed_extensions str =
+    String.split ~on:' ' str
+    |> List.filter ~f:(Fn.non String.is_empty)
+    |> List.map ~f:of_string
+    |> Or_error.all
+    >>= fun args ->
+    let has_invalid_arg =
+      List.exists args ~f:(fun arg ->
+          not (List.mem allowed_extensions (to_smtp_extension arg)))
+    in
+    if has_invalid_arg then
+      Or_error.errorf "Unable to parse MAIL FROM arguments: %s" str
+    else
+      Ok args
+
+
+end
+
 module Sender = struct
   open Or_error.Monad_infix
-
   type t =
     [ `Null
     | `Email of Email_address.t
-    ] [@@deriving sexp, bin_io, compare]
+    ]
+    [@@deriving bin_io, sexp, compare]
 
-  let of_string ?default_domain s =
-    match String.strip s with
-    | "<>" -> Ok `Null
-    | s ->
-      Email_address.of_string ?default_domain s
-      >>= fun email ->
-      Ok (`Email email)
+  let of_string_with_arguments ?default_domain ~allowed_extensions str =
+    Or_error.try_with (fun () -> Mail_from_lexer.parse_mail_from (Lexing.from_string str))
+    >>= fun mail_from  ->
+    Argument.list_of_string ~allowed_extensions mail_from.suffix
+    >>= fun all_args ->
+    match mail_from.sender with
+    | `Null -> Ok (`Null, all_args)
+    | `Email email ->
+      let domain = Option.first_some email.domain default_domain in
+      let email_address =
+        Email_address.create ?prefix:mail_from.prefix ?domain email.local_part
+      in
+      Ok (`Email email_address, all_args)
+
+  let of_string ?default_domain str =
+    of_string_with_arguments ?default_domain ~allowed_extensions:[] str
+    >>| function
+    | email,[] -> email
+    | _,(_::_) -> failwithf "impossible, unexpected extension arguments" ()
 
   let to_string = function
     | `Null -> "<>"
     | `Email email -> Email_address.to_string email
 
+  let to_string_with_arguments (sender,args) =
+    to_string sender :: List.map args ~f:Argument.to_string
+    |> String.concat ~sep:" "
+
   let map t ~f =
     match t with
-    | `Null -> `Null
+    | `Null -> t
     | `Email email -> `Email (f email)
 
   module T = struct
@@ -37,6 +129,12 @@ module Sender = struct
 
     let to_string = to_string
     let of_string s = of_string s |> Or_error.ok_exn
+
+    let compare a b = match a,b with
+      | `Null, `Null -> 0
+      | `Email a, `Email b -> Email_address.compare a b
+      | `Null, `Email _ -> -1
+      | `Email _, `Null -> 1
 
     let hash = function
       | `Null -> Hashtbl.hash `Null
@@ -64,6 +162,99 @@ module Sender = struct
   end
 end
 
+  (* Test mail_from_lexer.mll *)
+let%test_module _ = (module struct
+                      let test_lexing str = Mail_from_lexer.parse_mail_from (Lexing.from_string str)
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "todd@lubin.us")
+                          ~expect: { prefix = None
+                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                                   ; suffix = "" }
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "todd@lubin.us suffix")
+                          ~expect: { prefix = None
+                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                                   ; suffix = " suffix" }
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "<todd@lubin.us> suffix")
+                          ~expect: { prefix = Some ""
+                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                                   ; suffix = " suffix" }
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "Todd Lubin <todd@lubin.us> suffix")
+                          ~expect: { prefix = Some "Todd Lubin "
+                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                                   ; suffix = " suffix" }
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "<>")
+                          ~expect: { prefix = Some ""
+                                   ; sender = `Null
+                                   ; suffix = "" }
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "prefix <>")
+                          ~expect: { prefix = Some "prefix "
+                                   ; sender = `Null
+                                   ; suffix = "" }
+
+                      let%test_unit _ =
+                        [%test_result: Mail_from_lexer_types.email_with_suffix]
+                          (test_lexing "\"Mailer Daemon\" <> AUTH=<>")
+                          ~expect: { prefix = Some "\"Mailer Daemon\" "
+                                   ; sender = `Null
+                                   ; suffix = " AUTH=<>" }
+                    end)
+
+    (* Test parsing of commands to server *)
+let%test_module _ = (module struct
+                      let check str extn =
+                        let e = Argument.of_string str |> Or_error.ok_exn in
+                        Polymorphic_compare.equal e extn
+
+                      let%test _ = check "AUTH=<>" (Argument.Auth None)
+                      let%test _ = check "AUTH=<hello@world>" (Argument.Auth (Some (Email_address.of_string_exn "<hello@world>")))
+                    end)
+
+    (* Test to_string and of_string functions for symmetry *)
+let%test_module _ = (module struct
+                      let check extn =
+                        let e = Argument.of_string (Argument.to_string extn) |> Or_error.ok_exn in
+                        Polymorphic_compare.equal extn e
+
+                      let%test _ = check (Argument.Auth None)
+                      let%test _ = check (Argument.Auth (Some (Email_address.of_string_exn "<hello@world>")))
+                    end)
+
+let%test_module _ = (module struct
+                      let check ~should_fail allowed_extensions str =
+                        match Sender.of_string_with_arguments ~allowed_extensions str with
+                        | Ok mail_from ->
+                          not should_fail &&
+                          String.equal str (Sender.to_string_with_arguments mail_from)
+                        | Error _ -> should_fail
+
+                      let%test _ = check ~should_fail:false [] "todd@lubin.us"
+                      let%test _ = check ~should_fail:false [] "<>"
+                      let%test _ = check ~should_fail:true [] "<> <>"
+                      let%test _ = check ~should_fail:false [Auth_login] "<> AUTH=<>"
+                      let%test _ = check ~should_fail:false [Auth_login] "todd lubin <todd@lubin.us> AUTH=<>"
+                      let%test _ = check ~should_fail:false [Auth_login] "<todd@lubin.us> AUTH=foobar"
+                      let%test _ = check ~should_fail:false [] "<todd@lubin.us>"
+                      let%test _ = check ~should_fail:true [] "<todd@lubin.us> AUTH=foobar"
+                      let%test _ = check ~should_fail:true [Auth_login] "<todd@lubin.us> FOOBAR=foobar"
+                    end)
+
 module Envelope = struct
   module Id = struct
     include String
@@ -89,8 +280,8 @@ module Envelope = struct
       let next_unique_id_time = Time.add time (Time.Span.of_sec 0.0005) in
       let diff = Time.diff next_unique_id_time (Time.now ()) in
       (if Time.Span.(>) diff (Time.Span.of_int_sec 0)
-      then Time.pause diff
-      else ());
+       then Time.pause diff
+       else ());
       t
     ;;
   end
@@ -98,6 +289,7 @@ module Envelope = struct
   module T = struct
     type t =
       { sender     : Sender.t
+      ; sender_args       : Argument.t sexp_list
       ; recipients : Email_address.t list
       ; rejected_recipients : Email_address.t list
       ; id         : Id.t
@@ -110,7 +302,7 @@ module Envelope = struct
       let t2 = { t2 with id = "" } in
       compare t1 t2
 
-    let hash { sender; recipients; rejected_recipients; id = _; email } =
+    let hash { sender; sender_args; recipients; rejected_recipients; id = _; email } =
       let recipient_hash1 =
         List.map recipients ~f:Email_address.hash
         |> List.map ~f:Int.to_string
@@ -125,6 +317,7 @@ module Envelope = struct
       in
       let x =
         Sender.hash sender,
+        sender_args,
         recipient_hash1,
         recipient_hash2,
         Email.hash email
@@ -140,40 +333,41 @@ module Envelope = struct
   let string_recipients t = recipients t |> List.map ~f:Email_address.to_string
 
   let set
-        { sender; id; email; recipients; rejected_recipients }
-        ?(sender = sender)
-        ?(recipients = recipients)
-        ?(rejected_recipients=rejected_recipients)
-        ?(email = email)
-        () =
-    { sender; id; email; recipients; rejected_recipients }
+      { sender; sender_args; id; email; recipients; rejected_recipients }
+      ?(sender = sender)
+      ?(sender_args = sender_args)
+      ?(recipients = recipients)
+      ?(rejected_recipients=rejected_recipients)
+      ?(email = email)
+      () =
+    { sender; sender_args; id; email; recipients; rejected_recipients }
 
-  let create ?id ~sender ~recipients ?(rejected_recipients=[]) ~email () =
-    let id =
-      let default = Id.create () in
-      Option.value ~default id
+  let create ?id ~sender ?(sender_args=[]) ~recipients ?(rejected_recipients=[]) ~email () =
+    let id = match id with
+      | Some id -> id
+      | None -> Id.create ()
     in
-    Fields.create ~sender ~recipients ~rejected_recipients ~email ~id
+    Fields.create ~sender ~sender_args ~recipients ~rejected_recipients ~email ~id
   ;;
 
   let of_email email =
     let open Or_error.Monad_infix in
     let headers = Email.headers email in
     begin match Headers.find_all headers "From" with
-    | [sender] -> Sender.of_string sender
-    | _ ->
-      Or_error.error "Email contains no sender or multiple senders."
-        email Email.sexp_of_t
+      | [sender] -> Sender.of_string sender
+      | _ ->
+        Or_error.error "Email contains no sender or multiple senders."
+          email Email.sexp_of_t
     end
     >>= fun sender ->
     Or_error.try_with (fun () ->
-      (Headers.find_all headers "To"
-       @ Headers.find_all headers "CC"
-       @ Headers.find_all headers "Bcc")
-      |> List.map ~f:(String.filter ~f:(function
-        | '\n' | '\r' -> false
-        | _ -> true))
-      |> List.concat_map ~f:Email_address.list_of_string_exn)
+        (Headers.find_all headers "To"
+         @ Headers.find_all headers "CC"
+         @ Headers.find_all headers "Bcc")
+        |> List.map ~f:(String.filter ~f:(function
+            | '\n' | '\r' -> false
+            | _ -> true))
+        |> List.concat_map ~f:Email_address.list_of_string_exn)
     >>= fun recipients ->
     Ok (create ~sender ~recipients ~rejected_recipients:[] ~email ())
 
@@ -190,7 +384,7 @@ module Envelope = struct
 
   let modify_headers t ~f =
     modify_email t ~f:(fun email ->
-      Email.modify_headers email ~f)
+        Email.modify_headers email ~f)
 
   let add_header ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
@@ -198,7 +392,7 @@ module Envelope = struct
 
   let add_headers ?whitespace t ts =
     modify_headers t ~f:(fun headers ->
-      Headers.add_all ?whitespace headers ts)
+        Headers.add_all ?whitespace headers ts)
 
   let set_header ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
@@ -206,11 +400,11 @@ module Envelope = struct
 
   let add_header_at_bottom ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Headers.add_at_bottom ?whitespace headers ~name ~value)
+        Headers.add_at_bottom ?whitespace headers ~name ~value)
 
   let add_headers_at_bottom ?whitespace t ts =
     modify_headers t ~f:(fun headers ->
-      Headers.add_all_at_bottom ?whitespace headers ts)
+        Headers.add_all_at_bottom ?whitespace headers ts)
 
   let set_header_at_bottom ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
@@ -262,14 +456,15 @@ module Envelope_with_next_hop = struct
 
   let act_on_envelope f t = f (envelope t)
   let sender            = act_on_envelope Envelope.sender
+  let sender_args       = act_on_envelope Envelope.sender_args
   let string_sender     = act_on_envelope Envelope.string_sender
   let recipients        = act_on_envelope Envelope.recipients
   let string_recipients = act_on_envelope Envelope.string_recipients
   let email             = act_on_envelope Envelope.email
   let id                = act_on_envelope Envelope.id
 
-  let set t ?sender ?recipients () =
-    let envelope = Envelope.set t.envelope ?sender ?recipients () in
+  let set t ?sender ?sender_args ?recipients () =
+    let envelope = Envelope.set t.envelope ?sender ?sender_args ?recipients () in
     { t with envelope }
 end
 
@@ -279,10 +474,12 @@ module Session = struct
     ; local : Address.t
     ; helo : string option
     ; tls : Ssl.Connection.t option
+    ; authenticated : string option
+    ; advertised_extensions : Smtp_extension.t list
     } [@@deriving sexp_of, fields]
 
-  let create ~remote ~local ?helo ?tls () =
-    { remote; local; helo; tls; }
+  let create ~remote ~local ?helo ?tls ?authenticated ?(advertised_extensions=[]) () =
+    { remote; local; helo; tls; authenticated; advertised_extensions; }
 
   let cleanup t =
     match t.tls with
@@ -298,6 +495,7 @@ module Command = struct
     | Extended_hello of string
     | Sender of string
     | Recipient of string
+    | Auth_login of string option
     | Data
     | Reset
     | Quit
@@ -315,6 +513,9 @@ module Command = struct
       Sender (String.drop_prefix str 10 |> String.lstrip)
     | str when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
       Recipient (String.drop_prefix str 8 |> String.lstrip)
+    | str when String.Caseless.is_prefix str ~prefix:"AUTH LOGIN " ->
+      Auth_login (Some (String.drop_prefix str 11 |> String.lstrip))
+    | str when String.Caseless.equal str "AUTH LOGIN" -> Auth_login None
     | str when String.Caseless.equal str "DATA"     -> Data
     | str when String.Caseless.equal str "RESET"    -> Reset
     | str when String.Caseless.equal str "QUIT"     -> Quit
@@ -328,6 +529,8 @@ module Command = struct
     | Extended_hello string -> "EHLO " ^ string
     | Sender string -> "MAIL FROM: " ^ string
     | Recipient string -> "RCPT TO: " ^ string
+    | Auth_login arg ->
+      "AUTH LOGIN" ^ (Option.value_map arg ~default:"" ~f:(fun arg -> " " ^ arg))
     | Data -> "DATA"
     | Reset -> "RESET"
     | Quit -> "QUIT"
@@ -335,7 +538,7 @@ module Command = struct
     | Noop -> "NOOP"
     | Start_tls -> "STARTTLS"
 
-  (* Test parsing of commands to server *)
+                     (* Test parsing of commands to server *)
   let%test_unit _ =
     let check a b = [%test_eq:t] (of_string a) b in
     Variants.iter
@@ -358,6 +561,10 @@ module Command = struct
       ~recipient:(fun _ ->
           check "RCPT TO:hi" (Recipient "hi");
           check "rcpt to:hi" (Recipient "hi")
+        )
+      ~auth_login:(fun _ ->
+          check "AUTH LOGIN" (Auth_login None);
+          check "AUTH LOGIN foobar" (Auth_login (Some "foobar"))
         )
       ~data:(fun _ ->
           check "DATA" Data;
@@ -398,6 +605,10 @@ module Command = struct
         )
       ~recipient:(fun _ ->
           check (Recipient "Helo World!~")
+        )
+      ~auth_login:(fun _ ->
+          check (Auth_login None);
+          check (Auth_login (Some "foobar"))
         )
       ~data:(fun _ ->
           check Data
@@ -442,6 +653,10 @@ module Command = struct
           check_round "RCPT TO: Helo World!~" (Recipient "Helo World!~");
           check_of_str (Recipient "Bye World!~") "RCPT TO:Bye World!~";
           check_of_str (Recipient "Bye World!~") "rcpt to:Bye World!~")
+      ~auth_login:(fun _ ->
+          check_round "AUTH LOGIN foobar" (Auth_login (Some "foobar"));
+          check_round "AUTH LOGIN" (Auth_login None)
+        )
       ~data:(fun _ ->
           check_round "DATA" Data;
           check_of_str Data "data"
@@ -471,7 +686,9 @@ module Reply = struct
     type 'a t_ =
       [ `Service_ready_220
       | `Closing_connection_221
+      | `Authentication_successful_235
       | `Ok_completed_250
+      | `Start_authentication_input_334
       | `Start_mail_input_354
       | `Service_unavailable_421
       | `Local_error_451
@@ -483,6 +700,8 @@ module Reply = struct
       | `Command_not_implemented_502
       | `Bad_sequence_of_commands_503
       | `Parameter_not_implemented_504
+      | `Authentication_required_530
+      | `Authentication_credentials_invalid_535
       | `Mailbox_unavailable_550
       | `Exceeded_storage_allocation_552
       | `Transaction_failed_554
@@ -495,7 +714,9 @@ module Reply = struct
     let of_int = function
       | 220 -> `Service_ready_220
       | 221 -> `Closing_connection_221
+      | 235 -> `Authentication_successful_235
       | 250 -> `Ok_completed_250
+      | 334 -> `Start_authentication_input_334
       | 354 -> `Start_mail_input_354
       | 421 -> `Service_unavailable_421
       | 451 -> `Local_error_451
@@ -507,6 +728,8 @@ module Reply = struct
       | 502 -> `Command_not_implemented_502
       | 503 -> `Bad_sequence_of_commands_503
       | 504 -> `Parameter_not_implemented_504
+      | 530 -> `Authentication_required_530
+      | 535 -> `Authentication_credentials_invalid_535
       | 550 -> `Mailbox_unavailable_550
       | 552 -> `Exceeded_storage_allocation_552
       | 554 -> `Transaction_failed_554
@@ -516,7 +739,9 @@ module Reply = struct
     let to_int = function
       | `Service_ready_220 -> 220
       | `Closing_connection_221 -> 221
+      | `Authentication_successful_235 -> 235
       | `Ok_completed_250 -> 250
+      | `Start_authentication_input_334 -> 334
       | `Start_mail_input_354 -> 354
       | `Service_unavailable_421 -> 421
       | `Local_error_451 -> 451
@@ -528,6 +753,8 @@ module Reply = struct
       | `Command_not_implemented_502 -> 502
       | `Bad_sequence_of_commands_503 -> 503
       | `Parameter_not_implemented_504 -> 504
+      | `Authentication_required_530 -> 530
+      | `Authentication_credentials_invalid_535 -> 535
       | `Mailbox_unavailable_550 -> 550
       | `Exceeded_storage_allocation_552 -> 552
       | `Transaction_failed_554 -> 554
@@ -578,8 +805,14 @@ module Reply = struct
   let closing_connection_221 =
     create `Closing_connection_221 "%s closing connection" my_name
 
+  let authentication_successful_235 =
+    create `Authentication_successful_235 "Authentication successful"
+
   let ok_completed_250 msg =
     create `Ok_completed_250 "Ok: %s" msg
+
+  let start_authentication_input_334 msg =
+    create `Start_authentication_input_334 "%s" msg
 
   let start_mail_input_354 =
     create `Start_mail_input_354 "Enter message, ending with \".\" on a line by iteself"
@@ -607,6 +840,12 @@ module Reply = struct
 
   let bad_sequence_of_commands_503 command =
     create `Bad_sequence_of_commands_503 !"Bad sequence of commands: %{Command}" command
+
+  let authentication_required_530 =
+    create `Authentication_required_530 "Authentication required."
+
+  let authentication_credentials_invalid_535 =
+    create `Authentication_credentials_invalid_535 "Authentication credentials invalid"
 
   let mailbox_unavailable_550 reason =
     create `Mailbox_unavailable_550 "Mailbox unavailable: %s" reason
@@ -728,21 +967,12 @@ module Reply = struct
     end)
 end
 
-module Extension = struct
+module Credentials = struct
   type t =
-    | Start_tls
-    | Other of string
-    [@@deriving sexp]
+    { username : string
+    ; password : string;
+    }
+    [@@deriving sexp, fields]
 
-  let of_string str =
-    let t =
-      match String.uppercase str with
-      | "STARTTLS" -> Start_tls
-      | _ -> Other str
-    in
-    t
-
-  let to_string = function
-    | Start_tls -> "STARTTLS"
-    | Other str -> str
+  let create = Fields.create
 end

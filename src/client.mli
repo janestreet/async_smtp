@@ -25,9 +25,9 @@ module Peer_info : sig
   type t
 
   val greeting : t -> string option
-  val hello    : t -> [ `Simple of string | `Extended of string * Extension.t list ] option
+  val hello    : t -> [ `Simple of string | `Extended of string * Smtp_extension.t list ] option
 
-  val supports_extension : t -> Extension.t -> bool
+  val supports_extension : t -> Smtp_extension.t -> bool
 end
 
 type t = Client_raw.t
@@ -67,6 +67,7 @@ val send_envelope
 module Tcp : sig
   val with_
     : (?config:Client_config.t
+       -> ?credentials:Credentials.t option
        -> log:Mail_log.t
        -> ?flows:Mail_log.Flows.t
        -> ?component:Mail_log.Component.t

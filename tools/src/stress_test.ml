@@ -162,7 +162,8 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~message_from_stdin () =
         Email.Simple.create ~from:(Email_address.local_address ()) ~subject:"Stress test" ~to_:recipients
           (Email.Simple.Content.text "Stress Test")
       in
-      return (Smtp_envelope.create ~sender:`Null  ~recipients ~email ())
+      let sender = `Null in
+      return (Smtp_envelope.create ~sender ~recipients ~email ())
     end
   end
   >>= fun envelope ->

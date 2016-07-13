@@ -5,6 +5,30 @@ open Email_message.Std
 
 module Email_address = Email_address
 
+module Smtp_extension : sig
+  type t =
+    | Start_tls
+    | Auth_login
+    | Mime_8bit_transport
+    | Other of string
+  [@@deriving sexp]
+
+  val of_string : string -> t
+  val to_string : t -> string
+end
+
+(* These arguments become optional parameters to the "MAIL FROM" smtp command depending on
+   certain advertised smtp extensions. *)
+module Argument : sig
+  type t =
+    | Auth of Email_address.t option
+    | Body of [`Mime_8bit|`Mime_7bit]
+    [@@deriving bin_io, sexp, compare]
+
+  val of_string : string -> t Or_error.t
+  val to_string : t -> string
+end
+
 (*
    From 3.7 Relaying:
 
@@ -20,10 +44,23 @@ module Sender : sig
   type t =
     [ `Null
     | `Email of Email_address.t
-    ] [@@deriving sexp, compare]
+    ]
+    [@@deriving bin_io, sexp, compare]
 
-  val of_string : ?default_domain:string -> string -> t Or_error.t
+  val of_string
+    :  ?default_domain:string
+    -> string
+    -> t Or_error.t
+
+ val of_string_with_arguments
+    :  ?default_domain:string
+    -> allowed_extensions : Smtp_extension.t list  (* default: [] *)
+    -> string
+    -> (t * Argument.t list) Or_error.t
+
   val to_string : t -> string
+
+  val to_string_with_arguments : t * Argument.t list -> string
 
   val map : t -> f:(Email_address.t -> Email_address.t) -> t
 
@@ -59,6 +96,7 @@ module Envelope : sig
   val create :
     ?id:Id.t
     -> sender:Sender.t
+    -> ?sender_args:Argument.t list
     -> recipients:Email_address.t list
     -> ?rejected_recipients:Email_address.t list
     -> email:Email.t
@@ -68,6 +106,7 @@ module Envelope : sig
   val set
     :  t
     -> ?sender:Sender.t
+    -> ?sender_args:Argument.t list
     -> ?recipients:Email_address.t list
     -> ?rejected_recipients:Email_address.t list
     -> ?email:Email.t
@@ -77,13 +116,14 @@ module Envelope : sig
   (* Extracts sender and recipients from the headers. *)
   val of_email : Email.t -> t Or_error.t
 
-  val sender            : t -> Sender.t
-  val string_sender     : t -> string
-  val recipients        : t -> Email_address.t list
+  val sender              : t -> Sender.t
+  val sender_args         : t -> Argument.t list
+  val string_sender       : t -> string
+  val recipients          : t -> Email_address.t list
   val rejected_recipients : t -> Email_address.t list
-  val string_recipients : t -> string list
-  val email             : t -> Email.t
-  val id                : t -> Id.t
+  val string_recipients   : t -> string list
+  val email               : t -> Email.t
+  val id                  : t -> Id.t
 
   val last_header : ?whitespace:Email_headers.Whitespace.t -> t -> Email_headers.Name.t -> Email_headers.Value.t option
   val find_all_headers : ?whitespace:Email_headers.Whitespace.t -> t -> Email_headers.Name.t -> Email_headers.Value.t list
@@ -133,6 +173,7 @@ module Envelope_with_next_hop : sig
   (* Accessors for the message at [t.message]. *)
   val sender            : t -> Sender.t
   val string_sender     : t -> string
+  val sender_args       : t -> Argument.t list
   val recipients        : t -> Email_address.t list
   val string_recipients : t -> string list
   val email             : t -> Email.t
@@ -141,18 +182,20 @@ module Envelope_with_next_hop : sig
   val set
     :  t
     -> ?sender:Sender.t
+    -> ?sender_args:Argument.t list
     -> ?recipients:Email_address.t list
     -> unit
     -> t
 end
 
-
 module Session : sig
-  type t =
-    { remote : Address.t
-    ; local : Address.t
-    ; helo : string option
-    ; tls : Ssl.Connection.t option
+type t =
+    { remote                    : Address.t
+    ; local                     : Address.t
+    ; helo                      : string option
+    ; tls                       : Ssl.Connection.t option
+    ; authenticated             : string option
+    ; advertised_extensions     : Smtp_extension.t list
     } [@@deriving sexp_of, fields]
 
   val create
@@ -160,6 +203,8 @@ module Session : sig
     -> local : Address.t
     -> ?helo : string
     -> ?tls : Ssl.Connection.t
+    -> ?authenticated : string
+    -> ?advertised_extensions : Smtp_extension.t list
     -> unit
     -> t
 
@@ -172,6 +217,7 @@ module Command : sig
     | Extended_hello of string
     | Sender of string
     | Recipient of string
+    | Auth_login of string option
     | Data
     | Reset
     | Quit
@@ -188,7 +234,9 @@ module Reply : sig
     { code :
         [ `Service_ready_220
         | `Closing_connection_221
+        | `Authentication_successful_235
         | `Ok_completed_250
+        | `Start_authentication_input_334
         | `Start_mail_input_354
         | `Service_unavailable_421
         | `Local_error_451
@@ -200,6 +248,8 @@ module Reply : sig
         | `Command_not_implemented_502
         | `Bad_sequence_of_commands_503
         | `Parameter_not_implemented_504
+        | `Authentication_required_530
+        | `Authentication_credentials_invalid_535
         | `Mailbox_unavailable_550
         | `Exceeded_storage_allocation_552
         | `Transaction_failed_554
@@ -213,7 +263,9 @@ module Reply : sig
 
   val service_ready_220 : string -> t
   val closing_connection_221 : t
+  val authentication_successful_235 : t
   val ok_completed_250 : string -> t
+  val start_authentication_input_334 : string -> t
   val start_mail_input_354 : t
   val service_unavailable_421 : t
   val local_error_451 : string -> t
@@ -223,6 +275,8 @@ module Reply : sig
   val syntax_error_501 : string -> t
   val command_not_implemented_502 : Command.t -> t
   val bad_sequence_of_commands_503 : Command.t -> t
+  val authentication_required_530 : t
+  val authentication_credentials_invalid_535 : t
   val mailbox_unavailable_550 : string -> t
   val exceeded_storage_allocation_552 : t
   val transaction_failed_554 : string -> t
@@ -240,12 +294,15 @@ module Reply : sig
   val parse : ?partial:partial -> string -> [`Done of t | `Partial of partial]
 end
 
-module Extension : sig
+module Credentials : sig
   type t =
-    | Start_tls
-    | Other of string
+    { username : string
+    ; password : string
+    }
   [@@deriving sexp]
 
-  val of_string : string -> t
-  val to_string : t -> string
+  val create : username:string -> password:string -> t
+
+  val username : t -> string
+  val password : t -> string
 end

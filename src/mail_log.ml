@@ -144,13 +144,13 @@ end
 module Message = struct
   module Action = (String : Identifiable.S with type t = string)
   module Sender = struct
-    type t = [ Sender.t | `String of string ]
+    type t = [ `Sender of Sender.t | `String of string ]
     let to_string : t -> string = function
       | `String str -> str
-      | (#Sender.t as sender) -> Sender.to_string sender
+      | `Sender sender -> Sender.to_string sender
     let of_string str : t =
       match Sender.of_string str with
-      | Ok sender -> (sender :> t)
+      | Ok sender -> `Sender sender
       | Error _ -> `String str
   end
 
@@ -244,7 +244,7 @@ module Message = struct
     let sender = match sender with
       | Some _ -> sender
       | None -> match email with
-        | Some (`Envelope envelope) -> Some (Envelope.sender envelope :> Sender.t)
+        | Some (`Envelope envelope) -> Some (`Sender (Envelope.sender envelope))
         | _ -> None
     in
     let tags = match sender with

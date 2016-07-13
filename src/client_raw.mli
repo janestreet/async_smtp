@@ -7,8 +7,8 @@ module Peer_info : sig
   type t
 
   val greeting : t -> string option
-  val hello    : t -> [`Simple of string | `Extended of string * Extension.t list] option
-  val supports_extension : t -> Extension.t -> bool
+  val hello    : t -> [`Simple of string | `Extended of string * Smtp_extension.t list] option
+  val supports_extension : t -> Smtp_extension.t -> bool
   val dest : t -> Address.t
 end
 
@@ -33,11 +33,13 @@ val config : t -> Client_config.t
 val info : t -> Peer_info.t option
 
 val is_using_tls : t -> bool
+val is_using_auth_login : t -> bool
 
 val with_session
   :  t
   -> log:Mail_log.t
   -> component:Mail_log.Component.t
+  -> credentials:Credentials.t option
   -> f:(t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.Or_error.t
 
@@ -75,6 +77,26 @@ val send_receive
   -> component:Mail_log.Component.t
   -> here:Lexing.position
   -> Command.t
+  -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
+
+val send_string
+  :  t
+  -> log:Mail_log.t
+  -> ?flows:Mail_log.Flows.t
+  -> component:Mail_log.Component.t
+  -> here:Lexing.position
+  -> string
+  -> unit Deferred.Or_error.t
+
+val send_receive_string
+  :  ?on_eof:(?partial:Reply.partial -> unit -> Reply.t Deferred.Or_error.t)
+  -> ?timeout:Time.Span.t
+  -> t
+  -> log:Mail_log.t
+  -> ?flows:Mail_log.Flows.t
+  -> component:Mail_log.Component.t
+  -> here:Lexing.position
+  -> string
   -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
 
 (* Low level access *)

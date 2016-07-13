@@ -11,7 +11,7 @@ module Peer_info = struct
   type t =
     { dest : Address.t
     ; greeting : string Set_once.t
-    ; hello : [`Simple of string | `Extended of string * (Extension.t list) ] Set_once.t
+    ; hello : [`Simple of string | `Extended of string * (Smtp_extension.t list) ] Set_once.t
     } [@@deriving sexp, fields]
 
   let create ~dest () =
@@ -154,6 +154,9 @@ let tls t =
 let is_using_tls t =
   Option.is_some (tls t)
 
+let is_using_auth_login t =
+  supports_extension t Smtp_extension.Auth_login
+
 let read_reply ?on_eof reader =
   let rec loop partial =
     Reader.read_line reader
@@ -198,24 +201,37 @@ let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
 
 
 (* entry point *)
-let send t ~log ?flows ~component ~here cmd =
+let send_gen ?command t ~log ?flows ~component ~here str =
   let flows = match flows with
     | None -> t.flows
     | Some flows -> Log.Flows.union t.flows flows
   in
   Deferred.Or_error.try_with (fun () ->
-      Log.debug log (lazy (Log.Message.create
-                             ~here
-                             ~flows
-                             ~component
-                             ~command:cmd
-                             "->"));
-      Writer.write_line (writer t) (Command.to_string cmd);
-      Writer.flushed (writer t))
+    Log.debug log (lazy (Log.Message.create
+                           ~here
+                           ~flows
+                           ~component
+                           ?command
+                           "->"));
+    Writer.write_line (writer t) str;
+    Writer.flushed (writer t))
+
+let send_string t ~log ?flows ~component ~here str =
+  send_gen t ~log ?flows ~component ~here str
+
+let send t ~log ?flows ~component ~here cmd =
+  send_gen t ~command:cmd ~log ?flows ~component ~here (Command.to_string cmd)
 
 (* entry point *)
 let send_receive ?on_eof ?timeout t ~log ?flows ~component ~here cmd =
   send t ~log ?flows ~component ~here cmd
+  >>=? fun () ->
+  receive ?on_eof ?timeout t ~log ?flows ~component ~here
+
+
+(* entry point *)
+let send_receive_string ?on_eof ?timeout t ~log ?flows ~component ~here raw_string =
+  send_string t ~log ?flows ~component ~here raw_string
   >>=? fun () ->
   receive ?on_eof ?timeout t ~log ?flows ~component ~here
 
@@ -304,7 +320,7 @@ let do_ehlo ~log ~component t =
   | `Received { Reply.code =`Ok_completed_250; raw_message } ->
       begin match raw_message with
       | ehlo_greeting :: extensions ->
-        let extensions = List.map ~f:Extension.of_string extensions in
+        let extensions = List.map ~f:Smtp_extension.of_string extensions in
         Peer_info.set_hello (info_exn t) (`Extended (ehlo_greeting, extensions))
         |> return
       | [] -> failwith "IMPOSSIBLE: EHLO greeting expected, got empty response"
@@ -425,7 +441,7 @@ let should_try_tls t : Config.Tls.t option =
         match Config.Tls.mode tls with
         | `Always_try | `Required -> Some tls
         | `If_available ->
-          if supports_extension t Extension.Start_tls then Some tls else None
+          if supports_extension t Smtp_extension.Start_tls then Some tls else None
 
 (* Will fail if negotiated security level is lower than that required by the
    config. *)
@@ -445,10 +461,48 @@ let maybe_start_tls t ~log ~component =
                                ); _ } ->
       return (Ok ())
     | `Received reply ->
-      return (Or_error.errorf !"Unexpected respose to STARTTLS: %{Reply}" reply)
+      return (Or_error.errorf !"Unexpected response to STARTTLS: %{Reply}" reply)
   end
   >>=? fun () ->
   return (check_tls_security t)
+
+let do_auth_login t ~log ~component ~username ~password =
+  let username = Base64.encode username in
+  let password = Base64.encode password in
+  send_receive_string t ~log ~component ~here:[%here] username
+  >>=? function
+  | `Bsmtp | `Received { Reply.code=`Start_authentication_input_334; _ } -> begin
+    send_receive_string t ~log ~component ~here:[%here] password
+    >>=? function
+    | `Bsmtp | `Received { Reply.code=`Authentication_successful_235; _ } -> return (Ok ())
+    | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
+    end
+  | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
+
+let maybe_auth_login t ~log ~component ~credentials =
+  match is_using_auth_login t with
+  | false -> return (Ok ())
+  | true ->
+    match credentials with
+    | None ->
+      return (Ok ())
+    | Some credentials ->
+      send_receive t ~log ~component ~here:[%here] (Command.Auth_login None)
+      >>=? function
+      | `Bsmtp -> return (Ok ())
+      | `Received reply ->
+        match reply with
+        | { Reply.code=`Start_authentication_input_334; _ } ->
+          let username = Credentials.username credentials in
+          let password = Credentials.password credentials in
+          do_auth_login t ~log ~component ~username ~password
+        | { Reply.code=
+              ( `Command_not_recognized_500
+              | `Command_not_implemented_502
+              | `Parameter_not_implemented_504 ); _ } ->
+          return (Ok ())
+        | reply ->
+          return (Or_error.errorf !"Unexpected response to AUTH LOGIN: %{Reply}" reply)
 
 let with_quit t ~log ~component ~f =
   let component = component @ ["quit"] in
@@ -462,7 +516,7 @@ let with_quit t ~log ~component ~f =
   Monitor.protect f ~finally:(fun () -> quit_and_cleanup_with_log t)
 
 (* Entry point *)
-let with_session t ~log ~component ~f =
+let with_session t ~log ~component ~credentials ~f =
   let component = component @ [ "session" ] in
   Log.debug log (lazy (Log.Message.info ~component ~here:[%here]  ~flows:t.flows
                         ?remote_address:(remote_address t) ()));
@@ -474,5 +528,7 @@ let with_session t ~log ~component ~f =
     do_ehlo t ~log ~component:(component @ ["helo"])
     >>=? fun () ->
     maybe_start_tls t ~log ~component:(component @ ["starttls"])
+    >>=? fun () ->
+    maybe_auth_login t ~log ~component:(component @ ["auth_login"]) ~credentials
     >>=? fun () ->
     f t)

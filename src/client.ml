@@ -121,7 +121,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                             ~session_marker:`Sending
                             "sending"));
       send_receive t ~log ~flows ~component:(component @ ["sender"]) ~here:[%here]
-        (Command.Sender (Envelope.sender envelope |> Sender.to_string))
+        (Command.Sender (Sender.to_string_with_arguments (Envelope.sender envelope, Envelope.sender_args envelope)))
       >>=? begin function
         | `Bsmtp -> return (Ok (Ok ()))
         | `Received { Reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
@@ -257,6 +257,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
 module Tcp = struct
   let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout
       ?(config = Config.default)
+      ?(credentials = None)
       ~log
       ?(flows=Log.Flows.none)
       ?(component=[])
@@ -284,7 +285,7 @@ module Tcp = struct
                  "connection established"));
       create ~dest ~flows reader writer config
       (* Flow already attatched to the session *)
-      |> with_session ~log ~component ~f
+      |> with_session ~log ~component ~credentials ~f
     in
     match dest with
     | `Inet hp ->
