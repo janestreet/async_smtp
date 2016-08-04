@@ -43,14 +43,16 @@ module Flows : sig
   module Id : sig
     type t = private string [@@deriving sexp, bin_io]
     val is : t -> Kind.t -> bool
-    val equal : t -> t -> bool
 
+    include Comparable.S with type t := t
     include Hashable.S with type t := t
   end
   (* Represents a set of opaque flow ids.
      The internal list representation is exposed for use when analysing logs, however
      the order of elements is undefined. *)
   type t = private Id.t list [@@deriving sexp, bin_io]
+
+  val of_list : Id.t list -> t
 
   (* Should be used with care, but appropriate on some global state messages *)
   val none : t

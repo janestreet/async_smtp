@@ -80,16 +80,17 @@ module Flows = struct
         sprintf !"%s#%{Uuid}" (tag kind) (Uuid.create ())
       let is t kind =
         String.is_prefix t ~prefix:(tag kind)
-      let equal = String.equal
-
       let hash = String.hash
       let compare = String.compare
     end
     include T
     include Hashable.Make(T)
+    include Comparable.Make(T)
+    let equal = String.equal
   end
   type t = Id.t list [@@deriving bin_io, sexp]
   let none = []
+  let of_list = Fn.id
   let create kind = [ Id.create kind ]
   let union = (@)
   let extend t kind = Id.create kind :: t
