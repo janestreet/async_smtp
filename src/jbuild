@@ -1,0 +1,13 @@
+(library
+ ((name async_smtp)
+  (public_name async_smtp)
+  (libraries
+   (async
+    async_extended
+    async_ssl
+    core
+    textutils
+    email_message
+    re2))
+  ))
+(ocamllex (mail_from_lexer))

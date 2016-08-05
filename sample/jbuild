@@ -1,0 +1,5 @@
+(executables
+ ((names (run_async_smtp sendmail))
+  (libraries (async 
+              core
+              async_smtp))))

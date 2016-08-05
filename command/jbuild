@@ -1,0 +1,10 @@
+(library
+ ((name async_smtp_command)
+  (public_name async_smtp.command)
+  (libraries (async
+              core
+              textutils
+              email_message
+              re2
+              async_smtp))
+  ))

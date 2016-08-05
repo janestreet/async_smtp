@@ -1,0 +1,12 @@
+(library
+ ((name async_smtp_tools)
+  (public_name async_smtp.tools)
+  (libraries (async
+              core
+              textutils
+              email_message
+              crypto ; for hashing email bodies
+              re2
+              async_smtp
+              async_shell
+              async_smtp_command))))
