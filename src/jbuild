@@ -6,6 +6,7 @@
     async_extended
     async_ssl
     core
+    core_extended
     textutils
     email_message
     re2))

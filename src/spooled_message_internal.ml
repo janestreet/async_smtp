@@ -1,4 +1,5 @@
 open Core.Std
+open Core_extended.Std
 open Async.Std
 open Async_extended.Std
 open Types
@@ -20,7 +21,7 @@ module Id  = struct
     let parent_id = Envelope.id original_msg in
     let t =
       sprintf !"%{Envelope.Id}-%s" parent_id
-        (Base64.encode_float ~length:6 (!counter |> Int.to_float))
+        (Types.urlbase64_encode_float ~length:6 (!counter |> Int.to_float))
     in
     incr counter;
     t

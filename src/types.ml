@@ -1,4 +1,5 @@
 open Core.Std
+open Core_extended.Std
 open Async.Std
 open Async_ssl.Std
 open Email_message.Std
@@ -13,7 +14,7 @@ module Smtp_extension = struct
     | Auth_login
     | Mime_8bit_transport
     | Other of string
-  [@@deriving sexp]
+    [@@deriving sexp]
 
   let of_string str =
     let t =
@@ -73,7 +74,7 @@ module Argument = struct
     >>= fun args ->
     let has_invalid_arg =
       List.exists args ~f:(fun arg ->
-          not (List.mem allowed_extensions (to_smtp_extension arg)))
+        not (List.mem allowed_extensions (to_smtp_extension arg)))
     in
     if has_invalid_arg then
       Or_error.errorf "Unable to parse MAIL FROM arguments: %s" str
@@ -162,98 +163,129 @@ module Sender = struct
   end
 end
 
-  (* Test mail_from_lexer.mll *)
-let%test_module _ = (module struct
-                      let test_lexing str = Mail_from_lexer.parse_mail_from (Lexing.from_string str)
+(* Test mail_from_lexer.mll *)
+let%test_module _ =
+  (module struct
+    let test_lexing str = Mail_from_lexer.parse_mail_from (Lexing.from_string str)
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "todd@lubin.us")
-                          ~expect: { prefix = None
-                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
-                                   ; suffix = "" }
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "todd@lubin.us")
+        ~expect: { prefix = None
+                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; suffix = "" }
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "todd@lubin.us suffix")
-                          ~expect: { prefix = None
-                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
-                                   ; suffix = " suffix" }
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "todd@lubin.us suffix")
+        ~expect: { prefix = None
+                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; suffix = " suffix" }
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "<todd@lubin.us> suffix")
-                          ~expect: { prefix = Some ""
-                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
-                                   ; suffix = " suffix" }
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "<todd@lubin.us> suffix")
+        ~expect: { prefix = Some ""
+                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; suffix = " suffix" }
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "Todd Lubin <todd@lubin.us> suffix")
-                          ~expect: { prefix = Some "Todd Lubin "
-                                   ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
-                                   ; suffix = " suffix" }
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "Todd Lubin <todd@lubin.us> suffix")
+        ~expect: { prefix = Some "Todd Lubin "
+                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; suffix = " suffix" }
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "<>")
-                          ~expect: { prefix = Some ""
-                                   ; sender = `Null
-                                   ; suffix = "" }
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "<>")
+        ~expect: { prefix = Some ""
+                 ; sender = `Null
+                 ; suffix = "" }
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "prefix <>")
-                          ~expect: { prefix = Some "prefix "
-                                   ; sender = `Null
-                                   ; suffix = "" }
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "prefix <>")
+        ~expect: { prefix = Some "prefix "
+                 ; sender = `Null
+                 ; suffix = "" }
 
-                      let%test_unit _ =
-                        [%test_result: Mail_from_lexer_types.email_with_suffix]
-                          (test_lexing "\"Mailer Daemon\" <> AUTH=<>")
-                          ~expect: { prefix = Some "\"Mailer Daemon\" "
-                                   ; sender = `Null
-                                   ; suffix = " AUTH=<>" }
-                    end)
+    let%test_unit _ =
+      [%test_result: Mail_from_lexer_types.email_with_suffix]
+        (test_lexing "\"Mailer Daemon\" <> AUTH=<>")
+        ~expect: { prefix = Some "\"Mailer Daemon\" "
+                 ; sender = `Null
+                 ; suffix = " AUTH=<>" }
+  end)
 
-    (* Test parsing of commands to server *)
-let%test_module _ = (module struct
-                      let check str extn =
-                        let e = Argument.of_string str |> Or_error.ok_exn in
-                        Polymorphic_compare.equal e extn
+(* Test parsing of commands to server *)
+let%test_module _ =
+  (module struct
+    let check str extn =
+      let e = Argument.of_string str |> Or_error.ok_exn in
+      Polymorphic_compare.equal e extn
 
-                      let%test _ = check "AUTH=<>" (Argument.Auth None)
-                      let%test _ = check "AUTH=<hello@world>" (Argument.Auth (Some (Email_address.of_string_exn "<hello@world>")))
-                    end)
+    let%test _ = check "AUTH=<>" (Argument.Auth None)
+    let%test _ = check "AUTH=<hello@world>" (Argument.Auth (Some (Email_address.of_string_exn "<hello@world>")))
+  end)
 
-    (* Test to_string and of_string functions for symmetry *)
-let%test_module _ = (module struct
-                      let check extn =
-                        let e = Argument.of_string (Argument.to_string extn) |> Or_error.ok_exn in
-                        Polymorphic_compare.equal extn e
+(* Test to_string and of_string functions for symmetry *)
+let%test_module _ =
+  (module struct
+    let check extn =
+      let e = Argument.of_string (Argument.to_string extn) |> Or_error.ok_exn in
+      Polymorphic_compare.equal extn e
 
-                      let%test _ = check (Argument.Auth None)
-                      let%test _ = check (Argument.Auth (Some (Email_address.of_string_exn "<hello@world>")))
-                    end)
+    let%test _ = check (Argument.Auth None)
+    let%test _ = check (Argument.Auth (Some (Email_address.of_string_exn "<hello@world>")))
+  end)
 
-let%test_module _ = (module struct
-                      let check ~should_fail allowed_extensions str =
-                        match Sender.of_string_with_arguments ~allowed_extensions str with
-                        | Ok mail_from ->
-                          not should_fail &&
-                          String.equal str (Sender.to_string_with_arguments mail_from)
-                        | Error _ -> should_fail
+let%test_module _ =
+  (module struct
+    let check ~should_fail allowed_extensions str =
+      match Sender.of_string_with_arguments ~allowed_extensions str with
+      | Ok mail_from ->
+        not should_fail &&
+        String.equal str (Sender.to_string_with_arguments mail_from)
+      | Error _ -> should_fail
 
-                      let%test _ = check ~should_fail:false [] "todd@lubin.us"
-                      let%test _ = check ~should_fail:false [] "<>"
-                      let%test _ = check ~should_fail:true [] "<> <>"
-                      let%test _ = check ~should_fail:false [Auth_login] "<> AUTH=<>"
-                      let%test _ = check ~should_fail:false [Auth_login] "todd lubin <todd@lubin.us> AUTH=<>"
-                      let%test _ = check ~should_fail:false [Auth_login] "<todd@lubin.us> AUTH=foobar"
-                      let%test _ = check ~should_fail:false [] "<todd@lubin.us>"
-                      let%test _ = check ~should_fail:true [] "<todd@lubin.us> AUTH=foobar"
-                      let%test _ = check ~should_fail:true [Auth_login] "<todd@lubin.us> FOOBAR=foobar"
-                    end)
+    let%test _ = check ~should_fail:false [] "todd@lubin.us"
+    let%test _ = check ~should_fail:false [] "<>"
+    let%test _ = check ~should_fail:true [] "<> <>"
+    let%test _ = check ~should_fail:false [Auth_login] "<> AUTH=<>"
+    let%test _ = check ~should_fail:false [Auth_login] "todd lubin <todd@lubin.us> AUTH=<>"
+    let%test _ = check ~should_fail:false [Auth_login] "<todd@lubin.us> AUTH=foobar"
+    let%test _ = check ~should_fail:false [] "<todd@lubin.us>"
+    let%test _ = check ~should_fail:true [] "<todd@lubin.us> AUTH=foobar"
+    let%test _ = check ~should_fail:true [Auth_login] "<todd@lubin.us> FOOBAR=foobar"
+  end)
+
+let urlbase64_encode_float ?(length=6) f =
+  match Int64.of_float f with
+  | exception _ -> invalid_arg "cannot encode a float that does not fit in an Int64"
+  | n ->
+    String.init 9 ~f:(fun i ->
+      Int64.shift_right n (64 - 8*(i))
+      |> Int64.bit_and 0xffL
+      |> Int64.to_int_exn
+      |> Char.of_int_exn)
+    |> Base64.Websafe.encode
+    |> String.sub ~pos:(12-length) ~len:length
+;;
+
+let%test_module "urlbase64_encode_float" =
+  (module struct
+    let%expect_test _ =
+      printf "%s" (urlbase64_encode_float 1234.1235453123); [%expect_exact {|AAAATS|}]
+    let%expect_test _ =
+      printf "%s" (urlbase64_encode_float 1234.); [%expect_exact {|AAAATS|}]
+    let%expect_test _ =
+      printf "%s" (urlbase64_encode_float 1235.); [%expect_exact {|AAAATT|}]
+    let%expect_test _ =
+      printf "%s" (urlbase64_encode_float 123456.); [%expect_exact {|AAAeJA|}]
+    let%expect_test _ =
+      printf "%s" (urlbase64_encode_float Int64.(to_float (max_value - 1024L))); [%expect_exact {|____wA|}]
+  end)
 
 module Envelope = struct
   module Id = struct
@@ -270,7 +302,7 @@ module Envelope = struct
         integral, fractional
       in
       let pid = Unix.getpid () |> Pid.hash in
-      let encode = Base64.encode_float in
+      let encode = urlbase64_encode_float in
       let t =
         (encode integral)
         ^- (Int.to_float pid |> encode)
@@ -333,13 +365,13 @@ module Envelope = struct
   let string_recipients t = recipients t |> List.map ~f:Email_address.to_string
 
   let set
-      { sender; sender_args; id; email; recipients; rejected_recipients }
-      ?(sender = sender)
-      ?(sender_args = sender_args)
-      ?(recipients = recipients)
-      ?(rejected_recipients=rejected_recipients)
-      ?(email = email)
-      () =
+        { sender; sender_args; id; email; recipients; rejected_recipients }
+        ?(sender = sender)
+        ?(sender_args = sender_args)
+        ?(recipients = recipients)
+        ?(rejected_recipients=rejected_recipients)
+        ?(email = email)
+        () =
     { sender; sender_args; id; email; recipients; rejected_recipients }
 
   let create ?id ~sender ?(sender_args=[]) ~recipients ?(rejected_recipients=[]) ~email () =
@@ -354,20 +386,20 @@ module Envelope = struct
     let open Or_error.Monad_infix in
     let headers = Email.headers email in
     begin match Headers.find_all headers "From" with
-      | [sender] -> Sender.of_string sender
-      | _ ->
-        Or_error.error "Email contains no sender or multiple senders."
-          email Email.sexp_of_t
+    | [sender] -> Sender.of_string sender
+    | _ ->
+      Or_error.error "Email contains no sender or multiple senders."
+        email Email.sexp_of_t
     end
     >>= fun sender ->
     Or_error.try_with (fun () ->
-        (Headers.find_all headers "To"
-         @ Headers.find_all headers "CC"
-         @ Headers.find_all headers "Bcc")
-        |> List.map ~f:(String.filter ~f:(function
-            | '\n' | '\r' -> false
-            | _ -> true))
-        |> List.concat_map ~f:Email_address.list_of_string_exn)
+      (Headers.find_all headers "To"
+       @ Headers.find_all headers "CC"
+       @ Headers.find_all headers "Bcc")
+      |> List.map ~f:(String.filter ~f:(function
+        | '\n' | '\r' -> false
+        | _ -> true))
+      |> List.concat_map ~f:Email_address.list_of_string_exn)
     >>= fun recipients ->
     Ok (create ~sender ~recipients ~rejected_recipients:[] ~email ())
 
@@ -384,39 +416,39 @@ module Envelope = struct
 
   let modify_headers t ~f =
     modify_email t ~f:(fun email ->
-        Email.modify_headers email ~f)
+      Email.modify_headers email ~f)
 
   let add_header ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-        Headers.add ?whitespace headers ~name ~value)
+      Headers.add ?whitespace headers ~name ~value)
 
   let add_headers ?whitespace t ts =
     modify_headers t ~f:(fun headers ->
-        Headers.add_all ?whitespace headers ts)
+      Headers.add_all ?whitespace headers ts)
 
   let set_header ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-        Headers.set ?whitespace headers ~name ~value)
+      Headers.set ?whitespace headers ~name ~value)
 
   let add_header_at_bottom ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-        Headers.add_at_bottom ?whitespace headers ~name ~value)
+      Headers.add_at_bottom ?whitespace headers ~name ~value)
 
   let add_headers_at_bottom ?whitespace t ts =
     modify_headers t ~f:(fun headers ->
-        Headers.add_all_at_bottom ?whitespace headers ts)
+      Headers.add_all_at_bottom ?whitespace headers ts)
 
   let set_header_at_bottom ?whitespace t ~name ~value =
     modify_headers t ~f:(fun headers ->
-        Headers.set_at_bottom ?whitespace headers ~name ~value)
+      Headers.set_at_bottom ?whitespace headers ~name ~value)
 
   let filter_headers ?whitespace t ~f =
     modify_headers t ~f:(fun headers ->
-        Headers.filter ?whitespace headers ~f)
+      Headers.filter ?whitespace headers ~f)
 
   let map_headers ?whitespace t ~f =
     modify_headers t ~f:(fun headers ->
-        Headers.map ?whitespace headers ~f)
+      Headers.map ?whitespace headers ~f)
 end
 
 module Address = struct
@@ -538,95 +570,95 @@ module Command = struct
     | Noop -> "NOOP"
     | Start_tls -> "STARTTLS"
 
-                     (* Test parsing of commands to server *)
+  (* Test parsing of commands to server *)
   let%test_unit _ =
     let check a b = [%test_eq:t] (of_string a) b in
     Variants.iter
       ~hello:(fun _ ->
-          check "HELO hi" (Hello "hi");
-          check "helo hi" (Hello "hi")
-        )
+        check "HELO hi" (Hello "hi");
+        check "helo hi" (Hello "hi")
+      )
       ~extended_hello:(fun _ ->
-          check "EHLO hi" (Extended_hello "hi");
-          check "ehlo hi" (Extended_hello "hi")
-        )
+        check "EHLO hi" (Extended_hello "hi");
+        check "ehlo hi" (Extended_hello "hi")
+      )
       ~help:(fun _ ->
-          check "HELP" Help;
-          check "help" Help
-        )
+        check "HELP" Help;
+        check "help" Help
+      )
       ~sender:(fun _ ->
-          check "MAIL FROM:hi" (Sender "hi");
-          check "mail from:hi" (Sender "hi")
-        )
+        check "MAIL FROM:hi" (Sender "hi");
+        check "mail from:hi" (Sender "hi")
+      )
       ~recipient:(fun _ ->
-          check "RCPT TO:hi" (Recipient "hi");
-          check "rcpt to:hi" (Recipient "hi")
-        )
+        check "RCPT TO:hi" (Recipient "hi");
+        check "rcpt to:hi" (Recipient "hi")
+      )
       ~auth_login:(fun _ ->
-          check "AUTH LOGIN" (Auth_login None);
-          check "AUTH LOGIN foobar" (Auth_login (Some "foobar"))
-        )
+        check "AUTH LOGIN" (Auth_login None);
+        check "AUTH LOGIN foobar" (Auth_login (Some "foobar"))
+      )
       ~data:(fun _ ->
-          check "DATA" Data;
-          check "data" Data
-        )
+        check "DATA" Data;
+        check "data" Data
+      )
       ~reset:(fun _ ->
-          check "RESET" Reset;
-          check "reset" Reset
-        )
+        check "RESET" Reset;
+        check "reset" Reset
+      )
       ~quit:(fun _ ->
-          check "QUIT" Quit;
-          check "quit" Quit
-        )
+        check "QUIT" Quit;
+        check "quit" Quit
+      )
       ~noop:(fun _ ->
-          check "NOOP" Noop;
-          check "noop" Noop
-        )
+        check "NOOP" Noop;
+        check "noop" Noop
+      )
       ~start_tls:(fun _ ->
-          check "STARTTLS" Start_tls;
-          check "starttls" Start_tls
-        )
+        check "STARTTLS" Start_tls;
+        check "starttls" Start_tls
+      )
 
-      (* Test to_string and of_string functions for symmetry *)
+  (* Test to_string and of_string functions for symmetry *)
   let%test_unit _ =
     let check c = [%test_eq:t] c (of_string (to_string c)) in
     Variants.iter
       ~hello:(fun _ ->
-          check (Hello "Helo World!~")
-        )
+        check (Hello "Helo World!~")
+      )
       ~extended_hello:(fun _ ->
-          check (Extended_hello "Helo World!~")
-        )
+        check (Extended_hello "Helo World!~")
+      )
       ~help:(fun _ ->
-          check Help
-        )
+        check Help
+      )
       ~sender:(fun _ ->
-          check (Sender "Helo World!~")
-        )
+        check (Sender "Helo World!~")
+      )
       ~recipient:(fun _ ->
-          check (Recipient "Helo World!~")
-        )
+        check (Recipient "Helo World!~")
+      )
       ~auth_login:(fun _ ->
-          check (Auth_login None);
-          check (Auth_login (Some "foobar"))
-        )
+        check (Auth_login None);
+        check (Auth_login (Some "foobar"))
+      )
       ~data:(fun _ ->
-          check Data
-        )
+        check Data
+      )
       ~reset:(fun _ ->
-          check Reset
-        )
+        check Reset
+      )
       ~quit:(fun _ ->
-          check Quit
-        )
+        check Quit
+      )
       ~noop:(fun _ ->
-          check Noop
-        )
+        check Noop
+      )
       ~start_tls:(fun _ ->
-          check Start_tls
-        )
+        check Start_tls
+      )
 
-      (* Mechanical sanity checks *)
+  (* Mechanical sanity checks *)
   let%test_unit _ =
     let check_to_str a b = [%test_eq:string] a (to_string b) in
     let check_of_str a b = [%test_eq:t] a (of_string b) in
@@ -638,47 +670,47 @@ module Command = struct
     in
     Variants.iter
       ~hello:(fun _ ->
-          check_round "HELO Helo World!~" (Hello "Helo World!~");
-          check_of_str (Hello "Helo World!~") "helo Helo World!~"
-        )
+        check_round "HELO Helo World!~" (Hello "Helo World!~");
+        check_of_str (Hello "Helo World!~") "helo Helo World!~"
+      )
       ~extended_hello:(fun _ ->
-          check_round "EHLO Helo World!~" (Extended_hello "Helo World!~");
-          check_of_str (Extended_hello "Helo World!~") "ehlo Helo World!~"
-        )
+        check_round "EHLO Helo World!~" (Extended_hello "Helo World!~");
+        check_of_str (Extended_hello "Helo World!~") "ehlo Helo World!~"
+      )
       ~sender:(fun _ ->
-          check_round "MAIL FROM: Helo World!~" (Sender "Helo World!~");
-          check_of_str (Sender "Helo World!~") "mail from: Helo World!~"
-        )
+        check_round "MAIL FROM: Helo World!~" (Sender "Helo World!~");
+        check_of_str (Sender "Helo World!~") "mail from: Helo World!~"
+      )
       ~recipient:(fun _ ->
-          check_round "RCPT TO: Helo World!~" (Recipient "Helo World!~");
-          check_of_str (Recipient "Bye World!~") "RCPT TO:Bye World!~";
-          check_of_str (Recipient "Bye World!~") "rcpt to:Bye World!~")
+        check_round "RCPT TO: Helo World!~" (Recipient "Helo World!~");
+        check_of_str (Recipient "Bye World!~") "RCPT TO:Bye World!~";
+        check_of_str (Recipient "Bye World!~") "rcpt to:Bye World!~")
       ~auth_login:(fun _ ->
-          check_round "AUTH LOGIN foobar" (Auth_login (Some "foobar"));
-          check_round "AUTH LOGIN" (Auth_login None)
-        )
+        check_round "AUTH LOGIN foobar" (Auth_login (Some "foobar"));
+        check_round "AUTH LOGIN" (Auth_login None)
+      )
       ~data:(fun _ ->
-          check_round "DATA" Data;
-          check_of_str Data "data"
-        )
+        check_round "DATA" Data;
+        check_of_str Data "data"
+      )
       ~reset:(fun _ ->
-          check_round "RESET" Reset;
-          check_of_str Data "data"
-        )
+        check_round "RESET" Reset;
+        check_of_str Data "data"
+      )
       ~quit:(fun _ ->
-          check_round "QUIT" Quit;
-          check_of_str Quit "quit"
-        )
+        check_round "QUIT" Quit;
+        check_of_str Quit "quit"
+      )
       ~help:(fun _ ->
-          check_round "HELP" Help;
-          check_of_str Help "help"
-        )
+        check_round "HELP" Help;
+        check_of_str Help "help"
+      )
       ~noop:(fun _ ->
-          check_round "NOOP" Noop;
-          check_of_str Noop "noop")
+        check_round "NOOP" Noop;
+        check_of_str Noop "noop")
       ~start_tls:(fun _ ->
-          check_round "STARTTLS" Start_tls;
-          check_of_str Start_tls "starttls")
+        check_round "STARTTLS" Start_tls;
+        check_of_str Start_tls "starttls")
 end
 
 module Reply = struct
@@ -767,12 +799,12 @@ module Reply = struct
       |> all_of_t_
     end
 
-      (* Check that every int maps uniquely to a code, and back to itself *)
+    (* Check that every int maps uniquely to a code, and back to itself *)
     let%test_unit _ =
       List.range 100 999
       |> List.iter ~f:([%test_pred:int] (fun i -> to_int (of_int i) = i))
 
-        (* Check that every code maps to an int and back to itself *)
+    (* Check that every code maps to an int and back to itself *)
     let%test_unit _ =
       Lazy.force all
       |> List.iter ~f:([%test_pred:t] (fun c -> of_int (to_int c) = c))
@@ -797,7 +829,7 @@ module Reply = struct
 
   let create code fmt =
     ksprintf (fun raw_message ->
-        { code; raw_message = String.split_lines raw_message }) fmt
+      { code; raw_message = String.split_lines raw_message }) fmt
 
   let service_ready_220 greeting =
     create `Service_ready_220 "%s" greeting
@@ -943,9 +975,9 @@ module Reply = struct
       let%test_unit _ =
         List.iter (Lazy.force Code.all)
           ~f:(fun code ->
-              check { code; raw_message = [ "test" ] };
-              check { code; raw_message = [ "test0"; "test2"; "test3" ] }
-            )
+            check { code; raw_message = [ "test" ] };
+            check { code; raw_message = [ "test0"; "test2"; "test3" ] }
+          )
 
       let%test_unit _ = check (service_ready_220 "test")
       let%test_unit _ = check closing_connection_221

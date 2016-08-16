@@ -1,6 +1,6 @@
 version = "$(pkg_version)"
 description = "SMTP client and server"
-requires = "async async_extended async_ssl bin_prot core email_message fieldslib ppx_assert.runtime-lib ppx_bench.runtime-lib ppx_expect.collector ppx_hash.runtime-lib ppx_inline_test.runtime-lib re2 sexplib textutils typerep variantslib"
+requires = "async async_extended async_ssl bin_prot core core_extended email_message fieldslib ppx_assert.runtime-lib ppx_bench.runtime-lib ppx_expect.collector ppx_hash.runtime-lib ppx_inline_test.runtime-lib re2 sexplib textutils typerep variantslib"
 archive(byte  ) = "async_smtp.cma"
 archive(native) = "async_smtp.cmxa"
 plugin(byte  ) = "async_smtp.cma"

@@ -5,6 +5,8 @@ open Email_message.Std
 
 module Email_address = Email_address
 
+val urlbase64_encode_float : ?length:int -> float -> string
+
 module Smtp_extension : sig
   type t =
     | Start_tls

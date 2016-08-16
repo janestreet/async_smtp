@@ -1,4 +1,5 @@
 open Core.Std
+open Core_extended.Std
 open Async.Std
 open Async_ssl.Std
 open Types
