@@ -5,7 +5,7 @@
               core
               textutils
               email_message
-              crypto ; for hashing email bodies
+              cryptokit ; for hashing email bodies
               re2
               async_smtp
               async_shell
