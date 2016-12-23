@@ -147,10 +147,10 @@ let rec start_session
       >>= function
       | `Eof ->
         Log.info log (lazy (Log.Message.create
-                               ~here:[%here]
-                               ~flows
-                               ~component
-                               "DISCONNECTED"));
+                              ~here:[%here]
+                              ~flows
+                              ~component
+                              "DISCONNECTED"));
         return ()
       | `Ok input ->
         match Option.try_with (fun () -> Command.of_string input) with
@@ -287,7 +287,7 @@ let rec start_session
                              ~here:[%here]
                              ~flows
                              ~component:(component @ ["plugin"; "session_helo"])
-                            ~tags:["extended", Bool.to_string extended; "helo", helo]
+                             ~tags:["extended", Bool.to_string extended; "helo", helo]
                              (Error.tag err ~tag:"session_helo")));
       service_unavailable ~here:[%here] ~flows ~component ()
   and top_start_tls ~flows ~session tls_options =
@@ -331,11 +331,13 @@ let rec start_session
       >>= fun new_reader ->
       Writer.of_pipe (Info.of_string "SMTP/TLS") writer_pipe_w
       >>= fun (new_writer, _) ->
+      let version = Ssl.Connection.version tls in
+      let v = Sexp.to_string_hum (Ssl.Version.sexp_of_t version) in
       Log.info log (lazy (Log.Message.create
                             ~here:[%here]
                             ~flows
                             ~component
-                            "upgraded to tls"));
+                            (sprintf "Using TLS protocol %s" v)));
       let teardown () =
         Ssl.Connection.close tls;
         Deferred.all_unit

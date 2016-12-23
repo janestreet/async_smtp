@@ -847,7 +847,7 @@ module Reply = struct
     create `Start_authentication_input_334 "%s" msg
 
   let start_mail_input_354 =
-    create `Start_mail_input_354 "Enter message, ending with \".\" on a line by iteself"
+    create `Start_mail_input_354 "Enter message, ending with \".\" on a line by itself"
 
   let service_unavailable_421 =
     create `Service_unavailable_421 "%s Service not available, closing transmission channel" my_name
@@ -859,7 +859,7 @@ module Reply = struct
     create `Message_rate_exceeded_452 "Message rate exceeded"
 
   let unable_to_accommodate_455 msg =
-    create `Unable_to_accommodate_455 "Unable to accomodate: %s" msg
+    create `Unable_to_accommodate_455 "Unable to accommodate: %s" msg
 
   let command_not_recognized_500 command =
     create `Command_not_recognized_500 !"Unrecognized command: %s" command
@@ -883,13 +883,13 @@ module Reply = struct
     create `Mailbox_unavailable_550 "Mailbox unavailable: %s" reason
 
   let exceeded_storage_allocation_552 =
-    create `Exceeded_storage_allocation_552 "Exeeded storage allocation"
+    create `Exceeded_storage_allocation_552 "Exceeded storage allocation"
 
   let transaction_failed_554 message =
     create `Transaction_failed_554 !"Transaction failed: %s" message
 
   let from_to_parameters_bad_555 msg =
-    create `From_to_parameters_bad_555 !"From to To parameters bad: %s" msg
+    create `From_to_parameters_bad_555 !"From or To parameters bad: %s" msg
 
   let to_string t =
     let code = code t in

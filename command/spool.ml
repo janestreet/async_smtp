@@ -18,7 +18,7 @@ module Status = struct
         | "exim" -> `Exim
         | "sexp" -> `Sexp
         | str ->
-          str |> String.strip |> Sexp.of_string |> format_of_sexp
+          str |> Sexp.of_string |> format_of_sexp
       )
 
   let spec () =
