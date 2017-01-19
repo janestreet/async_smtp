@@ -10,5 +10,8 @@
     textutils
     email_message
     re2))
+  (inline_tests ((deps (test-ca.crt test-server.crt test-server.key))))
   ))
 (ocamllex (mail_from_lexer))
+
+(enforce_style ((exceptions (mail_from_lexer.ml))))

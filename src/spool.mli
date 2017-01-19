@@ -1,39 +1,39 @@
 (** Spool directory structure:
 
-   Async_smtp uses a spool directory structure heavily inspired by that of Exim (see [1]
-   and [2] for details on that). On startup, async_smtp takes out a lock on the spool
-   directory (using the [Lock_file] module with the file $spool_dir/lock) and assumes that
-   no other process will be manipulating the files or directories below it without using
-   the async_smtp RPC interface.
+    Async_smtp uses a spool directory structure heavily inspired by that of Exim (see [1]
+    and [2] for details on that). On startup, async_smtp takes out a lock on the spool
+    directory (using the [Lock_file] module with the file $spool_dir/lock) and assumes that
+    no other process will be manipulating the files or directories below it without using
+    the async_smtp RPC interface.
 
-   The lifetime of a message looks like this:
+    The lifetime of a message looks like this:
 
-   When async_smtp accepts a message it immediately processes it, possibly expanding it to
-   multiple additional messages (at least one per recipient). Each of the expanded
-   messages are added to the spool (by calling [Spool.add]), writing it first to
-   $spool_dir/tmp/$msgid (with a timestamp, as well as information about whether the
-   message is frozen or not, the last relay attempt, and the parent message ID if any) and
-   then renaming it to $spool_dir/active/$msgid (to minimize the chance of a message being
-   sent multiple times in case of a crash).
+    When async_smtp accepts a message it immediately processes it, possibly expanding it to
+    multiple additional messages (at least one per recipient). Each of the expanded
+    messages are added to the spool (by calling [Spool.add]), writing it first to
+    $spool_dir/tmp/$msgid (with a timestamp, as well as information about whether the
+    message is frozen or not, the last relay attempt, and the parent message ID if any) and
+    then renaming it to $spool_dir/active/$msgid (to minimize the chance of a message being
+    sent multiple times in case of a crash).
 
-   Newly spooled messages are also immediately written to a queue. A background loop
-   iterates over this queue, processing and relaying messages in accordance with the
-   [max_concurrent_send_jobs] configuration option. Async_smtp attempts to send each
-   message in turn.
+    Newly spooled messages are also immediately written to a queue. A background loop
+    iterates over this queue, processing and relaying messages in accordance with the
+    [max_concurrent_send_jobs] configuration option. Async_smtp attempts to send each
+    message in turn.
 
-   On success, the message is removed from the active directory.
+    On success, the message is removed from the active directory.
 
-   On failure, the [last_relay_attempt_date] is immediately updated in the on disk spool
-   file (again using tmp to make the change as atomic as possible). If the message has any
-   remaining retry intervals in [envelope_with_next_hop.retry_intervals] then async_smtp
-   schedules a retry for after the interval has elapsed (rewriting the spooled message
-   with the interval popped off the list of remaining retry intervals only after the
-   interval has elapsed). If there are no remaining retry intervals then the message is
-   marked as frozen and moved into $spool_dir/frozen/$msgid (and no further attempts to
-   send it are made).
+    On failure, the [last_relay_attempt_date] is immediately updated in the on disk spool
+    file (again using tmp to make the change as atomic as possible). If the message has any
+    remaining retry intervals in [envelope_with_next_hop.retry_intervals] then async_smtp
+    schedules a retry for after the interval has elapsed (rewriting the spooled message
+    with the interval popped off the list of remaining retry intervals only after the
+    interval has elapsed). If there are no remaining retry intervals then the message is
+    marked as frozen and moved into $spool_dir/frozen/$msgid (and no further attempts to
+    send it are made).
 
-   If async_smtp crashes (or is shutdown) and the spool has contents then it is reloaded
-   as follows:
+    If async_smtp crashes (or is shutdown) and the spool has contents then it is reloaded
+    as follows:
 
     If there are any contents of $spool_dir/tmp then async_smtp will refuse to
     start. Such messages indicate that mailcore died while changing a message on
@@ -42,8 +42,8 @@
     The contents of $spool_dir/active are read in and re-queued based on the
     last attempted relay time and the remaining retry intervals as above.
 
-   [1] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-how_exim_receives_and_delivers_mail.html
-   [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
+    [1] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-how_exim_receives_and_delivers_mail.html
+    [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
 *)
 open! Core.Std
 open! Async.Std

@@ -51,6 +51,7 @@ module Config = struct
     let server =
       { Smtp_server.Config.Tls.
         version = None
+      ; options = None
       ; name = None
       ; crt_file = t.dir ^/ "server.crt"
       ; key_file = t.dir ^/ "server.key"
@@ -62,6 +63,7 @@ module Config = struct
       [ Smtp_client.Config.Domain_suffix.of_string ( t.host),
         { Smtp_client.Config.Tls.
           version = None
+        ; options = None
         ; name = None
         ; ca_file = Some (t.dir ^/ "ca.crt")
         ; ca_path = None
@@ -71,6 +73,7 @@ module Config = struct
       ; Smtp_client.Config.Domain_suffix.of_string "",
         { Smtp_client.Config.Tls.
           version = None
+        ; options = None
         ; name = None
         ; ca_file = None
         ; ca_path = None
@@ -83,9 +86,9 @@ module Config = struct
 
   let server_and_client_config t =
     begin if t.tls then begin
-        make_tls_certificates t
-        >>| fun tls_options -> Some tls_options
-      end else begin
+      make_tls_certificates t
+      >>| fun tls_options -> Some tls_options
+    end else begin
         return None
       end
     end
@@ -133,30 +136,30 @@ let send ~config ~client_config envelope =
       (`Inet (Host_and_port.create ~host ~port))
       ~config:client_config
       ~f:(fun client ->
-          Smtp_client.send_envelope client ~log envelope
-          >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
-          >>| Or_error.join
-          >>|? ignore
-        )
+        Smtp_client.send_envelope client ~log envelope
+        >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
+        >>| Or_error.join
+        >>|? ignore
+      )
     >>| Or_error.ok_exn
   )
 
 let main ?dir ~host ~port ~tls ~send_n_messages ~message_from_stdin () =
   begin match dir with
-    | Some dir -> return dir
-    | None -> Unix.mkdtemp "/tmp/stress-test-"
+  | Some dir -> return dir
+  | None -> Unix.mkdtemp "/tmp/stress-test-"
   end
   >>= fun dir ->
   let config = { Config.dir; host; port; tls; send_n_messages } in
   begin if message_from_stdin then begin
-      let stdin = Lazy.force Reader.stdin in
-      Smtp_server.read_bsmtp stdin
-      |> Pipe.map ~f:Or_error.ok_exn
-      |> Pipe.to_list
-      >>| function
-      | [e] -> e
-      | _ -> failwith "Input must contain a single message."
-    end else begin
+    let stdin = Lazy.force Reader.stdin in
+    Smtp_server.read_bsmtp stdin
+    |> Pipe.map ~f:Or_error.ok_exn
+    |> Pipe.to_list
+    >>| function
+    | [e] -> e
+    | _ -> failwith "Input must contain a single message."
+  end else begin
       let recipients = [ Email_address.of_string_exn "test@example.com" ] in
       let email =
         Email.Simple.create ~from:(Email_address.local_address ()) ~subject:"Stress test" ~to_:recipients

@@ -137,10 +137,10 @@ module On_disk = struct
     let file = Option.value_exn (file t.meta) in
     if String.equal file path then return (Ok t)
     else let error = sprintf
-           "path mismatch: spooled message loaded from %s should be in %s"
-           path file
-         in
-         return (Or_error.error error t sexp_of_t)
+                       "path mismatch: spooled message loaded from %s should be in %s"
+                       path file
+      in
+      return (Or_error.error error t sexp_of_t)
 end
 
 let create spool_dir ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_msg =
@@ -187,9 +187,9 @@ let last_relay_attempt t =
   List.hd t.relay_attempts
 
 let with_file t
-    (f : Envelope.t -> [`Sync of Envelope.t | `Unlink] Or_error.t Deferred.t)
-    : unit Or_error.t Deferred.t
-    =
+      (f : Envelope.t -> [`Sync of Envelope.t | `Unlink] Or_error.t Deferred.t)
+  : unit Or_error.t Deferred.t
+  =
   Locks.lock t.id
   >>= fun () ->
   begin
@@ -207,11 +207,11 @@ let with_file t
     begin
       if compare t on_disk.meta = 0 then return (Ok ())
       else let e = Error.create
-             "spooled message in memory differs from spooled message on disk"
-             (`In_memory t, `On_disk on_disk.meta, `File from_file)
-             [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`File of string]]
-           in
-           return (Error e)
+                     "spooled message in memory differs from spooled message on disk"
+                     (`In_memory t, `On_disk on_disk.meta, `File from_file)
+                     [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`File of string]]
+        in
+        return (Error e)
     end
     >>=? fun () ->
     (* If the destination file differs from the source file (say, if the status
@@ -251,14 +251,14 @@ let map_envelope t ~f =
 
 let freeze t ~log =
   with_file t (fun envelope ->
-      Log.info log (lazy (Log.Message.create
-                            ~here:[%here]
-                            ~flows:t.flows
-                            ~component:["spool"]
-                            ~spool_id:t.id
-                            "frozen"));
-      t.status <- `Frozen;
-      return (Ok (`Sync envelope)))
+    Log.info log (lazy (Log.Message.create
+                          ~here:[%here]
+                          ~flows:t.flows
+                          ~component:["spool"]
+                          ~spool_id:t.id
+                          "frozen"));
+    t.status <- `Frozen;
+    return (Ok (`Sync envelope)))
 ;;
 
 let mark_for_send_now ~retry_intervals t ~log =
@@ -276,14 +276,14 @@ let mark_for_send_now ~retry_intervals t ~log =
 
 let remove t ~log =
   with_file t (fun envelope ->
-      Log.info log (lazy (Log.Message.create
-                            ~here:[%here]
-                            ~flows:t.flows
-                            ~component:["spool"]
-                            ~spool_id:t.id
-                            "removing"));
-      t.status <- `Removed;
-      return (Ok (`Sync envelope)))
+    Log.info log (lazy (Log.Message.create
+                          ~here:[%here]
+                          ~flows:t.flows
+                          ~component:["spool"]
+                          ~spool_id:t.id
+                          "removing"));
+    t.status <- `Removed;
+    return (Ok (`Sync envelope)))
 ;;
 
 (* We are being conservative here for simplicity - if we get a permanent error
@@ -312,11 +312,20 @@ let send_to_hops t ~log ~config envelope =
         ~log
         ~component:["spool";"send"]
         ~f:(fun client ->
-            (* Not passing flows allong as the Client session already includes the flows. *)
-            Client.send_envelope client ~log ~flows:t.flows ~component:["spool";"send"] envelope)
+          (* Not passing flows along as the Client session already includes the flows. *)
+          Client.send_envelope client ~log ~flows:t.flows ~component:["spool";"send"] envelope)
       >>= function
       | Error e ->
-        (* Already logged by the client *)
+        (* The client logs many common failures, so this might be repetitive. But
+           duplication in the error case is better than missing potential errors. *)
+        let e = Error.tag ~tag:"Unable to send envelope" e in
+        Log.info log (lazy (Log.Message.of_error
+                              ~here:[%here]
+                              ~flows:t.flows
+                              ~component:["spool"; "send"]
+                              ~spool_id:t.id
+                              ~remote_address:hop
+                              e));
         t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
         send_to_hops untried_next_hops
       | Ok envelope_status ->
@@ -332,7 +341,7 @@ let send_to_hops t ~log ~config envelope =
           | Error (`No_recipients rejected_recipients) ->
             let permanently_failed_recipients, temporarily_failed_recipients =
               List.partition_map rejected_recipients ~f:(fun (recipient, reject) ->
-                  if Reply.is_permanent_error reject then `Fst recipient
+                if Reply.is_permanent_error reject then `Fst recipient
                 else `Snd recipient)
             in
             t.remaining_recipients <- temporarily_failed_recipients;

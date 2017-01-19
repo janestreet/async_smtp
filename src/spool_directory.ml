@@ -36,10 +36,10 @@ let init ~path =
     >>=? fun () ->
     Sys.ls_dir (tmp_dir path)
     >>| (function
-    | [] -> Ok path
-    | _nonempty ->
-      Or_error.error_string
-        (sprintf "tmp dir %s is not empty, shutdown was not clean" (tmp_dir path)))
+      | [] -> Ok path
+      | _nonempty ->
+        Or_error.error_string
+          (sprintf "tmp dir %s is not empty, shutdown was not clean" (tmp_dir path)))
 
 (* do not show messages that have been removed, only active and frozen *)
 let ls t =

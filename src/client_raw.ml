@@ -97,11 +97,11 @@ let remote_address t =
 ;;
 
 let create
-    ?flows
-    ~dest
-    reader
-    writer
-    config =
+      ?flows
+      ~dest
+      reader
+      writer
+      config =
   let info = Peer_info.create ~dest () in
   let flows = match flows with
     | Some flows -> flows
@@ -111,9 +111,9 @@ let create
   { mode; flows; config }
 
 let create_bsmtp
-    ?flows
-    writer
-    config =
+      ?flows
+      writer
+      config =
   let flows = match flows with
     | Some flows -> flows
     | None -> Log.Flows.create `Client_session
@@ -163,13 +163,13 @@ let read_reply ?on_eof reader =
     Reader.read_line reader
     >>= function
     | `Ok line -> begin match Reply.parse ?partial line with
-        | `Done reply -> Deferred.Or_error.return reply
-        | `Partial partial -> loop (Some partial)
-      end
+      | `Done reply -> Deferred.Or_error.return reply
+      | `Partial partial -> loop (Some partial)
+    end
     | `Eof ->  begin match on_eof with
-        | Some on_eof -> on_eof ?partial ()
-        | None -> Deferred.Or_error.error_string "Unexpected EOF"
-      end
+      | Some on_eof -> on_eof ?partial ()
+      | None -> Deferred.Or_error.error_string "Unexpected EOF"
+    end
   in
   Deferred.Or_error.try_with_join
     (fun () -> loop None)
@@ -239,11 +239,11 @@ let send_receive_string ?on_eof ?timeout t ~log ?flows ~component ~here raw_stri
 let do_quit t ~log ~component =
   let component = component @ ["quit"] in
   Log.debug log (lazy (Log.Message.create
-                        ~here:[%here]
-                        ~flows:t.flows
-                        ~component
-                        ?remote_address:(remote_address t)
-                        "INFO"));
+                         ~here:[%here]
+                         ~flows:t.flows
+                         ~component
+                         ?remote_address:(remote_address t)
+                         "INFO"));
   if Writer.is_closed (writer t) then return (Ok ())
   else begin
     (* Errors when we send a QUIT command are tolerable. Don't raise unnecessary noise to
@@ -288,11 +288,11 @@ let quit_and_cleanup t ~log ~component =
 let do_greeting t ~log ~component =
   let component = component @ ["greeting"] in
   Log.debug log (lazy (Log.Message.create
-                        ~here:[%here]
-                        ~flows:t.flows
-                        ~component
-                        ?remote_address:(remote_address t)
-                        "INFO"));
+                         ~here:[%here]
+                         ~flows:t.flows
+                         ~component
+                         ?remote_address:(remote_address t)
+                         "INFO"));
   receive t ~log ~component ~here:[%here]
   >>=? function
   | `Bsmtp -> return (Ok ())
@@ -319,13 +319,13 @@ let do_ehlo ~log ~component t =
   >>=? function
   | `Bsmtp -> return (Ok ())
   | `Received { Reply.code =`Ok_completed_250; raw_message } ->
-      begin match raw_message with
-      | ehlo_greeting :: extensions ->
-        let extensions = List.map ~f:Smtp_extension.of_string extensions in
-        Peer_info.set_hello (info_exn t) (`Extended (ehlo_greeting, extensions))
-        |> return
-      | [] -> failwith "IMPOSSIBLE: EHLO greeting expected, got empty response"
-      end
+    begin match raw_message with
+    | ehlo_greeting :: extensions ->
+      let extensions = List.map ~f:Smtp_extension.of_string extensions in
+      Peer_info.set_hello (info_exn t) (`Extended (ehlo_greeting, extensions))
+      |> return
+    | [] -> failwith "IMPOSSIBLE: EHLO greeting expected, got empty response"
+    end
   | `Received { Reply.code = (`Command_not_recognized_500 | `Command_not_implemented_502); _ } ->
     do_helo t ~log ~component
   | `Received reply ->
@@ -350,6 +350,7 @@ let do_start_tls t ~log ~component tls_options =
     let writer_pipe_r,writer_pipe_w = Pipe.create () in
     Ssl.client
       ?version:tls_options.Config.Tls.version
+      ?options:tls_options.Config.Tls.options
       ?name:tls_options.Config.Tls.name
       ?ca_file:tls_options.Config.Tls.ca_file
       ?ca_path:tls_options.Config.Tls.ca_path
@@ -473,10 +474,10 @@ let do_auth_login t ~log ~component ~username ~password =
   send_receive_string t ~log ~component ~here:[%here] username
   >>=? function
   | `Bsmtp | `Received { Reply.code=`Start_authentication_input_334; _ } -> begin
-    send_receive_string t ~log ~component ~here:[%here] password
-    >>=? function
-    | `Bsmtp | `Received { Reply.code=`Authentication_successful_235; _ } -> return (Ok ())
-    | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
+      send_receive_string t ~log ~component ~here:[%here] password
+      >>=? function
+      | `Bsmtp | `Received { Reply.code=`Authentication_successful_235; _ } -> return (Ok ())
+      | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
     end
   | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
 
@@ -520,7 +521,7 @@ let with_quit t ~log ~component ~f =
 let with_session t ~log ~component ~credentials ~f =
   let component = component @ [ "session" ] in
   Log.debug log (lazy (Log.Message.info ~component ~here:[%here]  ~flows:t.flows
-                        ?remote_address:(remote_address t) ()));
+                         ?remote_address:(remote_address t) ()));
   (* The RFC prescribes that we send QUIT if we are not happy with the reached
      level of TLS security. *)
   with_quit t ~log ~component ~f:(fun () ->

@@ -208,8 +208,8 @@ module Message = struct
   ;;
 
   let with_info ~f ~flows ~component ~here ?local_address ?remote_address
-      ?email ?rfc822_id ?local_id ?sender ?recipients ?spool_id
-      ?dest ?command ?reply ?session_marker ?(tags=[]) =
+        ?email ?rfc822_id ?local_id ?sender ?recipients ?spool_id
+        ?dest ?command ?reply ?session_marker ?(tags=[]) =
     let tags = match reply with
       | Some reply -> (Tag.reply, Reply.to_string reply) :: tags
       | None -> tags
@@ -307,20 +307,20 @@ module Message = struct
 
   let create =
     with_info ~f:(fun tags action ->
-        Log.Message.create ~tags (`String action))
+      Log.Message.create ~tags (`String action))
 
   let debugf ~flows =
     with_info ~flows ~f:(fun tags fmt ->
-        ksprintf (fun msg ->
-            Log.Message.create ~tags (`String msg)) fmt)
+      ksprintf (fun msg ->
+        Log.Message.create ~tags (`String msg)) fmt)
 
   let of_error =
     with_info ~f:(fun tags error ->
-        Log.Message.create ~tags (`Sexp (Error.sexp_of_t error)))
+      Log.Message.create ~tags (`Sexp (Error.sexp_of_t error)))
 
   let info =
     with_info ~f:(fun tags () ->
-        Log.Message.create ~tags (`String "INFO"))
+      Log.Message.create ~tags (`String "INFO"))
 
   let with_flow_and_component ~flows ~component t =
     let tags = Log.Message.tags t in
@@ -352,15 +352,15 @@ module Message = struct
 
   let component t =
     List.find_map (Log.Message.tags t) ~f:(fun (k,v) ->
-        Option.some_if (k = Tag.component) v)
+      Option.some_if (k = Tag.component) v)
     |> Option.value_map ~f:Component.of_string ~default:Component.unknown
 
   let find_tag' t ~tag ~f =
     List.find_map (Log.Message.tags t) ~f:(fun (k, v) ->
-        if k = tag then
-          Option.try_with (fun () ->
-              f v)
-        else None)
+      if k = tag then
+        Option.try_with (fun () ->
+          f v)
+      else None)
 
   let find_tag = find_tag' ~f:ident
 
@@ -404,7 +404,7 @@ module Message = struct
   let session_marker = find_tag' ~tag:Tag.session_marker ~f:Session_marker.of_string
 
   let flows t = List.filter_map (Log.Message.tags t) ~f:(fun (k,v) ->
-      Option.some_if (k=Tag.flow) v)
+    Option.some_if (k=Tag.flow) v)
 
 end
 
@@ -412,7 +412,7 @@ type t = Log.t
 
 let message' t ~level msg =
   if Level.(<=) (Log.level t) level &&
-    Level.(<=) level (Option.value (Log.Message.level msg) ~default:level) then
+     Level.(<=) level (Option.value (Log.Message.level msg) ~default:level) then
     let msg =
       if Log.Message.level msg = Some level then
         msg
@@ -446,18 +446,18 @@ let with_flow_and_component ~flows ~component t =
   Log.create
     ~level:(Log.level t)
     ~output:[ Log.Output.create (fun msgs ->
-        Queue.iter msgs ~f:(fun msg ->
-            let level = Message.level msg in
-            if Level.(<=) (Log.level t) level then
-              message ~level t
-                (lazy (Message.with_flow_and_component ~flows ~component msg)));
-        Log.flushed t) ]
+      Queue.iter msgs ~f:(fun msg ->
+        let level = Message.level msg in
+        if Level.(<=) (Log.level t) level then
+          message ~level t
+            (lazy (Message.with_flow_and_component ~flows ~component msg)));
+      Log.flushed t) ]
     ~on_error:(`Call (fun err ->
-        Log.Global.sexp
-          ~level:`Error
-          ~tags:([ Message.Tag.component, sprintf !"%{Component}" (component @ ["_LOG"]) ]
-                 @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
-          (Error.sexp_of_t err)))
+      Log.Global.sexp
+        ~level:`Error
+        ~tags:([ Message.Tag.component, sprintf !"%{Component}" (component @ ["_LOG"]) ]
+               @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
+        (Error.sexp_of_t err)))
 
 let adjust_log_levels ?(minimum_level=`Debug) ?(remap_info_to=`Info) ?(remap_error_to=`Error) t =
   let minimum_level = Level.max (Log.level t) minimum_level in
@@ -469,17 +469,17 @@ let adjust_log_levels ?(minimum_level=`Debug) ?(remap_info_to=`Info) ?(remap_err
     Log.create
       ~level:minimum_level
       ~output:[ Log.Output.create (fun msgs ->
-          Queue.iter msgs ~f:(fun msg ->
-              let level = match Log.Message.level msg with
-                | None | Some `Info -> remap_info_to
-                | Some `Error -> remap_error_to
-                | Some `Debug -> `Debug
-              in
-              if Level.(<=) minimum_level level then
-                message' ~level t msg);
-          Log.flushed t) ]
+        Queue.iter msgs ~f:(fun msg ->
+          let level = match Log.Message.level msg with
+            | None | Some `Info -> remap_info_to
+            | Some `Error -> remap_error_to
+            | Some `Debug -> `Debug
+          in
+          if Level.(<=) minimum_level level then
+            message' ~level t msg);
+        Log.flushed t) ]
       ~on_error:(`Call (fun err ->
-          Log.Global.sexp
-            ~level:`Error
-            ~tags:[Message.Tag.component, "_LOG"]
-            (Error.sexp_of_t err)))
+        Log.Global.sexp
+          ~level:`Error
+          ~tags:[Message.Tag.component, "_LOG"]
+          (Error.sexp_of_t err)))

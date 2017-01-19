@@ -10,3 +10,5 @@
               async_smtp
               async_shell
               async_smtp_command))))
+
+(enforce_style ())

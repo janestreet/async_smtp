@@ -5,6 +5,7 @@ open Async_ssl.Std
 module Tls = struct
   type t =
     { version:Ssl.Version.t option
+    ; options:Ssl.Opt.t list option
     ; name:string option
     ; crt_file:string
     ; key_file:string

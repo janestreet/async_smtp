@@ -5,6 +5,7 @@ open Async_ssl.Std
 module Tls = struct
   type t =
     { version : Ssl.Version.t option
+    ; options : Ssl.Opt.t list option
     ; name : string option
     ; ca_file : string option
     ; ca_path : string option
@@ -21,6 +22,7 @@ module Tls = struct
 
   let default =
     { version = None
+    ; options = None
     ; name = None
     ; ca_file = None
     ; ca_path = None

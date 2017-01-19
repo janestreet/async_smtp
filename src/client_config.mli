@@ -5,6 +5,7 @@ open Async_ssl.Std
 module Tls : sig
   type t =
     { version : Ssl.Version.t option
+    ; options : Ssl.Opt.t list option
     ; name : string option
     ; ca_file : string option
     ; ca_path : string option

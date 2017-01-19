@@ -14,7 +14,7 @@ module Smtp_extension = struct
     | Auth_login
     | Mime_8bit_transport
     | Other of string
-    [@@deriving sexp]
+  [@@deriving sexp]
 
   let of_string str =
     let t =
@@ -38,7 +38,7 @@ module Argument = struct
   type t =
     | Auth of Email_address.t option
     | Body of [`Mime_8bit | `Mime_7bit ]
-    [@@deriving bin_io, sexp, compare]
+  [@@deriving bin_io, sexp, compare]
 
   let of_string = function
     | "AUTH=<>" -> Ok (Auth None)
@@ -90,10 +90,11 @@ module Sender = struct
     [ `Null
     | `Email of Email_address.t
     ]
-    [@@deriving bin_io, sexp, compare]
+  [@@deriving bin_io, sexp, compare]
 
   let of_string_with_arguments ?default_domain ~allowed_extensions str =
     Or_error.try_with (fun () -> Mail_from_lexer.parse_mail_from (Lexing.from_string str))
+    |> Or_error.tag ~tag:(sprintf "Failed to parse [Sender.t] from \"%s\"" str)
     >>= fun mail_from  ->
     Argument.list_of_string ~allowed_extensions mail_from.suffix
     >>= fun all_args ->
@@ -454,10 +455,6 @@ end
 module Address = struct
   type t = [`Inet of Host_and_port.t | `Unix of string] [@@deriving sexp, compare, bin_io]
 
-  let t_of_sexp sexp =
-    try t_of_sexp sexp with
-    | _ -> `Inet (Host_and_port.t_of_sexp sexp)
-
   let to_string t = sexp_of_t t |> Sexp.to_string
   let of_string str = Sexp.of_string str |> t_of_sexp
 end
@@ -534,7 +531,7 @@ module Command = struct
     | Help
     | Noop
     | Start_tls
-    [@@deriving variants, sexp]
+  [@@deriving variants, sexp]
 
   let of_string = function
     | str when String.Caseless.is_prefix str ~prefix:"HELO " ->
@@ -1004,7 +1001,7 @@ module Credentials = struct
     { username : string
     ; password : string;
     }
-    [@@deriving sexp, fields]
+  [@@deriving sexp, fields]
 
   let create = Fields.create
 end

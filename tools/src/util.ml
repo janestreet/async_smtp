@@ -23,19 +23,19 @@ module Address =struct
   let arg_spec () =
     Command.Spec.(
       step (fun m inet unix dest ->
-          let dest =
-            if inet && unix then
-              failwithf "can't sepecify both -inet and -unix" ()
-            else if unix then `Unix dest
-            else if inet then `Inet (Host_and_port.of_string ~port:25 dest)
-            else if String.mem dest '/' then `Unix dest
-            else `Inet (Host_and_port.of_string ~port:25 dest)
-          in
-          m ~dest)
+        let dest =
+          if inet && unix then
+            failwithf "can't sepecify both -inet and -unix" ()
+          else if unix then `Unix dest
+          else if inet then `Inet (Host_and_port.of_string ~port:25 dest)
+          else if String.mem dest '/' then `Unix dest
+          else `Inet (Host_and_port.of_string ~port:25 dest)
+        in
+        m ~dest)
       +> flag "-inet" no_arg
-        ~doc:" Intepret the address as a HOST[:PORT]"
+           ~doc:" Intepret the address as a HOST[:PORT]"
       +> flag "-unix" no_arg
-        ~doc:" Intepret the address as a FILE"
+           ~doc:" Intepret the address as a FILE"
       +> anon ("HOST[:PORT] | FILE" %: string))
 end
 
@@ -65,9 +65,9 @@ module Smtp_client_config = struct
     Command.Spec.(
       step (fun m smtp_config -> m ~smtp_config)
       +> flag "-smtp-config" (optional_with_default default file_arg_type)
-        ~doc:"File with config for the mailcore smtp client \
-              (defaults to ~/.js-smtp.sexp if it exists or system \
-              defaults otherwise)")
+           ~doc:"File with config for the mailcore smtp client \
+                 (defaults to ~/.js-smtp.sexp if it exists or system \
+                 defaults otherwise)")
 end
 
 module Hex = struct

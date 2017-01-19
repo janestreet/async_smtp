@@ -25,7 +25,7 @@ module Argument : sig
   type t =
     | Auth of Email_address.t option
     | Body of [`Mime_8bit|`Mime_7bit]
-    [@@deriving bin_io, sexp, compare]
+  [@@deriving bin_io, sexp, compare]
 
   val of_string : string -> t Or_error.t
   val to_string : t -> string
@@ -47,14 +47,14 @@ module Sender : sig
     [ `Null
     | `Email of Email_address.t
     ]
-    [@@deriving bin_io, sexp, compare]
+  [@@deriving bin_io, sexp, compare]
 
   val of_string
     :  ?default_domain:string
     -> string
     -> t Or_error.t
 
- val of_string_with_arguments
+  val of_string_with_arguments
     :  ?default_domain:string
     -> allowed_extensions : Smtp_extension.t list  (* default: [] *)
     -> string
@@ -191,7 +191,7 @@ module Envelope_with_next_hop : sig
 end
 
 module Session : sig
-type t =
+  type t =
     { remote                    : Address.t
     ; local                     : Address.t
     ; helo                      : string option

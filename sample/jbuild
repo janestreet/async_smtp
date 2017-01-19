@@ -1,5 +1,7 @@
 (executables
  ((names (run_async_smtp sendmail))
-  (libraries (async 
+  (libraries (async
               core
               async_smtp))))
+
+(enforce_style ())

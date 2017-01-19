@@ -18,18 +18,26 @@ end
    for B will contain all the flow ids of the the log message for A.
 
    Each message will have multiple flow IDs indicating what it is related to.
-     [`Server] - Included on all log messages related to a SMTP session on the server side
-         and all log messages relating to any envelope received on the session.
-         Issued when a TCP session is established (or an SMTP session is otherwise established)
-     [`Client] - Included on all log messages related to a SMTP session on the client side
-         No new messages are generated here, so these flow IDs are short lived.
-         NB: When a Client session is established this will be the only ID until an envelope
-         is sent, at which point the IDs relevant to the envelope will also be included.
-     [`Inbound_envelope] - Include on all log messages related to an Inbound envelope,
-        and any outbound messages generated from it.
-        It is issued upon 'MAIL FROM',
-     [`Outbound_envelope] - Included on all log messages related to an outbound envelope.
-        This ID is issued when spooling a message, or when using the client directly,
+
+   [`Server] -
+   Included on all log messages related to a SMTP session on the server side
+   and all log messages relating to any envelope received on the session.
+   Issued when a TCP session is established (or an SMTP session is otherwise established)
+
+   [`Client] -
+   Included on all log messages related to a SMTP session on the client side
+   No new messages are generated here, so these flow IDs are short lived.
+   NB: When a Client session is established this will be the only ID until an envelope
+   is sent, at which point the IDs relevant to the envelope will also be included.
+
+   [`Inbound_envelope] -
+   Include on all log messages related to an Inbound envelope,
+   and any outbound messages generated from it.
+   It is issued upon 'MAIL FROM',
+
+   [`Outbound_envelope] -
+   Included on all log messages related to an outbound envelope.
+   This ID is issued when spooling a message, or when using the client directly,
 *)
 module Flows : sig
   module Kind : sig
@@ -111,18 +119,18 @@ module Message : sig
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
               | `Envelope of Envelope.t
-             ]
-   -> ?rfc822_id:string
-   -> ?local_id:Envelope.Id.t
-   -> ?sender:[ `Sender of Sender.t | `String of string ]
-   -> ?recipients:[ `Email of Email_address.t | `String of string ] list
-   -> ?spool_id:string
-   -> ?dest:Address.t
-   -> ?command:Command.t
-   -> ?reply:Reply.t
-   -> ?session_marker:Session_marker.t
-   -> ?tags:(string * string) list
-   -> 'a
+              ]
+    -> ?rfc822_id:string
+    -> ?local_id:Envelope.Id.t
+    -> ?sender:[ `Sender of Sender.t | `String of string ]
+    -> ?recipients:[ `Email of Email_address.t | `String of string ] list
+    -> ?spool_id:string
+    -> ?dest:Address.t
+    -> ?command:Command.t
+    -> ?reply:Reply.t
+    -> ?session_marker:Session_marker.t
+    -> ?tags:(string * string) list
+    -> 'a
   ;;
 
 
@@ -173,7 +181,7 @@ module Message : sig
   (* tag 'sender'. [`String _] if the value doesn't parse *)
   val sender : t -> [ `Sender of Sender.t | `String of string ] option
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
-    nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
+     nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
   *)
   val recipients : t -> [ `Email of Email_address.t | `String of string ] list option
   (* tag 'email-fingerprint' *)
@@ -221,13 +229,13 @@ val adjust_log_levels
 
     Use [Message.create], [Message.debug] or [Message.of_error] to create the [Message.t].
     e.g.
-      [ Mail_log.info log (lazy Message.create ~component:"world" "hello"); ]
+    [ Mail_log.info log (lazy Message.create ~component:"world" "hello"); ]
 
     Special notes about the behaviour of these functions:
-    * The message is dropped without forcing if [level] is less that [Log.level t].
-    * If the message has no loglevel set the level to match.
-    * If [t] has information attached to it via [with_flow_and_component],
-      add that information to the message.
+ * The message is dropped without forcing if [level] is less that [Log.level t].
+ * If the message has no loglevel set the level to match.
+ * If [t] has information attached to it via [with_flow_and_component],
+    add that information to the message.
 *)
 val message : t -> level:Log.Level.t -> Message.t Lazy.t -> unit
 val message' : t -> level:Log.Level.t -> Message.t -> unit

@@ -3,27 +3,28 @@ open Async.Std
 open Async_smtp.Std
 
 let config =
- { Smtp_server.Config.
-   spool_dir = "/tmp/spool-mailcore"
- ; tmp_dir = None
- ; where_to_listen = [`Port 2200; `Port 2201 ]
- ; max_concurrent_send_jobs = 1
- ; max_concurrent_receive_jobs_per_port = 1
- ; rpc_port = 2210
- ; malformed_emails = `Reject
- ; max_message_size = Byte_units.create `Megabytes 1.
- ; tls_options =
-     Some
-       { Smtp_server.Config.Tls.
-         version = None
-       ; name = None
-       ; crt_file = "/tmp/mailcore.crt"
-       ; key_file = "/tmp/mailcore.key"
-       ; ca_file = None
-       ; ca_path  = None
-       }
- ; client = Smtp_client.Config.default
- }
+  { Smtp_server.Config.
+    spool_dir = "/tmp/spool-mailcore"
+  ; tmp_dir = None
+  ; where_to_listen = [`Port 2200; `Port 2201 ]
+  ; max_concurrent_send_jobs = 1
+  ; max_concurrent_receive_jobs_per_port = 1
+  ; rpc_port = 2210
+  ; malformed_emails = `Reject
+  ; max_message_size = Byte_units.create `Megabytes 1.
+  ; tls_options =
+      Some
+        { Smtp_server.Config.Tls.
+          version = None
+        ; options = None
+        ; name = None
+        ; crt_file = "/tmp/mailcore.crt"
+        ; key_file = "/tmp/mailcore.key"
+        ; ca_file = None
+        ; ca_path  = None
+        }
+  ; client = Smtp_client.Config.default
+  }
 
 module Callbacks = struct
   include Smtp_server.Callbacks.Simple

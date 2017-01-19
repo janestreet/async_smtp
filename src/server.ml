@@ -300,6 +300,7 @@ let rec start_session
     let writer_pipe_r,writer_pipe_w = Pipe.create () in
     Ssl.server
       ?version:tls_options.Config.Tls.version
+      ?options:tls_options.Config.Tls.options
       ?name:tls_options.Config.Tls.name
       ?ca_file:tls_options.Config.Tls.ca_file
       ?ca_path:tls_options.Config.Tls.ca_path
@@ -424,11 +425,11 @@ let rec start_session
     match Sender.of_string_with_arguments ~allowed_extensions sender_str with
     | Error err ->
       Log.info log (lazy (Log.Message.of_error
-                             ~here:[%here]
-                             ~flows
-                             ~component
-                             ~sender:(`String sender_str)
-                             (Error.tag err ~tag:"Unable to parse MAIL FROM")));
+                            ~here:[%here]
+                            ~flows
+                            ~component
+                            ~sender:(`String sender_str)
+                            (Error.tag err ~tag:"Unable to parse MAIL FROM")));
       syntax_error ~here:[%here] ~flows ~component (sprintf "Cannot parse '%s'" sender_str)
       >>= fun () ->
       top ~session
@@ -452,11 +453,11 @@ let rec start_session
         top ~session
       | Error err ->
         Log.error log (lazy (Log.Message.of_error
-                              ~here:[%here]
-                              ~flows
-                              ~component:(component @ ["plugin"; "process_sender"])
-                              ~sender:(`String sender_str)
-                              (Error.tag err ~tag:"mail_from")));
+                               ~here:[%here]
+                               ~flows
+                               ~component:(component @ ["plugin"; "process_sender"])
+                               ~sender:(`String sender_str)
+                               (Error.tag err ~tag:"mail_from")));
         service_unavailable ~here:[%here] ~flows ~component ()
         >>= fun () ->
         top ~session
@@ -474,27 +475,27 @@ let rec start_session
   and envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients =
     let component = ["smtp-server"; "session"; "envelope"; "top"] in
     loop ~flows ~component ~next:(function
-        | Command.Quit ->
-          closing_connection ~here:[%here] ~flows ~component ()
-        | Command.Noop ->
-          ok_continue ~here:[%here] ~flows ~component ()
-          >>= fun () ->
-          envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients
-        | Command.Recipient recipient ->
-          envelope_recipient ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients recipient
-        | Command.Data when not (List.is_empty recipients) ->
-          envelope_data ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients
-        | ( Command.Hello _ | Command.Extended_hello _
-          | Command.Sender _ | Command.Data
-          | Command.Start_tls | Command.Auth_login _
-          ) as cmd ->
-          bad_sequence_of_commands ~here:[%here] ~flows ~component cmd
-          >>= fun () -> envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients
-        | Command.Reset ->
-          ok_continue ~here:[%here] ~flows ~component () >>= fun () -> top ~session
-        | (Command.Help) as cmd ->
-          command_not_implemented ~here:[%here] ~flows ~component cmd
-          >>= fun () -> envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients)
+      | Command.Quit ->
+        closing_connection ~here:[%here] ~flows ~component ()
+      | Command.Noop ->
+        ok_continue ~here:[%here] ~flows ~component ()
+        >>= fun () ->
+        envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients
+      | Command.Recipient recipient ->
+        envelope_recipient ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients recipient
+      | Command.Data when not (List.is_empty recipients) ->
+        envelope_data ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients
+      | ( Command.Hello _ | Command.Extended_hello _
+        | Command.Sender _ | Command.Data
+        | Command.Start_tls | Command.Auth_login _
+        ) as cmd ->
+        bad_sequence_of_commands ~here:[%here] ~flows ~component cmd
+        >>= fun () -> envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients
+      | Command.Reset ->
+        ok_continue ~here:[%here] ~flows ~component () >>= fun () -> top ~session
+      | (Command.Help) as cmd ->
+        command_not_implemented ~here:[%here] ~flows ~component cmd
+        >>= fun () -> envelope ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients)
   and envelope_recipient ~session ~flows ~sender ~sender_args ~recipients ~rejected_recipients recipient_str =
     let component = ["smtp-server"; "session"; "envelope"; "recipient"] in
     match Email_address.of_string recipient_str with
@@ -645,13 +646,13 @@ let rec start_session
             >>= function
             | Error err ->
               List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                  Log.error log (lazy (Log.Message.of_error
-                                        ~here:[%here]
-                                        ~flows
-                                        ~component
-                                        ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
-                                        ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
-                                                  ~f:(fun c -> "next-hop",Address.to_string c))
+                Log.error log (lazy (Log.Message.of_error
+                                       ~here:[%here]
+                                       ~flows
+                                       ~component
+                                       ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
+                                       ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
+                                                ~f:(fun c -> "next-hop",Address.to_string c))
                                        (Error.tag err ~tag:"quarantining"))));
               transaction_failed ~here:[%here] ~flows ~component "error spooling"
               >>= fun () ->
@@ -679,14 +680,14 @@ let rec start_session
           >>= function
           | Error err ->
             List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                Log.error log (lazy (Log.Message.of_error
-                                       ~here:[%here]
-                                       ~flows
-                                       ~component
-                                       ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
-                                       ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
-                                                ~f:(fun c -> "next-hop",Address.to_string c))
-                                       (Error.tag err ~tag:"spooling"))));
+              Log.error log (lazy (Log.Message.of_error
+                                     ~here:[%here]
+                                     ~flows
+                                     ~component
+                                     ~email:(`Envelope (Envelope_with_next_hop.envelope envelope_with_next_hops))
+                                     ~tags:(List.map (Envelope_with_next_hop.next_hop_choices envelope_with_next_hops)
+                                              ~f:(fun c -> "next-hop",Address.to_string c))
+                                     (Error.tag err ~tag:"spooling"))));
             transaction_failed ~here:[%here] ~flows ~component "error spooling"
             >>= fun () ->
             top ~session
@@ -774,14 +775,14 @@ let tcp_servers ~spool ~config ~log ~server_events (module Cb : Callbacks.S) =
     let local = make_local_address where in
     Tcp.Server.create (make_tcp_where_to_listen where)
       ~on_handler_error:(`Call (fun remote_address exn ->
-          let remote_address = make_remote_address remote_address in
-          Log.error log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows:Log.Flows.none
-                                 ~component:["smtp-server";"tcp"]
-                                 ~local_address:local
-                                 ~remote_address
-                                 (Error.of_exn ~backtrace:`Get exn)))))
+        let remote_address = make_remote_address remote_address in
+        Log.error log (lazy (Log.Message.of_error
+                               ~here:[%here]
+                               ~flows:Log.Flows.none
+                               ~component:["smtp-server";"tcp"]
+                               ~local_address:local
+                               ~remote_address
+                               (Error.of_exn ~backtrace:`Get exn)))))
       ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
       (fun address_in reader writer ->
          let session_flows = Log.Flows.create `Server_session in
@@ -795,41 +796,41 @@ let tcp_servers ~spool ~config ~log ~server_events (module Cb : Callbacks.S) =
          in
          let session = Session.create ~local ~remote () in
          Deferred.Or_error.try_with (fun () ->
-             start_session
-               ~log
-               ~server_events
-               ~config
-               ~session_flows
-               ~reader ~writer ~send_envelope ~quarantine
-               ~session
-               (module Cb))
+           start_session
+             ~log
+             ~server_events
+             ~config
+             ~session_flows
+             ~reader ~writer ~send_envelope ~quarantine
+             ~session
+             (module Cb))
          >>| Result.iter_error ~f:(fun err ->
-             Log.error log (lazy (Log.Message.of_error
-                                    ~here:[%here]
-                                    ~flows:session_flows
-                                    ~component:["smtp-server"; "tcp"]
-                                    ~remote_address:session.Session.remote
-                                    ~local_address:session.Session.local
-                                    err))))
+           Log.error log (lazy (Log.Message.of_error
+                                  ~here:[%here]
+                                  ~flows:session_flows
+                                  ~component:["smtp-server"; "tcp"]
+                                  ~remote_address:session.Session.remote
+                                  ~local_address:session.Session.local
+                                  err))))
     >>| to_server
   in
   Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:(function
-      | `Port port ->
-        let make_local_address port = `Inet (Host_and_port.create ~host:"0.0.0.0" ~port) in
-        let make_tcp_where_to_listen = Tcp.on_port in
-        let make_remote_address (`Inet (inet_in, port_in)) =
-          `Inet (Host_and_port.create ~host:(Unix.Inet_addr.to_string inet_in) ~port:port_in)
-        in
-        let to_server s = Inet s in
-        start_servers port ~make_local_address ~make_tcp_where_to_listen
-          ~make_remote_address ~to_server
-      | `File file ->
-        let make_local_address socket = `Unix socket in
-        let make_tcp_where_to_listen = Tcp.on_file in
-        let make_remote_address (`Unix socket_in) = `Unix socket_in in
-        let to_server s = Unix s in
-        start_servers file ~make_local_address ~make_tcp_where_to_listen
-          ~make_remote_address ~to_server)
+    | `Port port ->
+      let make_local_address port = `Inet (Host_and_port.create ~host:"0.0.0.0" ~port) in
+      let make_tcp_where_to_listen = Tcp.on_port in
+      let make_remote_address (`Inet (inet_in, port_in)) =
+        `Inet (Host_and_port.create ~host:(Unix.Inet_addr.to_string inet_in) ~port:port_in)
+      in
+      let to_server s = Inet s in
+      start_servers port ~make_local_address ~make_tcp_where_to_listen
+        ~make_remote_address ~to_server
+    | `File file ->
+      let make_local_address socket = `Unix socket in
+      let make_tcp_where_to_listen = Tcp.on_file in
+      let make_remote_address (`Unix socket_in) = `Unix socket_in in
+      let to_server s = Unix s in
+      start_servers file ~make_local_address ~make_tcp_where_to_listen
+        ~make_remote_address ~to_server)
 ;;
 
 let start ~config ~log (module Cb : Callbacks.S) =
@@ -847,17 +848,17 @@ let config t = t.config
 ;;
 
 let ports t = List.filter_map t.servers ~f:(function
-    | Inet server -> Some (Tcp.Server.listening_on server)
-    | Unix _server -> None)
+  | Inet server -> Some (Tcp.Server.listening_on server)
+  | Unix _server -> None)
 
 let close ?timeout t =
   Deferred.List.iter ~how:`Parallel t.servers ~f:(function
-      | Inet server -> Tcp.Server.close server
-      | Unix server -> Tcp.Server.close server)
+    | Inet server -> Tcp.Server.close server
+    | Unix server -> Tcp.Server.close server)
   >>= fun () ->
   Deferred.List.iter ~how:`Parallel t.servers ~f:(function
-      | Inet server -> Tcp.Server.close_finished server
-      | Unix server -> Tcp.Server.close_finished server)
+    | Inet server -> Tcp.Server.close_finished server
+    | Unix server -> Tcp.Server.close_finished server)
   >>= fun () ->
   Spool.kill_and_flush ?timeout t.spool
   >>= function
@@ -866,46 +867,46 @@ let close ?timeout t =
 
 
 let bsmtp_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
-    log
-    |> Log.adjust_log_levels ~remap_info_to:`Debug)
+  log
+  |> Log.adjust_log_levels ~remap_info_to:`Debug)
 
 let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
   let server_events = Smtp_events.create () in
   Pipe.create_reader ~close_on_exception:true (fun out ->
-      let session_flows = Log.Flows.create `Server_session in
-      let module Cb : Callbacks.S = struct
-        include Callbacks.Simple
-        let process_envelope ~log:_ ~session:_ envelope =
-          Pipe.write out (Ok envelope)
-          >>| fun () ->
-          `Consume "bsmtp"
-      end in
-      start_session
-        ~log
-        ~config:(Config.empty)
-        ~reader
-        ~server_events
-        ~session_flows
-        ?writer:None
-        ~write_reply:(fun reply ->
-            if Reply.is_ok reply then return ()
-            else begin
-              Pipe.write out (Or_error.error_string (Reply.to_string reply))
-            end)
-        ~send_envelope:(fun ~flows:_ ~original_msg:_ _ ->
-            Deferred.Or_error.error_string "Not implemented")
-        ~quarantine:(fun ~flows:_ ~reason:_ ~original_msg:_ _ ->
-            Deferred.Or_error.error_string "Not implemented")
-        ~session:(Session.create
-                    ~local:(`Inet (Host_and_port.create ~host:"*pipe*" ~port:0))
-                    ~remote:(`Inet (Host_and_port.create ~host:"*pipe*" ~port:0))
-                    ())
-        (module Cb))
+    let session_flows = Log.Flows.create `Server_session in
+    let module Cb : Callbacks.S = struct
+      include Callbacks.Simple
+      let process_envelope ~log:_ ~session:_ envelope =
+        Pipe.write out (Ok envelope)
+        >>| fun () ->
+        `Consume "bsmtp"
+    end in
+    start_session
+      ~log
+      ~config:(Config.empty)
+      ~reader
+      ~server_events
+      ~session_flows
+      ?writer:None
+      ~write_reply:(fun reply ->
+        if Reply.is_ok reply then return ()
+        else begin
+          Pipe.write out (Or_error.error_string (Reply.to_string reply))
+        end)
+      ~send_envelope:(fun ~flows:_ ~original_msg:_ _ ->
+        Deferred.Or_error.error_string "Not implemented")
+      ~quarantine:(fun ~flows:_ ~reason:_ ~original_msg:_ _ ->
+        Deferred.Or_error.error_string "Not implemented")
+      ~session:(Session.create
+                  ~local:(`Inet (Host_and_port.create ~host:"*pipe*" ~port:0))
+                  ~remote:(`Inet (Host_and_port.create ~host:"*pipe*" ~port:0))
+                  ())
+      (module Cb))
 ;;
 
 let mbox_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
-    log
-    |> Log.adjust_log_levels ~remap_info_to:`Debug)
+  log
+  |> Log.adjust_log_levels ~remap_info_to:`Debug)
 
 let read_mbox ?(log=Lazy.force mbox_log) reader =
   ignore log;

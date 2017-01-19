@@ -8,3 +8,5 @@
               re2
               async_smtp))
   ))
+
+(enforce_style ())

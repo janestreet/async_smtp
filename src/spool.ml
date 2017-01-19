@@ -148,7 +148,7 @@ let create ~config ~log : t Deferred.Or_error.t =
                               ~flows:Log.Flows.none
                               ~component:["spool";"event-stream"]
                               "ping"));
-      Bus.write event_stream (Time.now (), `Ping));
+       Bus.write event_stream (Time.now (), `Ping));
   let messages = Spooled_message.Id.Table.create () in
   Fields.create
     ~spool_dir
@@ -247,25 +247,25 @@ let load t =
                            ~tags:["files", sprintf !"%{sexp:string list}" entries]
                            "found files"));
   Deferred.List.iter entries ~how:`Parallel ~f:(fun entry ->
-      Throttle.enqueue t.file_throttle (fun () -> Spooled_message.load entry)
-      >>| function
-      | Error e ->
-        Log.error t.log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows:Log.Flows.none
-                                 ~component:["spool";"init"]
-                                 ~tags:["files", sprintf !"%{sexp: string list}" [entry]]
-                                 e))
-      | Ok msg ->
-        Log.info t.log (lazy (Log.Message.create
-                                ~here:[%here]
-                                ~flows:Log.Flows.none
-                                ~component:["spool";"init"]
-                                ~tags:["files", sprintf !"%{sexp: string list}" [entry]]
-                                ~spool_id:(Spooled_message_id.to_string (Spooled_message.id msg))
-                                "loaded"));
-        add_message t msg;
-        schedule t msg)
+    Throttle.enqueue t.file_throttle (fun () -> Spooled_message.load entry)
+    >>| function
+    | Error e ->
+      Log.error t.log (lazy (Log.Message.of_error
+                               ~here:[%here]
+                               ~flows:Log.Flows.none
+                               ~component:["spool";"init"]
+                               ~tags:["files", sprintf !"%{sexp: string list}" [entry]]
+                               e))
+    | Ok msg ->
+      Log.info t.log (lazy (Log.Message.create
+                              ~here:[%here]
+                              ~flows:Log.Flows.none
+                              ~component:["spool";"init"]
+                              ~tags:["files", sprintf !"%{sexp: string list}" [entry]]
+                              ~spool_id:(Spooled_message_id.to_string (Spooled_message.id msg))
+                              "loaded"));
+      add_message t msg;
+      schedule t msg)
   >>= fun () ->
   return (Ok ())
 ;;
@@ -280,18 +280,18 @@ let create ~config ~log () =
 
 let add t ~flows ~original_msg messages =
   Deferred.Or_error.List.iter messages ~how:`Parallel ~f:(fun envelope_with_next_hop ->
-      Throttle.enqueue t.file_throttle (fun () ->
-          Spooled_message.create
-            t.spool_dir
-            ~log:t.log
-            ~flows:(Log.Flows.extend flows `Outbound_envelope)
-            ~initial_status:`Send_now
-            envelope_with_next_hop
-            ~original_msg)
-      >>|? fun spooled_msg ->
-      add_message t spooled_msg;
-      enqueue t spooled_msg;
-      spooled_event t ~here:[%here] spooled_msg)
+    Throttle.enqueue t.file_throttle (fun () ->
+      Spooled_message.create
+        t.spool_dir
+        ~log:t.log
+        ~flows:(Log.Flows.extend flows `Outbound_envelope)
+        ~initial_status:`Send_now
+        envelope_with_next_hop
+        ~original_msg)
+    >>|? fun spooled_msg ->
+    add_message t spooled_msg;
+    enqueue t spooled_msg;
+    spooled_event t ~here:[%here] spooled_msg)
   >>|? fun () ->
   Envelope.id original_msg
 ;;
