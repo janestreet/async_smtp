@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Async.Std
 open Async_smtp.Std
 
@@ -127,7 +127,7 @@ let finished = Ivar.create ()
 
 let send ~config ~client_config envelope =
   incr counter;
-  Core.Std.Printf.printf "%d\n%!" !counter;
+  Core.Printf.printf "%d\n%!" !counter;
   let port = Config.port config in
   let host = Config.host config in
   don't_wait_for (

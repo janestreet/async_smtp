@@ -1,4 +1,4 @@
-open! Core.Std
+open! Core
 open! Async.Std
 open Async_ssl.Std
 open Email_message.Std

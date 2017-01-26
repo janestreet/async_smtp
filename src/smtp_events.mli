@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Async.Std
 
 (* Use this module to track any smtp events that are interesting for monitoring *)

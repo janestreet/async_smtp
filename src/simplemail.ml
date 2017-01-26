@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Async.Std
 open Types
 open Email_message.Std
@@ -28,15 +28,76 @@ module Expert = struct
     >>| Or_error.ignore
 end
 
-let send' ?log ?server ?(from=Email_address.local_address ()) ?sender_args ~to_ ?(cc=[]) ?(bcc=[]) ~subject ?id ?date ?extra_headers ?attachments content =
-  let email = create ~from ~to_ ~cc ~subject ?id ?date ?extra_headers ?attachments content in
+let send'
+      ?log
+      ?server
+      ?(from=Email_address.local_address ())
+      ?sender_args
+      ~to_
+      ?(cc=[])
+      ?(bcc=[])
+      ?reply_to
+      ~subject
+      ?id
+      ?in_reply_to
+      ?date
+      ?auto_generated
+      ?extra_headers
+      ?attachments
+      content =
+  let email =
+    create
+      ~from
+      ~to_
+      ~cc
+      ?reply_to
+      ~subject
+      ?id
+      ?in_reply_to
+      ?date
+      ?auto_generated
+      ?extra_headers
+      ?attachments
+      content in
   let recipients = to_ @ cc @ bcc in
   let sender = `Email from in
   let server = Option.map server ~f:(fun hp -> `Inet hp) in
   Expert.send' ?log ?server ~sender ?sender_args ~recipients email
 
-let send ?log ?server ?from ?sender_args ~to_ ?cc ?bcc ~subject ?id ?date ?extra_headers ?attachments content =
-  send' ?log ?server ?from ?sender_args ~to_ ?cc ?bcc ~subject ?id ?date ?extra_headers ?attachments content
+let send
+      ?log
+      ?server
+      ?from
+      ?sender_args
+      ~to_
+      ?cc
+      ?bcc
+      ?reply_to
+      ~subject
+      ?id
+      ?in_reply_to
+      ?date
+      ?auto_generated
+      ?extra_headers
+      ?attachments
+      content =
+  send'
+    ?log
+    ?server
+    ?from
+    ?sender_args
+    ~to_
+    ?cc
+    ?bcc
+    ?reply_to
+    ~subject
+    ?id
+    ?in_reply_to
+    ?date
+    ?auto_generated
+    ?extra_headers
+    ?attachments
+    content
   >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
   >>| Or_error.join
   >>| Or_error.ignore

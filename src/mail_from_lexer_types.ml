@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 
 type email =
   { local_part : string

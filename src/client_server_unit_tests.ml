@@ -1,6 +1,7 @@
-open Core.Std
+module Local_std = Std
+open Core
 open Async.Std
-open Std
+open Local_std
 open Email_message.Std
 
 let%test_module _ =

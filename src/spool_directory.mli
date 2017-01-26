@@ -1,4 +1,4 @@
-open! Core.Std
+open! Core
 open! Async.Std
 
 type t = string [@@deriving bin_io, sexp, compare]

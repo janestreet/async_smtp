@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open! Async.Std
 
 let is_accessible_directory ?create_if_missing dir =

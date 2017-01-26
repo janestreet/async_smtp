@@ -1,4 +1,4 @@
-open! Core.Std
+open! Core
 open! Async.Std
 open Email_message.Std
 open Types
@@ -37,9 +37,12 @@ val send'
   -> to_:Email_address.t list
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
+  -> ?reply_to:Email_address.t list
   -> subject:string
   -> ?id:string
+  -> ?in_reply_to:string
   -> ?date:Time.t
+  -> ?auto_generated:unit
   -> ?extra_headers:(Email_headers.Name.t * Email_headers.Value.t) list
   -> ?attachments:(attachment_name * Email.Simple.Content.t) list
   -> Email.Simple.Content.t
@@ -53,9 +56,12 @@ val send
   -> to_:Email_address.t list
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
+  -> ?reply_to:Email_address.t list
   -> subject:string
   -> ?id:string
+  -> ?in_reply_to:string
   -> ?date:Time.t
+  -> ?auto_generated:unit
   -> ?extra_headers:(Email_headers.Name.t * Email_headers.Value.t) list
   -> ?attachments:(attachment_name * Email.Simple.Content.t) list
   -> Email.Simple.Content.t

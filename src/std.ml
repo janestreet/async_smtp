@@ -6,7 +6,7 @@ module Smtp_client = struct
   include Client
   module Config = Client_config
   module Raw    = Client_raw
-  module Simple = Client_simple
+  module Simple = Simplemail
 end
 module Address                     = Types.Address
 module Smtp_credentials            = Types.Credentials
@@ -25,4 +25,4 @@ module Smtp_sender                 = Types.Sender
 module Smtp_sender_argument        = Types.Argument
 module Smtp_command                = Types.Command
 module Smtp_mail_log               = Mail_log
-module Simplemail                  = Smtp_client.Simple
+module Simplemail                  = Simplemail

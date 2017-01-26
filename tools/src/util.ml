@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Async.Std
 open Async_smtp.Std
 
@@ -46,7 +46,7 @@ module Smtp_client_config = struct
       (fun file -> Sexp.load_sexp_conv_exn file t_of_sexp)
 
   let load_sync path =
-    match Core.Std.Sys.file_exists path with
+    match Core.Sys.file_exists path with
     | `Yes -> Some (Sexp.load_sexp_conv_exn path t_of_sexp)
     | `No | `Unknown -> None
 

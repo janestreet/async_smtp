@@ -1,4 +1,4 @@
-open! Core.Std
+open! Core
 open Re2
 open Async_smtp.Std
 

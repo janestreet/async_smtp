@@ -45,7 +45,7 @@
     [1] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-how_exim_receives_and_delivers_mail.html
     [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
 *)
-open! Core.Std
+open! Core
 open! Async.Std
 open Types
 
