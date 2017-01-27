@@ -390,12 +390,12 @@ let rec start_session
       Reader.read_line reader
       >>| function
       | `Eof -> None
-      | `Ok line -> Option.try_with (fun () -> Base64.decode line)
+      | `Ok line -> Option.try_with (fun () -> Base64.decode_exn line)
     in
     let component = ["smtp-server"; "session"; "auth"] in
     begin match username with
     | None -> get_input ~msg:"Username:" ~here:[%here] ~flows ~component
-    | Some username -> Option.try_with (fun () -> Base64.decode username) |> return
+    | Some username -> Option.try_with (fun () -> Base64.decode_exn username) |> return
     end >>= function
     | None -> authentication_unsuccessful ~here:[%here] ~flows ~component ~session
     | Some username ->

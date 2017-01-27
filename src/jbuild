@@ -5,6 +5,7 @@
    (async
     async_extended
     async_ssl
+    core_extended.base64
     core
     core_extended
     textutils
