@@ -131,24 +131,20 @@ module Message : sig
     -> ?session_marker:Session_marker.t
     -> ?tags:(string * string) list
     -> 'a
-  ;;
 
 
   type t = Log.Message.t [@@deriving sexp_of]
-  ;;
+
+  val json_of_t : t -> Json_wheel_jane_street_overlay.Std.Json_type.json_type
 
   val create : (Action.t -> t) with_info
-  ;;
 
   (* Should be used only for extended debug output *)
   val debugf : (('a,unit,string,t) format4 -> 'a) with_info
-  ;;
 
   val of_error : (Error.t -> t) with_info
-  ;;
 
   val info : (unit -> t) with_info
-  ;;
 
   (* Utility accessors for the standard info tags *)
   val level : t -> Log.Level.t
@@ -164,7 +160,7 @@ module Message : sig
   (** Alias for the message field. *)
   val action : t -> Action.t
 
-  (* if a value doesn't parse, or is missing thisn will give back [None] *)
+  (* If a value doesn't parse, or is missing this will give back [None] *)
   val find_tag' : t -> tag:string -> f:(string -> 'a) -> 'a option
   val find_tag : t -> tag:string -> string option
 
@@ -199,7 +195,6 @@ module Message : sig
 end
 
 type t = Log.t
-;;
 
 (** [with_flow_and_component] - Add additional component and flow ids to log messages.
 

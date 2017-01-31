@@ -17,6 +17,7 @@ depends: [
   "core_extended"
   "email_message"
   "jbuilder"
+  "json-wheel_jane_street_overlay"
   "ppx_driver"
   "ppx_jane"
   "re2"

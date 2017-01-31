@@ -1,10 +1,7 @@
 open Core
 open Core_extended.Std
 open Async.Std
-open Async_extended.Std
 open Types
-
-module Mutex = Async_mutex
 
 module Log = Mail_log
 
@@ -17,7 +14,7 @@ module Id  = struct
 
   let counter = ref 0
 
-  let create ~envelope_with_next_hop:_ ~original_msg =
+  let create ~original_msg =
     let parent_id = Envelope.id original_msg in
     let t =
       sprintf !"%{Envelope.Id}-%s" parent_id
@@ -26,23 +23,6 @@ module Id  = struct
     incr counter;
     t
   ;;
-end
-
-module Locks = struct
-  let t : Mutex.t Id.Table.t = Id.Table.create ()
-
-  let lock id =
-    let r = Hashtbl.find_or_add t id ~default:(fun () -> Mutex.create ()) in
-    Mutex.lock r
-
-  let release id =
-    let r = Hashtbl.find_or_add t id ~default:(fun () -> Mutex.create ()) in
-    Mutex.unlock r;
-    match Mutex.try_lock r with
-    | `Acquired ->
-      Mutex.unlock r;
-      Hashtbl.remove t id
-    | `Not_acquired -> ()
 end
 
 module Status = struct
@@ -57,11 +37,44 @@ module Status = struct
     ] [@@deriving sexp, bin_io, compare]
 end
 
-(* A value of type t should only be modified via with_file below. This
-   guarantees that one has exclusive access to the spool file (guarded by a
-   mutex) and all changes are properly flushed to disk. *)
+module Queue = struct
+  type t =
+    | Active
+    | Frozen
+    | Removed
+    | Quarantine
+  [@@deriving sexp, enumerate, compare, bin_io]
+
+  let to_dirname = function
+    | Active     -> "active"
+    | Frozen     -> "frozen"
+    | Removed    -> "removed"
+    | Quarantine -> "quarantine"
+  ;;
+
+  let of_status status =
+    match status with
+    | `Frozen                           -> Some Frozen
+    | `Send_now | `Send_at _ | `Sending -> Some Active
+    | `Removed                          -> Some Removed
+    | `Quarantined _                    -> Some Quarantine
+    | `Delivered                        -> None
+  ;;
+
+  let of_status' status =
+    match of_status status with
+    | Some queue  -> Ok queue
+    | None        ->
+      Or_error.error_s
+        [%message "Specified status not associated with a queue"
+                    (status : Status.t)]
+  ;;
+end
+
+(* A value of type t should only be modified via [On_disk_spool].  This guarantees
+   that all changes are properly flushed to disk. *)
 type t =
-  { spool_dir                    : Spool_directory.t
+  { spool_dir                    : string
   ; id                           : Id.t
   (* with default so that sexps without a flowid still parse. *)
   ; flows                        : Log.Flows.t [@default Log.Flows.none]
@@ -73,79 +86,70 @@ type t =
   ; mutable retry_intervals      : Time.Span.t list
   ; mutable remaining_recipients : Email_address.t list
   (* Currently not used, but saved to disk to aid in triaging frozen messages and failed
-     deliveries. Addresses on this list will not be included in remaining_recipients, and
-     would otherwise be lost to the ether. *)
+     deliveries. Addresses on this list will not be included in remaining_recipients,
+     and would otherwise be lost to the ether. *)
   ; mutable failed_recipients    : Email_address.t list
   ; mutable relay_attempts       : (Time.t * Error.t) list
   ; mutable status               : Status.t
   } [@@deriving fields, sexp, bin_io]
 
+type meta = t [@@deriving sexp]
+
+
 let compare t1 t2 =
   Sexp.compare (sexp_of_t t1) (sexp_of_t t2)
-
-let file t =
-  match t.status with
-  | `Frozen ->
-    Some (Spool_directory.frozen_dir t.spool_dir ^/ Id.to_string t.id)
-  | `Send_now | `Send_at _ | `Sending ->
-    Some (Spool_directory.active_dir t.spool_dir ^/ Id.to_string t.id)
-  | `Removed ->
-    Some (Spool_directory.removed_dir t.spool_dir ^/ Id.to_string t.id)
-  | `Quarantined _ ->
-    Some (Spool_directory.quarantine_dir t.spool_dir ^/ Id.to_string t.id)
-  | `Delivered -> None
+;;
 
 let status t =
   match t.status with
   | `Send_at time when Time.(time < now ()) -> `Send_now
   | status -> status
+;;
 
 module On_disk = struct
-  type meta = t [@@deriving sexp, bin_io]
+  module T = struct
+    type t =
+      { mutable meta : meta
+      ; mutable envelope : Envelope.t
+      } [@@deriving fields, sexp]
+  end
 
-  type t =
-    { mutable meta : meta
-    ; mutable envelope : Envelope.t
-    } [@@deriving fields, sexp, bin_io]
+  include T
+  include Sexpable.To_stringable (T)
+
+  module Queue = Queue
+
+  module Name_generator = struct
+    type t = Envelope.t
+    let next original_msg ~attempt:_ =
+      Id.create ~original_msg
+    ;;
+  end
 
   let create = Fields.create
-
-  let save t =
-    begin
-      match file t.meta with
-      | Some file -> return (Ok (file, Filename.basename file))
-      | None ->
-        Deferred.Or_error.error
-          "Trying to save state of a delivered message: %s"
-          t sexp_of_t
-    end
-    >>=? fun (file, filename) ->
-    Deferred.Or_error.try_with (fun () ->
-      let tmp = Spool_directory.tmp_dir t.meta.spool_dir ^/ filename in
-      Writer.save_sexp tmp (sexp_of_t t)
-      >>= fun () ->
-      Unix.rename ~src:tmp ~dst:file)
-    >>= function
-    | Ok () -> return (Ok ())
-    | Error e ->
-      return (Error e)
-
-  let load path =
-    Deferred.Or_error.try_with_join (fun () ->
-      Reader.load_sexp path t_of_sexp)
-    >>=? fun t ->
-    let file = Option.value_exn (file t.meta) in
-    if String.equal file path then return (Ok t)
-    else let error = sprintf
-                       "path mismatch: spooled message loaded from %s should be in %s"
-                       path file
-      in
-      return (Or_error.error error t sexp_of_t)
 end
 
-let create spool_dir ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_msg =
+module On_disk_spool = struct
+  include Multispool.Make(On_disk)
+
+  (* Hide optional argument from the interface *)
+  let load str = load str
+
+  let ls t queues =
+    Deferred.Or_error.List.concat_map queues ~f:(fun queue -> list t queue)
+  ;;
+end
+
+let entry t =
+  let open Deferred.Or_error.Let_syntax in
+  let open On_disk_spool in
+  let spool = load_unsafe t.spool_dir in
+  let%map queue = Queue.of_status' t.status |> Deferred.return in
+  Entry.create spool queue ~name:t.id
+;;
+
+let create spool ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_msg =
   let parent_id = Envelope.id original_msg in
-  let id = Id.create ~envelope_with_next_hop ~original_msg in
   let next_hop_choices =
     Envelope_with_next_hop.next_hop_choices envelope_with_next_hop
   in
@@ -154,9 +158,13 @@ let create spool_dir ~log:_ ~initial_status envelope_with_next_hop ~flows ~origi
   in
   let envelope = Envelope_with_next_hop.envelope envelope_with_next_hop in
   let remaining_recipients = Envelope.recipients envelope in
+  Queue.of_status' initial_status |> Deferred.return
+  >>=? fun queue ->
+  On_disk_spool.Unique_name.reserve spool original_msg
+  >>=? fun id ->
   let t =
     Fields.create
-      ~spool_dir
+      ~spool_dir:(On_disk_spool.dir spool)
       ~spool_date:(Time.now ())
       ~remaining_recipients
       ~failed_recipients:[]
@@ -165,83 +173,67 @@ let create spool_dir ~log:_ ~initial_status envelope_with_next_hop ~flows ~origi
       ~relay_attempts:[]
       ~parent_id
       ~status:initial_status
-      ~id
+      ~id:(id :> string)
       ~flows
   in
   let on_disk = On_disk.create ~meta:t ~envelope in
-  On_disk.save on_disk
-  >>|? fun () ->
-  t
+  On_disk_spool.enqueue spool queue on_disk (`Use id)
+  >>=? fun (_ : On_disk_spool.Entry.t) ->
+  Deferred.Or_error.return t
+;;
 
-let load path =
-  On_disk.load path
-  >>|? fun on_disk ->
+let load entry =
+  let open Deferred.Or_error.Let_syntax in
+  let%map on_disk = On_disk_spool.Entry.contents_unsafe entry in
   on_disk.meta
+;;
 
-let load_with_envelope path =
-  On_disk.load path
-  >>|? fun on_disk ->
+let load_with_envelope entry =
+  let open Deferred.Or_error.Let_syntax in
+  let%map on_disk = On_disk_spool.Entry.contents_unsafe entry in
   on_disk.meta, on_disk.envelope
+;;
 
 let last_relay_attempt t =
   List.hd t.relay_attempts
+;;
 
 let with_file t
       (f : Envelope.t -> [`Sync of Envelope.t | `Unlink] Or_error.t Deferred.t)
-  : unit Or_error.t Deferred.t
-  =
-  Locks.lock t.id
-  >>= fun () ->
-  begin
-    begin
-      match file t with
-      | Some file -> return (Ok file)
-      | None ->
-        Deferred.Or_error.error
-          "Attempting file operation on a delivered message"
-          t sexp_of_t
-    end
-    >>=? fun from_file ->
-    On_disk.load from_file
-    >>=? fun on_disk ->
-    begin
-      if compare t on_disk.meta = 0 then return (Ok ())
-      else let e = Error.create
-                     "spooled message in memory differs from spooled message on disk"
-                     (`In_memory t, `On_disk on_disk.meta, `File from_file)
-                     [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`File of string]]
+  : unit Or_error.t Deferred.t =
+  entry t
+  >>=? fun entry ->
+  return (Queue.of_status' t.status)
+  >>=? fun original_queue ->
+  On_disk_spool.with_entry entry
+    ~f:(fun on_disk ->
+      match compare t on_disk.meta = 0 with
+      | false ->
+        let e = Error.create
+                  "spooled message in memory differs from spooled message on disk"
+                  (`In_memory t, `On_disk on_disk.meta, `Entry entry)
+                  [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`Entry of On_disk_spool.Entry.t]]
         in
-        return (Error e)
-    end
-    >>=? fun () ->
-    (* If the destination file differs from the source file (say, if the status
-       of the message changed) then we need to unlink the old file after
-       creating the new one. However, if the destination file is the same as the
-       source file, we need to be careful not to unlink the new file. We dont't
-       trust String.equal because different paths may refer to the same file. So
-       instead we move the source file out of the way first and then delete it
-       at the end. *)
-    let from_file_bak = from_file ^ ".bak" in
-    Common.rename ~src:from_file ~dst:from_file_bak
-    >>=? fun () ->
-    f on_disk.envelope
-    >>=? fun action ->
-    begin match action with
-    | `Unlink ->
-      Common.unlink from_file_bak
-    | `Sync envelope'  ->
-      on_disk.meta <- t;
-      on_disk.envelope <- envelope';
-      On_disk.save on_disk
-      >>=? fun () ->
-      Common.unlink from_file_bak
-    end
-    >>=? fun () ->
-    return (Ok ())
-  end
-  >>= fun result ->
-  Locks.release t.id;
-  return result
+        return (`Save (on_disk, original_queue), Error e)
+      | true ->
+        f on_disk.envelope
+        >>= function
+        | Error _ as e -> return (`Save (on_disk, original_queue), e)
+        | Ok (`Unlink) -> return (`Remove, Ok ())
+        | Ok (`Sync envelope) ->
+          (* Derive queue from mutable [t.status] as it may have changed in [~f] *)
+          Queue.of_status' t.status
+          |> Or_error.tag ~tag:(Sexp.to_string (sexp_of_t t))
+          |> Deferred.return
+          >>= function
+          | Error _ as e -> return (`Save (on_disk, original_queue), e)
+          | Ok new_queue ->
+            on_disk.meta <- t;
+            on_disk.envelope <- envelope;
+            return (`Save (on_disk, new_queue), Ok ())
+    )
+  >>| Or_error.join
+;;
 
 let map_envelope t ~f =
   with_file t (fun envelope ->
@@ -357,6 +349,7 @@ let send_to_hops t ~log ~config envelope =
             else send_to_hops untried_next_hops
   in
   send_to_hops t.next_hop_choices
+;;
 
 let do_send t ~log ~config =
   with_file t (fun envelope ->
@@ -382,36 +375,32 @@ let send t ~log ~config =
   | `Send_now | `Send_at _ -> do_send t ~log ~config
   | `Frozen ->
     return (Or_error.error_string
-              "Spooled_message.send: message is frozen")
+              "Message.send: message is frozen")
   | `Removed ->
     return (Or_error.error_string
-              "Spooled_message.send: message is removed")
+              "Message.send: message is removed")
   | `Quarantined _ ->
     return (Or_error.error_string
-              "Spooled_message.send: message is quarantined")
+              "Message.send: message is quarantined")
   | `Sending ->
     return (Or_error.error_string
-              "Spooled_message.send: message is already being sent")
+              "Message.send: message is already being sent")
   | `Delivered ->
     return (Or_error.error_string
-              "Spooled_message.send: message is delivered")
+              "Message.send: message is delivered")
+;;
 
 let size_of_file t =
-  match file t with
-  | None ->
-    Deferred.Or_error.error
-      "Spooled_message.size_of_file: message already delivered."
-      t sexp_of_t
-  | Some file ->
-    Deferred.Or_error.try_with_join (fun () ->
-      Unix.stat file
-      >>= fun stats ->
-      let size = Unix.Stats.size stats |> Float.of_int64 in
-      return (Ok (Byte_units.create `Bytes size)))
+  let open Deferred.Or_error.Let_syntax in
+  let%bind entry = entry t in
+  let%map stats = On_disk_spool.Entry.stat entry in
+  let size = Unix.Stats.size stats |> Float.of_int64 in
+  Byte_units.create `Bytes size
 ;;
 
 let time_on_spool t =
-  Time.diff (Time.now ()) (spool_date t)
+  Time.diff (Time.now ()) t.spool_date
+;;
 
 module T = struct
   type nonrec t = t [@@deriving sexp]

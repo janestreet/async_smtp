@@ -45,8 +45,6 @@ let%test_module _ =
           Ivar.fill finished envelope;
           return (`Consume "done")
       end in
-      Unix.mkdir ~p:() (tmp_dir ^/ "spool")
-      >>= fun () ->
       Smtp_server.start ~log ~config:server_config (module Cb)
       >>| Or_error.ok_exn
       >>= fun server ->

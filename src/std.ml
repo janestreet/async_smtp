@@ -16,6 +16,7 @@ module Smtp_events                 = Smtp_events
 module Email                       = Email_message.Email
 module Email_address               = Types.Email_address
 module Email_headers               = Email_message.Headers
+module Multispool                  = Multispool
 module Smtp_envelope               = Types.Envelope
 module Smtp_envelope_with_next_hop = Types.Envelope_with_next_hop
 module Smtp_envelope_selector      = Envelope_selector

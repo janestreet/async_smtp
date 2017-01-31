@@ -3,6 +3,15 @@ open Async.Std
 open Email_message.Std
 open Types
 
+open Json_wheel_jane_street_overlay.Std
+module J = struct
+  include Json_type.Build
+  let array_of f v = List.map ~f v |> array
+  let val_or_array_of f = function
+    | [ v ] -> f v
+    | vs -> array_of f vs
+end
+
 (* Level with a comparison function that has our desired behaviour *)
 module Level : Comparable.S with type t := Log.Level.t = struct
   include Comparable.Make(struct
@@ -52,6 +61,27 @@ module Mail_fingerprint = struct
       }
 
   let of_email = of_email ~headers:[]
+
+  let json_of_headers headers =
+    String.Map.of_alist_multi headers
+    |> Map.to_alist
+    |> List.Assoc.map ~f:(function
+      | [v] -> J.string v
+      | vs -> J.array (List.rev_map vs ~f:J.string))
+    |> J.objekt
+
+  let rec json_of_t t =
+    let j = [] in
+    let j = match t.parts with
+      | [] -> j
+      | parts -> ("parts", J.array (List.map ~f:json_of_t parts)) :: j
+    in
+    let j = match t.md5 with
+      | None -> j
+      | Some md5 -> ("md5", J.string md5) :: j
+    in
+    let j = ("headers", json_of_headers t.headers) :: j in
+    J.objekt j
 end
 
 module Here = struct
@@ -304,6 +334,41 @@ module Message = struct
     f tags
 
   type t = Log.Message.t [@@deriving sexp_of]
+
+  let json_of_t =
+    let tag name to_json = name, { Logstash_conv.Message.field = name; to_json } in
+    let tag1 name to_json = tag name (J.val_or_array_of to_json) in
+    Logstash_conv.Message.json_of_t' ()
+      ~tags:
+        [ tag1 Tag.component   J.string
+        ; tag1 Tag.spool_id    J.string
+        ; tag1 Tag.rfc822_id   J.string
+        ; tag1 Tag.local_id    J.string
+        ; tag1 Tag.sender      J.string
+        ; tag  Tag.recipient
+            (fun strs ->
+               List.filter_map strs ~f:(function
+                 | "" -> None
+                 | str -> Some (J.string str))
+               |> J.array)
+        ; tag1 Tag.email_fingerprint
+            (fun str ->
+               Sexp.of_string_conv_exn str Mail_fingerprint.t_of_sexp
+               |> Mail_fingerprint.json_of_t)
+        ; tag1 Tag.local_address J.string
+        ; tag1 Tag.remote_address J.string
+        ; tag1 Tag.command J.string
+        ; tag1 Tag.dest (fun str ->
+            match Sexp.of_string_conv_exn str Address.t_of_sexp with
+            | `Unix file -> J.(objekt [ "unix", string file ])
+            | `Inet hp -> J.(objekt [ "inet", string (Host_and_port.to_string hp) ])
+            | exception _ -> J.string str)
+        ; tag1 Tag.reply J.string
+        ; tag1 Tag.session_marker J.string
+        ; tag  Tag.flow J.(array_of string)
+        ; tag1 Tag.location J.string
+        ]
+    |> Staged.unstage
 
   let create =
     with_info ~f:(fun tags action ->

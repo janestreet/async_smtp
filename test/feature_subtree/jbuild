@@ -1,0 +1,10 @@
+(library
+ ((name feature_test_async_smtp)
+  (libraries
+   (core
+    async
+    async_smtp
+    expect_test_helpers
+    test_async_smtp))
+  (inline_tests
+   ((alias feature-subtree-build)))))

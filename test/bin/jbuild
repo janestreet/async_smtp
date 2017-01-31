@@ -1,0 +1,9 @@
+(executables
+ ((names
+   (spool_memory_test
+    ))
+  (libraries
+   (test_async_smtp
+    core))))
+
+(enforce_style ())

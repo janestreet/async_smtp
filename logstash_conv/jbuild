@@ -1,0 +1,9 @@
+(library
+ ((name logstash_conv)
+  (public_name async_smtp.logstash_conv)
+  (libraries (
+    core
+    async
+    json-wheel_jane_street_overlay
+    ))
+  ))

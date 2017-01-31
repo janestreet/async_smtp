@@ -69,7 +69,7 @@ let error        = binable (module Error)
 
 let smtp_event = binable (module Smtp_events.Event)
 
-let id           = binable (module Spool.Spooled_message_id)
+let id           = binable (module Spool.Message_id)
 let spool_status = binable (module Spool.Status)
 let spool_event  = binable (module Spool.Event)
 let send_info    = binable (module Spool.Send_info)

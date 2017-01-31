@@ -42,10 +42,6 @@ module Callbacks = struct
 end
 
 let main () =
-  let spool_dir = Smtp_server.Config.spool_dir config in
-  Log.Global.info "creating %s" spool_dir;
-  Unix.mkdir ~p:() spool_dir
-  >>= fun () ->
   Smtp_server.start ~log:(Lazy.force Log.Global.log) ~config (module Callbacks : Smtp_server.Callbacks.S)
   >>| Or_error.ok_exn
   >>= fun server ->

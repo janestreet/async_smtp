@@ -49,7 +49,7 @@ open! Core
 open! Async.Std
 open Types
 
-module Spooled_message_id : Identifiable
+module Message_id : Identifiable
 
 type t
 
@@ -99,14 +99,14 @@ val set_max_concurrent_jobs : t -> int -> unit
 
 val freeze
   :  t
-  -> Spooled_message_id.t list
+  -> Message_id.t list
   -> unit Deferred.Or_error.t
 
 module Send_info : sig
   type t =
     [ `All_messages
     | `Frozen_only
-    | `Some_messages of Spooled_message_id.t list ] [@@deriving bin_io]
+    | `Some_messages of Message_id.t list ] [@@deriving bin_io]
 end
 
 val send
@@ -120,14 +120,14 @@ val send
    command. *)
 val remove
   :  t
-  -> Spooled_message_id.t list
+  -> Message_id.t list
   -> unit Deferred.Or_error.t
 
 module Recover_info : sig
   type t =
     { msgs :
-        [ `Removed of Spooled_message_id.t list
-        | `Quarantined of Spooled_message_id.t list ]
+        [ `Removed of Message_id.t list
+        | `Quarantined of Message_id.t list ]
     ; wrapper : Email_message.Wrapper.t option
     } [@@deriving bin_io]
 end
@@ -140,7 +140,7 @@ val recover
 module Spooled_message_info : sig
   type t [@@deriving sexp, bin_io]
 
-  val id                 : t -> Spooled_message_id.t
+  val id                 : t -> Message_id.t
   val spool_date         : t -> Time.t
   val last_relay_attempt : t -> (Time.t * Error.t) option
   val parent_id          : t -> Envelope.Id.t
@@ -186,13 +186,13 @@ val count_from_disk : Server_config.t -> int Or_error.t Deferred.t
 
 module Event : sig
   type t = Time.t *
-           [ `Spooled       of Spooled_message_id.t
-           | `Delivered     of Spooled_message_id.t
-           | `Frozen        of Spooled_message_id.t
-           | `Removed       of Spooled_message_id.t
-           | `Unfrozen      of Spooled_message_id.t
-           | `Recovered     of Spooled_message_id.t * [`From_quarantined | `From_removed]
-           | `Quarantined   of Spooled_message_id.t * [`Reason of string]
+           [ `Spooled     of Message_id.t
+           | `Delivered   of Message_id.t
+           | `Frozen      of Message_id.t
+           | `Removed     of Message_id.t
+           | `Unfrozen    of Message_id.t
+           | `Recovered   of Message_id.t * [`From_quarantined | `From_removed]
+           | `Quarantined of Message_id.t * [`Reason of string]
            | `Ping ]
   [@@deriving sexp, bin_io]
 

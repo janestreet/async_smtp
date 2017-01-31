@@ -31,10 +31,10 @@ module Set_max_send_jobs : sig
 end
 
 module Freeze : sig
-  val spec : unit -> (msgids:Smtp_spool.Spooled_message_id.t list -> 'a, 'a) Command.Spec.t
+  val spec : unit -> (msgids:Smtp_spool.Message_id.t list -> 'a, 'a) Command.Spec.t
 
   val dispatch
-    :  msgids:Smtp_spool.Spooled_message_id.t list
+    :  msgids:Smtp_spool.Message_id.t list
     -> Rpc.Connection.t
     -> unit Deferred.t
 end
@@ -53,10 +53,10 @@ module Send : sig
 end
 
 module Remove : sig
-  val spec : unit -> (msgids:Smtp_spool.Spooled_message_id.t list -> 'a, 'a) Command.Spec.t
+  val spec : unit -> (msgids:Smtp_spool.Message_id.t list -> 'a, 'a) Command.Spec.t
 
   val dispatch
-    :  msgids:Smtp_spool.Spooled_message_id.t list
+    :  msgids:Smtp_spool.Message_id.t list
     -> Rpc.Connection.t
     -> unit Deferred.t
 end

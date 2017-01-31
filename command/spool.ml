@@ -6,7 +6,7 @@ open Common
 
 let msgid =
   Command.Spec.Arg_type.create
-    Smtp_spool.Spooled_message_id.of_string
+    Smtp_spool.Message_id.of_string
 
 module Status = struct
   type format = [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] [@@deriving sexp]

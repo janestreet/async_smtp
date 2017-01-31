@@ -5,21 +5,22 @@ module Config = Server_config
 
 open Types
 
-module Spooled_message = Spooled_message_internal
-module Spooled_message_id = Spooled_message.Id
+module Message_id = Message.Id
+module Message_spool = Message.On_disk_spool
+module Message_queue = Message.Queue
 
 module Log = Mail_log
 
 module Event = struct
   module T = struct
     type t = Time.t *
-             [ `Spooled     of Spooled_message.Id.t
-             | `Delivered   of Spooled_message.Id.t
-             | `Frozen      of Spooled_message.Id.t
-             | `Removed     of Spooled_message.Id.t
-             | `Unfrozen    of Spooled_message.Id.t
-             | `Recovered   of Spooled_message_id.t * [`From_quarantined | `From_removed]
-             | `Quarantined of Spooled_message.Id.t * [`Reason of string]
+             [ `Spooled     of Message_id.t
+             | `Delivered   of Message_id.t
+             | `Frozen      of Message_id.t
+             | `Removed     of Message_id.t
+             | `Unfrozen    of Message_id.t
+             | `Recovered   of Message_id.t * [`From_quarantined | `From_removed]
+             | `Quarantined of Message_id.t * [`Reason of string]
              | `Ping ]
     [@@deriving sexp, bin_io, compare]
 
@@ -32,7 +33,7 @@ module Event = struct
 
   let to_string (_rcvd_time, happening) =
     let without_time =
-      let id_to_s = Spooled_message.Id.to_string in
+      let id_to_s = Message_id.to_string in
       match happening with
       | `Spooled    msgid             -> (id_to_s msgid) ^ " spooled"
       | `Frozen     msgid             -> (id_to_s msgid) ^ " frozen"
@@ -47,20 +48,20 @@ module Event = struct
   ;;
 
   let event_gen ~here ~log ~f event_stream spooled_msg =
-    let id = Spooled_message.id spooled_msg in
+    let id = Message.id spooled_msg in
     let t = f ~id spooled_msg in
     Log.debug log (lazy (Log.Message.create
                            ~here
-                           ~flows:(Spooled_message.flows spooled_msg)
+                           ~flows:(Message.flows spooled_msg)
                            ~component:["spool";"event-stream"]
-                           ~spool_id:(Spooled_message_id.to_string id)
+                           ~spool_id:(Message_id.to_string id)
                            ~tags:["event", sprintf !"%{sexp:t}" t]
                            "writing event"));
     Bus.write event_stream t
   ;;
 
   let spooled   =
-    event_gen ~f:(fun ~id  msg -> (Spooled_message.spool_date msg, `Spooled id))
+    event_gen ~f:(fun ~id  msg -> (Message.spool_date msg, `Spooled id))
   ;;
 
   let quarantine reason =
@@ -78,11 +79,11 @@ module Event = struct
 end
 
 type t =
-  { spool_dir     : Spool_directory.t
+  { spool         : Message_spool.t
   ; send_throttle : Adjustable_throttle.t
   (* Don't hit the max open files system limit. *)
   ; file_throttle : unit Throttle.t
-  ; messages      : Spooled_message.t Spooled_message.Id.Table.t
+  ; messages      : Message.t Message_id.Table.t
   ; event_stream  : (Event.t -> unit) Bus.Read_write.t
   ; client        : Client_config.t
   ; log           : Log.t
@@ -90,25 +91,25 @@ type t =
 ;;
 
 let add_message t msg =
-  let id = Spooled_message.id msg in
+  let id = Message.id msg in
   match Hashtbl.add t.messages ~key:id ~data:msg with
   | `Ok -> ()
   | `Duplicate ->
     Log.error t.log (lazy (Log.Message.create
                              ~here:[%here]
-                             ~flows:(Spooled_message.flows msg)
+                             ~flows:(Message.flows msg)
                              ~component:["spool";"admin"]
-                             ~spool_id:(Spooled_message_id.to_string id)
+                             ~spool_id:(Message_id.to_string id)
                              "Message already in spool"))
 
 let remove_message t msg =
-  let id = Spooled_message.id msg in
+  let id = Message.id msg in
   if not (Hashtbl.mem t.messages id) then
     Log.error t.log (lazy (Log.Message.create
                              ~here:[%here]
-                             ~flows:(Spooled_message.flows msg)
+                             ~flows:(Message.flows msg)
                              ~component:["spool";"admin"]
-                             ~spool_id:(Spooled_message_id.to_string id)
+                             ~spool_id:(Message_id.to_string id)
                              "Trying to remove message that is not in spool"));
   Hashtbl.remove t.messages id
 
@@ -131,8 +132,8 @@ let create ~config ~log : t Deferred.Or_error.t =
                         ~tags:[ "spool-dir", spool_dir
                               ; "max-concurrent-jobs", Int.to_string max_concurrent_jobs]
                         "initializing"));
-  Spool_directory.init ~path:spool_dir
-  >>|? fun spool_dir ->
+  Message_spool.create spool_dir
+  >>|? fun spool ->
   let event_stream =
     Bus.create [%here] Arity1 ~allow_subscription_after_first_write:true
       ~on_callback_raise:Error.raise
@@ -149,9 +150,9 @@ let create ~config ~log : t Deferred.Or_error.t =
                               ~component:["spool";"event-stream"]
                               "ping"));
        Bus.write event_stream (Time.now (), `Ping));
-  let messages = Spooled_message.Id.Table.create () in
+  let messages = Message_id.Table.create () in
   Fields.create
-    ~spool_dir
+    ~spool
     ~send_throttle
     ~file_throttle
     ~messages
@@ -162,7 +163,7 @@ let create ~config ~log : t Deferred.Or_error.t =
 
 (* Using the Async queue to store the messages waiting for retry. *)
 let rec enqueue ?at t spooled_msg =
-  let msgid = Spooled_message.id spooled_msg in
+  let msgid = Message.id spooled_msg in
   don't_wait_for (
     begin match at with
     | None      -> Deferred.unit
@@ -173,12 +174,12 @@ let rec enqueue ?at t spooled_msg =
     else begin
       Log.debug t.log (lazy (Log.Message.create
                                ~here:[%here]
-                               ~flows:(Spooled_message.flows spooled_msg)
+                               ~flows:(Message.flows spooled_msg)
                                ~component:["spool";"throttle"]
-                               ~spool_id:(Spooled_message_id.to_string msgid)
+                               ~spool_id:(Message_id.to_string msgid)
                                "enqueuing message"));
       Adjustable_throttle.enqueue t.send_throttle (fun () ->
-        match Spooled_message.status spooled_msg with
+        match Message.status spooled_msg with
         | `Delivered  | `Sending | `Frozen | `Removed | `Quarantined _ ->
           (* Only actually call [send] if the status is [`Send_now]. Between the time an
              async job was scheduled and the time it gets run, the status of the message
@@ -186,17 +187,17 @@ let rec enqueue ?at t spooled_msg =
              causing a permanent status change. *)
           return ()
         | `Send_now  | `Send_at _ ->
-          Spooled_message.send spooled_msg ~log:t.log ~config:t.client
+          Message.send spooled_msg ~log:t.log ~config:t.client
           >>| function
           | Error e ->
             Log.error t.log (lazy (Log.Message.of_error
                                      ~here:[%here]
-                                     ~flows:(Spooled_message.flows spooled_msg)
+                                     ~flows:(Message.flows spooled_msg)
                                      ~component:["spool";"send"]
-                                     ~spool_id:(Spooled_message_id.to_string msgid)
+                                     ~spool_id:(Message_id.to_string msgid)
                                      e))
           | Ok () ->
-            match Spooled_message.status spooled_msg with
+            match Message.status spooled_msg with
             | `Delivered ->
               remove_message t spooled_msg;
               delivered_event t ~here:[%here] spooled_msg
@@ -206,63 +207,63 @@ let rec enqueue ?at t spooled_msg =
               enqueue ~at t spooled_msg
             | `Sending ->
               failwithf !"Message has status Sending after returning from \
-                          Spooled_message.send: %{Spooled_message.Id}"
-                (Spooled_message.id spooled_msg) ()
+                          Message.send: %{Message_id}"
+                (Message.id spooled_msg) ()
             | `Frozen | `Removed | `Quarantined _ -> ())
     end)
 ;;
 
 let schedule t msg =
-  match Spooled_message.status msg with
+  match Message.status msg with
   | `Frozen | `Removed | `Quarantined _ -> ()
   | (`Sending | `Delivered) as status ->
-    failwithf !"Unexpected status %{sexp:Spooled_message.Status.t} when trying \
-                to schedule message %{Spooled_message.Id}"
-      status (Spooled_message.id msg) ()
+    failwithf !"Unexpected status %{sexp:Message.Status.t} when trying \
+                to schedule message %{Message_id}"
+      status (Message.id msg) ()
   | `Send_at at ->
     Log.info t.log (lazy (Log.Message.create
                             ~here:[%here]
-                            ~flows:(Spooled_message.flows msg)
+                            ~flows:(Message.flows msg)
                             ~component:["spool";"queue"]
-                            ~spool_id:(Spooled_message_id.to_string (Spooled_message.id msg))
+                            ~spool_id:(Message_id.to_string (Message.id msg))
                             ~tags:["time", sprintf !"%{sexp:Time.t}" at]
                             "send later"));
     enqueue ~at t msg
   | `Send_now ->
     Log.info t.log (lazy (Log.Message.create
                             ~here:[%here]
-                            ~flows:(Spooled_message.flows msg)
+                            ~flows:(Message.flows msg)
                             ~component:["spool";"queue"]
-                            ~spool_id:(Spooled_message_id.to_string (Spooled_message.id msg))
+                            ~spool_id:(Message_id.to_string (Message.id msg))
                             "send now"));
     enqueue t msg
 
 let load t =
-  Spool_directory.ls t.spool_dir
+  Message_spool.ls t.spool [Message_queue.Active; Message_queue.Frozen]
   >>=? fun entries ->
   Log.debug t.log (lazy (Log.Message.create
                            ~here:[%here]
                            ~flows:Log.Flows.none
                            ~component:["spool";"init"]
-                           ~tags:["files", sprintf !"%{sexp:string list}" entries]
+                           ~tags:["entries", sprintf !"%{sexp:Message_spool.Entry.t list}" entries]
                            "found files"));
   Deferred.List.iter entries ~how:`Parallel ~f:(fun entry ->
-    Throttle.enqueue t.file_throttle (fun () -> Spooled_message.load entry)
+    Throttle.enqueue t.file_throttle (fun () -> Message.load entry)
     >>| function
     | Error e ->
       Log.error t.log (lazy (Log.Message.of_error
                                ~here:[%here]
                                ~flows:Log.Flows.none
                                ~component:["spool";"init"]
-                               ~tags:["files", sprintf !"%{sexp: string list}" [entry]]
+                               ~tags:["entries", sprintf !"%{sexp:Message_spool.Entry.t list}" [entry]]
                                e))
     | Ok msg ->
       Log.info t.log (lazy (Log.Message.create
                               ~here:[%here]
                               ~flows:Log.Flows.none
                               ~component:["spool";"init"]
-                              ~tags:["files", sprintf !"%{sexp: string list}" [entry]]
-                              ~spool_id:(Spooled_message_id.to_string (Spooled_message.id msg))
+                              ~tags:["entries", sprintf !"%{sexp:Message_spool.Entry.t list}" [entry]]
+                              ~spool_id:(Message_id.to_string (Message.id msg))
                               "loaded"));
       add_message t msg;
       schedule t msg)
@@ -281,8 +282,8 @@ let create ~config ~log () =
 let add t ~flows ~original_msg messages =
   Deferred.Or_error.List.iter messages ~how:`Parallel ~f:(fun envelope_with_next_hop ->
     Throttle.enqueue t.file_throttle (fun () ->
-      Spooled_message.create
-        t.spool_dir
+      Message.create
+        t.spool
         ~log:t.log
         ~flows:(Log.Flows.extend flows `Outbound_envelope)
         ~initial_status:`Send_now
@@ -302,8 +303,8 @@ let quarantine t ~reason ~flows ~original_msg messages =
     ~f:(fun envelope_with_next_hop ->
       Throttle.enqueue t.file_throttle
         (fun () ->
-           Spooled_message.create
-             t.spool_dir
+           Message.create
+             t.spool
              ~log:t.log
              ~flows:(Log.Flows.extend flows `Outbound_envelope)
              ~initial_status:(`Quarantined reason)
@@ -335,7 +336,7 @@ let freeze t ids =
   Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
     with_outstanding_msg t id ~f:(fun spooled_msg ->
       Throttle.enqueue t.file_throttle (fun () ->
-        Spooled_message.freeze spooled_msg ~log:t.log)
+        Message.freeze spooled_msg ~log:t.log)
       >>=? fun () ->
       frozen_event t ~here:[%here] spooled_msg;
       Deferred.Or_error.ok_unit))
@@ -345,13 +346,13 @@ module Send_info = struct
   type t =
     [ `All_messages
     | `Frozen_only
-    | `Some_messages of Spooled_message_id.t list ] [@@deriving bin_io]
+    | `Some_messages of Message_id.t list ] [@@deriving bin_io]
 end
 
 let send_msgs ?(retry_intervals = []) t ids =
   let do_send ?event msg =
     Throttle.enqueue t.file_throttle (fun () ->
-      Spooled_message.mark_for_send_now ~retry_intervals msg ~log:t.log
+      Message.mark_for_send_now ~retry_intervals msg ~log:t.log
     )
     >>=? fun () ->
     Option.iter event ~f:(fun event -> event t msg);
@@ -360,13 +361,13 @@ let send_msgs ?(retry_intervals = []) t ids =
   in
   Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
     with_outstanding_msg t id ~f:(fun msg ->
-      match Spooled_message.status msg with
+      match Message.status msg with
       | `Frozen ->
         do_send ~event:(unfrozen_event ~here:[%here]) msg
       | `Send_at _ ->
         (* This will enqueue the message without changing what was previously
            queued, so we will attempt to deliver twice. It's ok,
-           [Spooled_message.send] can deal with this. *)
+           [Message.send] can deal with this. *)
         do_send msg
       | `Sending | `Delivered | `Send_now | `Removed | `Quarantined _ -> return (Ok ())
     )
@@ -377,10 +378,10 @@ let remove t ids =
   Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
     with_outstanding_msg t id ~f:(fun spooled_msg ->
       begin
-        match Spooled_message.status spooled_msg with
+        match Message.status spooled_msg with
         | `Frozen ->
           Throttle.enqueue t.file_throttle
-            (fun () -> Spooled_message.remove spooled_msg ~log:t.log)
+            (fun () -> Message.remove spooled_msg ~log:t.log)
         | `Send_at _ | `Send_now | `Sending | `Delivered | `Removed | `Quarantined _ ->
           Error (Error.of_string "Cannot remove a message that is not currently frozen")
           |> return
@@ -394,23 +395,22 @@ let remove t ids =
 module Recover_info = struct
   type t =
     { msgs :
-        [ `Removed of Spooled_message_id.t list
-        | `Quarantined of Spooled_message_id.t list ]
+        [ `Removed of Message_id.t list
+        | `Quarantined of Message_id.t list ]
     ; wrapper : Email_message.Wrapper.t option
     } [@@deriving bin_io]
 end
 
 let recover t (info : Recover_info.t) =
-  let msgids, from_where, dir =
+  let msgids, from_queue, from_queue' =
     match info.msgs with
-    | `Quarantined msgids ->
-      msgids, `From_quarantined, Spool_directory.quarantine_dir t.spool_dir
-    | `Removed msgids ->
-      msgids, `From_removed, Spool_directory.removed_dir t.spool_dir
+    | `Quarantined msgids -> msgids, Message_queue.Quarantine, `From_quarantined
+    | `Removed msgids     -> msgids, Message_queue.Removed, `From_removed
   in
   Deferred.Or_error.List.iter msgids ~how:`Parallel ~f:(fun id ->
-    let path = dir ^/ Spooled_message.Id.to_string id in
-    Throttle.enqueue t.file_throttle (fun () -> Spooled_message.load path)
+    let name = Message_id.to_string id in
+    let entry = Message_spool.Entry.create t.spool from_queue ~name in
+    Throttle.enqueue t.file_throttle (fun () -> Message.load entry)
     >>= function
     | Error e ->
       let e = Error.tag e ~tag:"Failed to recover message" in
@@ -418,28 +418,28 @@ let recover t (info : Recover_info.t) =
                                ~here:[%here]
                                ~flows:Log.Flows.none
                                ~component:["spool";"admin"]
-                               ~spool_id:(Spooled_message_id.to_string id)
+                               ~spool_id:(Message_id.to_string id)
                                e));
       return (Error e)
     | Ok msg ->
       Option.value_map info.wrapper ~default:Deferred.Or_error.ok_unit ~f:(fun wrapper ->
         Throttle.enqueue t.file_throttle
-          (fun () -> Spooled_message.map_envelope msg ~f:(fun envelope ->
+          (fun () -> Message.map_envelope msg ~f:(fun envelope ->
              Envelope.modify_email envelope ~f:(Email_message.Wrapper.add wrapper))))
       >>=? fun () ->
-      Throttle.enqueue t.file_throttle (fun () -> Spooled_message.freeze msg ~log:t.log)
+      Throttle.enqueue t.file_throttle (fun () -> Message.freeze msg ~log:t.log)
       >>=? fun () ->
       add_message t msg;
-      recover_event t ~here:[%here] from_where msg;
+      recover_event t ~here:[%here] from_queue' msg;
       Deferred.Or_error.ok_unit)
 ;;
 
 let send_all ?retry_intervals ?(frozen_only = false) t =
   Hashtbl.data t.messages
   |> List.filter_map ~f:(fun m ->
-    match Spooled_message.status m, frozen_only with
-    | `Frozen, _        -> Some (Spooled_message.id m)
-    | `Send_at _, false -> Some (Spooled_message.id m)
+    match Message.status m, frozen_only with
+    | `Frozen, _        -> Some (Message.id m)
+    | `Send_at _, false -> Some (Message.id m)
     | `Send_now, _  | `Send_at _, true | `Sending, _
     | `Delivered, _ | `Removed, _      | `Quarantined _, _-> None)
   |> send_msgs ?retry_intervals t
@@ -453,22 +453,22 @@ let send ?retry_intervals t send_info =
 
 module Spooled_message_info = struct
   type t =
-    { spooled_message : Spooled_message.t
+    { message : Message.t
     ; file_size : Byte_units.t option
     ; envelope : Envelope.t option
     } [@@deriving fields, sexp, bin_io]
 
-  let sp f t = f t.spooled_message
+  let sp f t = f t.message
 
-  let id                 = sp Spooled_message.id
-  let spool_date         = sp Spooled_message.spool_date
-  let last_relay_attempt = sp Spooled_message.last_relay_attempt
-  let parent_id          = sp Spooled_message.parent_id
-  let status             = sp Spooled_message.status
+  let id                 = sp Message.id
+  let spool_date         = sp Message.spool_date
+  let last_relay_attempt = sp Message.last_relay_attempt
+  let parent_id          = sp Message.parent_id
+  let status             = sp Message.status
 
   (* Internal *)
-  let time_on_spool      = sp Spooled_message.time_on_spool
-  let next_hop_choices   = sp Spooled_message.next_hop_choices
+  let time_on_spool      = sp Message.time_on_spool
+  let next_hop_choices   = sp Message.next_hop_choices
 end
 
 module Status = struct
@@ -527,11 +527,11 @@ module Status = struct
       match S.envelope msg with
       | Some envelope ->
         let recipients = Envelope.string_recipients envelope |> String.concat ~sep:"\n" in
-        sprintf !"%4s %5s %{Spooled_message.Id} <%s> %s\n           %s\n"
+        sprintf !"%4s %5s %{Message_id} <%s> %s\n           %s\n"
           time size (S.id msg) (Envelope.string_sender envelope)
           frozen_text recipients
       | None ->
-        sprintf !"%4s %5s %{Spooled_message.Id} %s (sender and recipients hidden)\n"
+        sprintf !"%4s %5s %{Message_id} %s (sender and recipients hidden)\n"
           time size (S.id msg) frozen_text
     in
     List.map (sort t) ~f:msg_to_string
@@ -566,7 +566,7 @@ module Status = struct
           let open Ascii_table in
           let id =
             Column.create "id"
-              (fun a -> S.id a |> Spooled_message.Id.to_string)
+              (fun a -> S.id a |> Message_id.to_string)
           in
           let sender = Column.create "sender" (fun a ->
             match S.envelope a with
@@ -611,30 +611,33 @@ end
 
 let status t =
   Hashtbl.data t.messages
-  |> List.map ~f:(fun spooled_message ->
-    { Spooled_message_info. spooled_message
+  |> List.map ~f:(fun message ->
+    { Spooled_message_info. message
     ; envelope = None; file_size = None })
 
 let status_from_disk config =
-  Spool_directory.ls (Config.spool_dir config)
+  Message_spool.load (Config.spool_dir config)
+  >>=? fun spool ->
+  Message_spool.ls spool [Message_queue.Active; Message_queue.Frozen]
   >>=? fun entries ->
   Deferred.List.map entries ~f:(fun entry ->
-    Spooled_message.load_with_envelope entry
-    >>=? fun (spooled_message, envelope) ->
-    Spooled_message.size_of_file spooled_message
+    Message.load_with_envelope entry
+    >>=? fun (message, envelope) ->
+    Message.size_of_file message
     >>=? fun file_size ->
-    return (Ok { Spooled_message_info. spooled_message
+    return (Ok { Spooled_message_info. message
                ; envelope = Some envelope
                ; file_size = Some file_size }))
   (* Drop errors because the list of files might have changed since we read
      the directory. *)
   >>| fun msgs ->
   Ok (List.filter_map msgs ~f:Result.ok)
-
 ;;
 
 let count_from_disk config =
-  Spool_directory.ls (Config.spool_dir config)
+  Message_spool.load (Config.spool_dir config)
+  >>=? fun spool ->
+  Message_spool.ls spool [Message_queue.Active; Message_queue.Frozen]
   >>=? fun entries ->
   return (Ok (List.length entries))
 ;;
