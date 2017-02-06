@@ -1,6 +1,6 @@
 module Local_std = Std
 open Core
-open Async.Std
+open Async
 open Local_std
 open Email_message.Std
 
@@ -8,7 +8,7 @@ let%test_module _ =
   (module struct
 
     let log =
-      Lazy.force Async.Std.Log.Global.log
+      Lazy.force Async.Log.Global.log
       |> Mail_log.adjust_log_levels ~minimum_level:`Error
 
 

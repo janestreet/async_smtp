@@ -1,6 +1,6 @@
 open Core
 open Core_extended.Std
-open Async.Std
+open Async
 open Async_ssl.Std
 open Email_message.Std
 
@@ -14,7 +14,9 @@ module Smtp_extension = struct
     | Auth_login
     | Mime_8bit_transport
     | Other of string
-  [@@deriving sexp]
+  [@@deriving compare, sexp]
+
+  let equal = [%compare.equal: t]
 
   let of_string str =
     let t =
@@ -74,7 +76,7 @@ module Argument = struct
     >>= fun args ->
     let has_invalid_arg =
       List.exists args ~f:(fun arg ->
-        not (List.mem allowed_extensions (to_smtp_extension arg)))
+        not (List.mem allowed_extensions (to_smtp_extension arg) ~equal:Smtp_extension.equal))
     in
     if has_invalid_arg then
       Or_error.errorf "Unable to parse MAIL FROM arguments: %s" str

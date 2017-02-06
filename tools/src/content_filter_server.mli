@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 open Async_smtp.Std
 
 (** It is common for some external content scanning software to accept messages over smtp,

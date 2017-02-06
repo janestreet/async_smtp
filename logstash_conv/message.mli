@@ -1,5 +1,5 @@
 open Core.Std
-open Async.Std
+open Async
 open Json_wheel_jane_street_overlay.Std
 
 type tag_format =

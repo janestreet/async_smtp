@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 open Async_extended.Std
 
 module Mutex = Async_mutex

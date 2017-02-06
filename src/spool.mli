@@ -46,7 +46,7 @@
     [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
 *)
 open! Core
-open! Async.Std
+open! Async
 open Types
 
 module Message_id : Identifiable

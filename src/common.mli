@@ -1,5 +1,5 @@
 open! Core
-open! Async.Std
+open! Async
 
 val is_accessible_directory
   :  ?create_if_missing:unit

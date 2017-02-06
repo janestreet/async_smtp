@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 
 (* Use this module to track any smtp events that are interesting for monitoring *)
 type t

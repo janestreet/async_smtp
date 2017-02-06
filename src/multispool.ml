@@ -1,5 +1,5 @@
 open Core.Std
-open Async.Std
+open Async
 open Common
 
 (* Various shared utility functions *)

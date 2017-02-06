@@ -121,7 +121,7 @@ let permissive_cnf t =
   in
   let t = List.filter_map (cnf t) ~f:reduce_disjunction in
   (* Short circuit the case that there is a [False] in the conjunction *)
-  if List.mem t [] then [[]]
+  if List.mem t [] ~equal:Poly.equal then [[]]
   else t
 
 let arg = Command.Arg_type.create (fun s -> t_of_sexp (Sexp.of_string s))

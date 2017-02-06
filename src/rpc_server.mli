@@ -1,4 +1,4 @@
-open! Async.Std
+open! Async
 
 val start
   :  (Server_config.t * Spool.t * Smtp_events.t)

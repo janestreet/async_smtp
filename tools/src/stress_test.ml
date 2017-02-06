@@ -1,9 +1,9 @@
 open Core
-open Async.Std
+open Async
 open Async_smtp.Std
 
 let log =
-  Lazy.force Async.Std.Log.Global.log
+  Lazy.force Async.Log.Global.log
   |> Async_smtp.Mail_log.adjust_log_levels ~remap_info_to:`Debug
 
 module Config = struct

@@ -1,5 +1,5 @@
 open Core.Std
-open Async.Std
+open Async
 open Async_smtp.Std
 open Expect_test_helpers
 

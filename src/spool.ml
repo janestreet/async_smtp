@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 
 module Config = Server_config
 

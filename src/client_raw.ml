@@ -1,6 +1,6 @@
 open Core
 open Core_extended.Std
-open Async.Std
+open Async
 open Async_ssl.Std
 open Types
 
@@ -38,7 +38,7 @@ module Peer_info = struct
   let supports_extension t extension =
     match extensions t with
     | None -> false
-    | Some extensions -> List.mem extensions extension
+    | Some extensions -> List.mem extensions extension ~equal:Smtp_extension.equal
 
   let greeting t =
     Set_once.get t.greeting

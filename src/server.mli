@@ -1,5 +1,5 @@
 open! Core
-open! Async.Std
+open! Async
 open Types
 
 module Callbacks = Server_callbacks

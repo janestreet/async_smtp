@@ -1,6 +1,6 @@
 open Core
 open Core_extended.Std
-open Async.Std
+open Async
 open Async_ssl.Std
 open Types
 open Email_message.Std
@@ -190,7 +190,9 @@ let rec start_session
       | Command.Extended_hello helo ->
         top_helo ~extended:true ~flows ~session helo
       | (Command.Auth_login username) as cmd -> begin
-          match List.mem (Session.advertised_extensions session) Smtp_extension.Auth_login
+          match
+            List.mem (Session.advertised_extensions session) Smtp_extension.Auth_login
+              ~equal:Smtp_extension.equal
           with
           | false ->
             command_not_implemented ~here:[%here] ~flows ~component cmd >>= fun () -> top ~session
@@ -866,7 +868,7 @@ let close ?timeout t =
   | `Timeout  -> Deferred.Or_error.error_string "Messages remaining in queue"
 
 
-let bsmtp_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
+let bsmtp_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
   log
   |> Log.adjust_log_levels ~remap_info_to:`Debug)
 
@@ -904,7 +906,7 @@ let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
       (module Cb))
 ;;
 
-let mbox_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
+let mbox_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
   log
   |> Log.adjust_log_levels ~remap_info_to:`Debug)
 

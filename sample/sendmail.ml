@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 open Async_smtp.Std
 
 let key_value_pair = Command.Spec.Arg_type.create (String.lsplit2_exn ~on:':')

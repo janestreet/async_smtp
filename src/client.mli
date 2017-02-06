@@ -1,5 +1,5 @@
 open! Core
-open! Async.Std
+open! Async
 open Types
 
 (** SMTP client API. Includes TLS support: http://tools.ietf.org/html/rfc3207

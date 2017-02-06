@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 open Email_message.Std
 open Types
 
@@ -309,7 +309,7 @@ module Bsmtp = struct
     ; final_ok_timeout = `This (Time.Span.of_sec 5.)
     }
 
-  let bsmtp_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
+  let bsmtp_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
     Log.adjust_log_levels ~remap_info_to:`Debug log)
 
 

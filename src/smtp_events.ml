@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 
 module Event = struct
   module Envelope_received = struct

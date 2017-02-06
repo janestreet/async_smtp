@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 open Types
 open Email_message.Std
 
@@ -10,7 +10,7 @@ include (Email.Simple : module type of Email.Simple with module Expert := Email.
 
 let default_server = `Inet (Host_and_port.create ~host:"qsmtp" ~port:25)
 
-let client_log = Lazy.map Async.Std.Log.Global.log ~f:(fun log ->
+let client_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
   Mail_log.adjust_log_levels ~remap_info_to:`Debug log)
 
 module Expert = struct

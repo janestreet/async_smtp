@@ -1,5 +1,5 @@
 open Core
-open Async.Std
+open Async
 open Async_smtp.Std
 
 module Host_and_port = struct

@@ -1,5 +1,5 @@
 open! Core
-open! Async.Std
+open! Async
 open Async_ssl.Std
 open Email_message.Std
 
@@ -13,7 +13,9 @@ module Smtp_extension : sig
     | Auth_login
     | Mime_8bit_transport
     | Other of string
-  [@@deriving sexp]
+  [@@deriving compare, sexp]
+
+  include Equal.S with type t := t
 
   val of_string : string -> t
   val to_string : t -> string
