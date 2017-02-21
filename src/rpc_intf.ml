@@ -76,7 +76,7 @@ let send_info    = binable (module Spool.Send_info)
 let recover_info = binable (module Spool.Recover_info)
 
 let gc_stat      = binable (module Gc.Stat)
-let pid          = binable (module Pid)
+let pid          = binable (module Pid.Stable.V1)
 
 module Monitor = struct
   (* Including a sequence number. We broadcast a heartbeat message (with error =
