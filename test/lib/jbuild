@@ -6,3 +6,5 @@
     async_smtp
     expect_test_helpers
     ))))
+
+(jbuild_version jane_street)

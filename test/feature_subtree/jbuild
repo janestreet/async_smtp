@@ -8,3 +8,5 @@
     test_async_smtp))
   (inline_tests
    ((alias feature-subtree-build)))))
+
+(jbuild_version jane_street)

@@ -19,3 +19,5 @@
 (ocamllex (mail_from_lexer))
 
 (enforce_style ((exceptions (mail_from_lexer.ml))))
+
+(jbuild_version jane_street)
