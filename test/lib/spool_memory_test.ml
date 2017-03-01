@@ -1,4 +1,4 @@
-open! Core.Std
+open! Core
 open! Async
 open Async_smtp.Std
 open Email_message.Std

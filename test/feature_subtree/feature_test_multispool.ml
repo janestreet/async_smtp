@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Async
 open Expect_test_helpers
 open Async_smtp.Std

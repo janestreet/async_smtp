@@ -1,4 +1,4 @@
-open! Core.Std
+open! Core
 
 (** See multispool_intf.ml for main documentation *)
 
