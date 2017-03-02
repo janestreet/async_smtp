@@ -1,9 +1,8 @@
 INSTALL_ARGS := $(if $(PREFIX),--prefix $(PREFIX),)
-NAME := async_smtp
 
 # Default rule
 default:
-	jbuilder build-package $(NAME)
+	jbuilder build @install
 
 install:
 	jbuilder install $(INSTALL_ARGS)
