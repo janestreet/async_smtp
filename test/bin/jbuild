@@ -4,8 +4,8 @@
     ))
   (libraries
    (test_async_smtp
-    core))))
+    core))
+  (preprocess (pps (ppx_jane)))))
 
-(enforce_style ())
 
 (jbuild_version jane_street)

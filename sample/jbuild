@@ -2,8 +2,8 @@
  ((names (run_async_smtp sendmail))
   (libraries (async
               core
-              async_smtp))))
+              async_smtp))
+  (preprocess (pps (ppx_jane)))))
 
-(enforce_style ())
 
 (jbuild_version jane_street)

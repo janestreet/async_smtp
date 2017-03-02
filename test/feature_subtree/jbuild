@@ -6,7 +6,7 @@
     async_smtp
     expect_test_helpers
     test_async_smtp))
-  (inline_tests
-   ((alias feature-subtree-build)))))
+  (preprocess (pps (ppx_jane)))
+))
 
 (jbuild_version jane_street)

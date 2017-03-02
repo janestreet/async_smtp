@@ -5,6 +5,7 @@
     async
     async_smtp
     expect_test_helpers
-    ))))
+    ))
+  (preprocess (pps (ppx_jane)))))
 
 (jbuild_version jane_street)

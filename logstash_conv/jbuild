@@ -6,6 +6,7 @@
     async
     json-wheel_jane_street_overlay
     ))
+  (preprocess (pps (ppx_jane)))
   ))
 
 (jbuild_version jane_street)

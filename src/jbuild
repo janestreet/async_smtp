@@ -14,10 +14,9 @@
     json-wheel_jane_street_overlay
     logstash_conv
     ))
-  (inline_tests ((deps (test-ca.crt test-server.crt test-server.key))))
+  (preprocess (pps (ppx_jane)))
   ))
 (ocamllex (mail_from_lexer))
 
-(enforce_style ((exceptions (mail_from_lexer.ml))))
 
 (jbuild_version jane_street)

@@ -9,8 +9,8 @@
               re2
               async_smtp
               async_shell
-              async_smtp_command))))
+              async_smtp_command))
+  (preprocess (pps (ppx_jane)))))
 
-(enforce_style ())
 
 (jbuild_version jane_street)
