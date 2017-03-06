@@ -14,7 +14,7 @@
     json-wheel_jane_street_overlay
     logstash_conv
     ))
-  (preprocess (pps (ppx_jane)))
+  (preprocess (pps (ppx_jane ppx_driver.runner)))
   ))
 (ocamllex (mail_from_lexer))
 
