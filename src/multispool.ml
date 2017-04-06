@@ -25,6 +25,10 @@ module Utils = struct
     )
   ;;
 
+  let unlink path =
+    Deferred.Or_error.try_with (fun () -> Unix.unlink path)
+  ;;
+
   let try_to_stat path =
     replace_unix_error Unix.ENOENT `Not_found ~f:(fun () -> Unix.stat path)
   ;;
@@ -52,6 +56,25 @@ module Utils = struct
   ;;
 end
 
+module Make_spoolable (S : Multispool_intf.Spoolable.Simple) = struct
+  include S
+
+  let load_from_disk ~path =
+    let open Deferred.Or_error.Let_syntax in
+    let%map raw_data =
+      Deferred.Or_error.try_with (fun () ->
+        Reader.file_contents path)
+    in
+    of_string raw_data
+  ;;
+
+  let save_to_disk ?temp_file ~path t =
+    let contents = to_string t in
+    Deferred.Or_error.try_with (fun () ->
+      Writer.save path ?temp_file ~contents ~fsync:true)
+  ;;
+end
+
 module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
   type t = string [@@deriving sexp_of]
 
@@ -60,8 +83,7 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
   let dir t = t
 
   let reg_dir_of dir = dir ^/ ".registry"
-  let co_subdir = ".checkout"
-  let co_dir_of  dir = dir ^/ co_subdir
+  let co_dir_of  dir = dir ^/ ".checkout"
   let tmp_dir_of dir = dir ^/ ".tmp"
 
   let dir_looks_like_a_spool dir =
@@ -133,17 +155,34 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
       Fields.create ~spool ~queue ~name
 
     let contents_unsafe t =
-      let open Deferred.Or_error.Let_syntax in
       let queue_dir = t.spool ^/ Spoolable.Queue.to_dirname t.queue in
-      let%map raw_data = Deferred.Or_error.try_with (fun () ->
-        Reader.file_contents (queue_dir ^/ t.name))
-      in
-      Spoolable.of_string raw_data
+      Spoolable.Throttle.enqueue (fun () ->
+        Deferred.Or_error.try_with_join (fun () ->
+          Spoolable.load_from_disk ~path:(queue_dir ^/ t.name)))
+    ;;
+
+    let save_unsafe t spoolable =
+      let path = t.spool ^/ Spoolable.Queue.to_dirname t.queue ^/ t.name in
+      let temp_file = tmp_dir_of t.spool ^/ t.name in
+      Spoolable.Throttle.enqueue (fun () ->
+        Deferred.Or_error.try_with_join (fun () ->
+          Spoolable.save_to_disk ~temp_file ~path spoolable))
+    ;;
+
+    let remove_unsafe t =
+      let open Deferred.Or_error.Let_syntax in
+      let path = t.spool ^/ Spoolable.Queue.to_dirname t.queue ^/ t.name in
+      Spoolable.Throttle.enqueue (fun () ->
+        let%bind () = Utils.unlink path in
+        Utils.unlink (reg_dir_of t.spool ^/ t.name))
     ;;
 
     let stat t =
       let open Deferred.Or_error.Let_syntax in
-      match%bind Utils.try_to_stat (reg_dir_of t.spool ^/ t.name) with
+      match%bind
+        Spoolable.Throttle.enqueue (fun () ->
+          Utils.try_to_stat (reg_dir_of t.spool ^/ t.name))
+      with
       | `Ok stat   -> Deferred.return (Ok stat)
       | `Not_found ->
         Deferred.Or_error.error_s [%message "No such entry" (t : t)]
@@ -152,17 +191,9 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
 
   let list t queue =
     let queue_dir = t ^/ Spoolable.Queue.to_dirname queue in
-    Utils.ls_sorted queue_dir
+    Spoolable.Throttle.enqueue (fun () -> Utils.ls_sorted queue_dir)
     >>|? fun entries ->
     List.map entries ~f:(fun name -> Entry.create t queue ~name)
-  ;;
-
-  let atomic_file_write t ~subdir ~contents name =
-    Deferred.Or_error.try_with (fun () ->
-      let temp_file = tmp_dir_of t ^/ name in
-      let file = t ^/ subdir ^/ name in
-      Writer.save file ~temp_file ~contents ~fsync:true
-    )
   ;;
 
   module Unique_name = struct
@@ -171,7 +202,10 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
     let reserve t opaque =
       let open Deferred.Or_error.Let_syntax in
       let rec try_name ~attempt =
-        let name = Spoolable.Name_generator.next opaque ~attempt in
+        let%bind name =
+          Deferred.Or_error.try_with
+            (fun () -> Deferred.return (Spoolable.Name_generator.next opaque ~attempt))
+        in
         let path = reg_dir_of t ^/ name in
         match%bind Utils.open_creat_excl_wronly path with
         | `Exists -> try_name ~attempt:(attempt + 1)
@@ -179,7 +213,7 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
           let%bind () = Deferred.Or_error.try_with (fun () -> Unix.close fd) in
           return name
       in
-      try_name ~attempt:0
+      Spoolable.Throttle.enqueue (fun () -> try_name ~attempt:0)
     ;;
   end
 
@@ -190,19 +224,20 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
     end
     >>=? fun name ->
     let entry = Entry.create t queue ~name in
-    let contents = Spoolable.to_string spoolable in
-    let queue_dir = Spoolable.Queue.to_dirname queue in
-    atomic_file_write t name ~subdir:queue_dir ~contents
+    let path = t ^/ Spoolable.Queue.to_dirname queue ^/ name in
+    let temp_file = tmp_dir_of t ^/ name in
+    Spoolable.Throttle.enqueue (fun () ->
+      Deferred.Or_error.try_with_join (fun () ->
+        Spoolable.save_to_disk ~temp_file ~path spoolable))
     >>= function
     | Error _  as error ->
       (* Best-effort cleanup: Unlink both files and ignore any errors *)
-      let queue_path = t ^/ queue_dir ^/ name in
-      let%bind (_unlink1 : (unit, exn) result) =
-        try_with (fun () -> Unix.unlink queue_path)
-      and (_unlink2 : (unit, exn) result) =
-        try_with (fun () -> Unix.unlink (reg_dir_of t ^/ name))
-      in
-      return error
+      Spoolable.Throttle.enqueue (fun () ->
+        let%bind (_ : unit Or_error.t) = Utils.unlink path in
+        let%map (_ : unit Or_error.t) = Utils.unlink (reg_dir_of t ^/ name) in
+        ())
+      >>| fun () ->
+      error
     | Ok () ->
       Deferred.Or_error.return entry
   ;;
@@ -219,20 +254,26 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
 
     let save t queue =
       let open Deferred.Or_error.Let_syntax in
-      let contents = Spoolable.to_string t.contents in
-      let%bind () = atomic_file_write t.spool t.name ~subdir:co_subdir ~contents in
+      let path = co_dir_of t.spool ^/ t.name in
+      let temp_file = tmp_dir_of t.spool ^/ t.name in
+      let%bind () =
+        Spoolable.Throttle.enqueue (fun () ->
+          Deferred.Or_error.try_with_join (fun () ->
+            Spoolable.save_to_disk ~temp_file ~path t.contents))
+      in
       let queue_dir = t.spool ^/ Spoolable.Queue.to_dirname queue in
-      let src = co_dir_of t.spool ^/ t.name in
       let dst = queue_dir ^/ t.name in
-      Deferred.Or_error.try_with (fun () -> Unix.rename ~src ~dst)
+      Spoolable.Throttle.enqueue (fun () ->
+        Deferred.Or_error.try_with (fun () -> Unix.rename ~src:path ~dst))
     ;;
 
     let remove t =
-      let%bind () = Unix.unlink (co_dir_of t.spool ^/ t.name) in
-      (* If we crash here, we'll have an orphaned file in the registry.  'multispool fsck'
-         should find this *)
-      let%bind () = Unix.unlink (reg_dir_of t.spool ^/ t.name) in
-      Deferred.Or_error.ok_unit
+      let open Deferred.Or_error.Let_syntax in
+      Spoolable.Throttle.enqueue (fun () ->
+        let%bind () = Utils.unlink (co_dir_of t.spool ^/ t.name) in
+        (* If we crash here, we'll have an orphaned file in the registry.  'multispool fsck'
+           should find this *)
+        Utils.unlink (reg_dir_of t.spool ^/ t.name))
     ;;
 
     let create spool contents ~name = { spool; name; contents }
@@ -242,13 +283,14 @@ module Make_raw (Spoolable : Multispool_intf.Spoolable.S) = struct
     let open Deferred.Or_error.Let_syntax in
     let src = entry.spool ^/ Spoolable.Queue.to_dirname entry.queue ^/ entry.name in
     let dst = co_dir_of entry.spool ^/ entry.name in
-    match%bind Utils.try_to_rename ~src ~dst with
+    match%bind Spoolable.Throttle.enqueue (fun () -> Utils.try_to_rename ~src ~dst) with
     | `Not_found as x -> return x
     | `Ok () ->
-      let%bind raw_data = Deferred.Or_error.try_with (fun () ->
-        Reader.file_contents dst)
+      let%bind contents =
+        Spoolable.Throttle.enqueue (fun () ->
+          Deferred.Or_error.try_with_join (fun () ->
+            Spoolable.load_from_disk ~path:dst))
       in
-      let contents = Spoolable.of_string raw_data in
       return (`Ok (Checked_out_entry.create entry.spool ~name:entry.name contents))
   ;;
 

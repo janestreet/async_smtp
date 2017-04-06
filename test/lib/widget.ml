@@ -23,3 +23,7 @@ module Queue = struct
     | Queue3 -> "queue3"
   ;;
 end
+
+module Throttle = struct
+  let enqueue f = f ()  (* No throttle *)
+end

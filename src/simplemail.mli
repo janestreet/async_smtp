@@ -1,7 +1,6 @@
 open! Core
 open! Async
 open Email_message.Std
-open Types
 
 module Envelope_status = Client.Envelope_status
 
@@ -10,7 +9,7 @@ module Expert : sig
     :  ?log:Mail_log.t
     -> ?server:Address.t
     -> sender:Sender.t
-    -> ?sender_args:Argument.t list
+    -> ?sender_args:Sender_argument.t list
     -> recipients:Email_address.t list
     -> Email.t
     -> Envelope_status.t Deferred.Or_error.t
@@ -19,7 +18,7 @@ module Expert : sig
     :  ?log:Mail_log.t
     -> ?server:Address.t
     -> sender:Sender.t
-    -> ?sender_args:Argument.t list
+    -> ?sender_args:Sender_argument.t list
     -> recipients:Email_address.t list
     -> Email.t
     -> unit Deferred.Or_error.t
@@ -33,7 +32,7 @@ val send'
   :  ?log:Mail_log.t
   -> ?server:Host_and_port.t
   -> ?from:Email_address.t (* defaults to <user@host> *)
-  -> ?sender_args:Argument.t list
+  -> ?sender_args:Sender_argument.t list
   -> to_:Email_address.t list
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
@@ -52,7 +51,7 @@ val send
   :  ?log:Mail_log.t
   -> ?server:Host_and_port.t
   -> ?from:Email_address.t (* defaults to <user@host> *)
-  -> ?sender_args:Argument.t list
+  -> ?sender_args:Sender_argument.t list
   -> to_:Email_address.t list
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list

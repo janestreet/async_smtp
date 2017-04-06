@@ -72,7 +72,10 @@ module Bodies = struct
         |> Octet_stream.of_string
       in
       Envelope.modify_email ~f:(fun email ->
-        Email.map_data email ~f:hash_data)
+        (* This tool is used to hide the message body to optimize the message
+           comparison. In the event of a parse error preserving the original content is
+           more useful then raising. *)
+        Email.Content.map_data ~on_unparsable_content:`Skip email ~f:hash_data)
     | Some `whole ->
       let hash_body email =
         email

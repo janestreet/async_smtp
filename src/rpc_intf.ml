@@ -60,12 +60,12 @@ let triple (type a) (type b) (type c) (m1, m2, m3)
 
 let binable (type a) m : (module Binable.S with type t = a) = m
 
-let string       = binable (module String)
-let int          = binable (module Int)
-let unit         = binable (module Unit)
-let bool         = binable (module Bool)
-let time_span    = binable (module Time.Span)
-let error        = binable (module Error)
+let string         = binable (module String)
+let int            = binable (module Int)
+let unit           = binable (module Unit)
+let bool           = binable (module Bool)
+let retry_interval = binable (module Retry_interval)
+let error          = binable (module Error)
 
 let smtp_event = binable (module Smtp_events.Event)
 
@@ -99,15 +99,11 @@ module Spool = struct
                      ~version:1
 
   let send       = rpc ~name:(prefix ^- "send")
-                     (pair (list time_span, send_info)) (or_error unit)
+                     (pair (list retry_interval, send_info)) (or_error unit)
 
   let remove     = rpc ~name:(prefix ^- "remove") (list id) (or_error unit)
 
   let recover    = rpc ~name:(prefix ^- "recover") (recover_info) (or_error unit)
-
-  let send_now   = rpc ~name:(prefix ^- "send-now")
-                     (pair (list id, list time_span))
-                     (or_error unit)
 
   let events     = pipe_rpc ~name:(prefix ^- "events") unit spool_event error
 

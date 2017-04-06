@@ -32,23 +32,26 @@ module Id = struct
     Set_once.get id_ref, envelope'
 end
 
-module Callbacks = struct
-  include Smtp_server.Callbacks.Simple
-
-  let process_envelope ~log:_ ~session:_ envelope =
-    let id, envelope' = Id.untag_exn envelope in
-    Option.iter id ~f:(fun id ->
-      match Hashtbl.find messages id with
-      | None -> ()
-      | Some ivar -> Ivar.fill ivar envelope');
-    return (`Consume "Message consumed")
-end
+module Server = Smtp_server.Make(struct
+    module Session = Smtp_server.Plugin.Simple.Session
+    module Envelope = struct
+      include Smtp_server.Plugin.Simple.Envelope
+      let process ~log:_ _session t email =
+        let envelope = smtp_envelope t email in
+        let id, envelope' = Id.untag_exn envelope in
+        Option.iter id ~f:(fun id ->
+          match Hashtbl.find messages id with
+          | None -> ()
+          | Some ivar -> Ivar.fill ivar envelope');
+        return (`Consume "Message consumed")
+    end
+    let rpcs () = []
+  end)
 
 let start_exn config ~log =
-  Smtp_server.start
+  Server.start
     ~log
     ~config
-    (module Callbacks : Smtp_server.Callbacks.S)
   >>| Or_error.ok_exn
   >>| fun _server -> log
 

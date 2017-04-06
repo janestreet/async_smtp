@@ -1,6 +1,7 @@
 (executables
  ((names
    (spool_memory_test
+    cache_speed_test
     ))
   (libraries
    (test_async_smtp

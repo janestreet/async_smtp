@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Types
+open Email_message.Std
 
 module Id : Identifiable
 
@@ -16,20 +16,18 @@ module Status : sig
     ] [@@deriving sexp]
 end
 
-module Queue : sig
-  type t =
-    | Active
-    | Frozen
-    | Removed
-    | Quarantine
-  [@@deriving sexp, enumerate, compare, bin_io]
-
-  val to_dirname : t -> string
-end
-
 module On_disk_spool : sig
   type t
   type spool = t
+
+  module Queue : sig
+    type t =
+      | Active
+      | Frozen
+      | Removed
+      | Quarantine
+    [@@deriving sexp, enumerate, compare, bin_io]
+  end
 
   module Entry : sig
     type t [@@deriving sexp_of]
@@ -66,7 +64,7 @@ val create
   :  On_disk_spool.t
   -> log:Mail_log.t
   -> initial_status:Status.t (* should usually be [`Send_now]*)
-  -> Envelope_with_next_hop.t
+  -> Envelope.With_next_hop.t
   -> flows:Mail_log.Flows.t
   -> original_msg : Envelope.t
   -> t Or_error.t Deferred.t
@@ -76,10 +74,10 @@ val load_with_envelope : On_disk_spool.Entry.t -> (t * Envelope.t) Or_error.t De
 
 (* It is an error to call [send] on a message that is currently being sent or
    for which the call previously returned [`Done]. *)
-val send : t -> log:Mail_log.t -> config:Client_config.t -> unit Or_error.t Deferred.t
+val send : t -> log:Mail_log.t -> client_cache:Client_cache.t -> unit Or_error.t Deferred.t
 
-(* Map an envelope that is saved on disk. *)
-val map_envelope : t -> f:(Envelope.t -> Envelope.t) -> unit Or_error.t Deferred.t
+(* Map an email that is saved on disk. *)
+val map_email : t -> f:(Email.t -> Email.t) -> unit Or_error.t Deferred.t
 
 val freeze
   :  t
@@ -89,7 +87,7 @@ val freeze
 (* Change a message's status to [`Send_now].
    [retry_intervals] are added in front of the existing ones. *)
 val mark_for_send_now
-  :  retry_intervals : Time.Span.t list
+  :  retry_intervals : Retry_interval.t list
   -> t
   -> log:Mail_log.t
   -> unit Or_error.t Deferred.t

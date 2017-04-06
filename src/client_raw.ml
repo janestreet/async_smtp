@@ -2,7 +2,6 @@ open Core
 open Core_extended.Std
 open Async
 open Async_ssl.Std
-open Types
 
 module Log = Mail_log
 
@@ -162,7 +161,7 @@ let read_reply ?on_eof reader =
   let rec loop partial =
     Reader.read_line reader
     >>= function
-    | `Ok line -> begin match Reply.parse ?partial line with
+    | `Ok line -> begin match Smtp_reply.parse ?partial line with
       | `Done reply -> Deferred.Or_error.return reply
       | `Partial partial -> loop (Some partial)
     end
@@ -221,7 +220,7 @@ let send_string t ~log ?flows ~component ~here str =
   send_gen t ~log ?flows ~component ~here str
 
 let send t ~log ?flows ~component ~here cmd =
-  send_gen t ~command:cmd ~log ?flows ~component ~here (Command.to_string cmd)
+  send_gen t ~command:cmd ~log ?flows ~component ~here (Smtp_command.to_string cmd)
 
 (* entry point *)
 let send_receive ?on_eof ?timeout t ~log ?flows ~component ~here cmd =
@@ -250,9 +249,9 @@ let do_quit t ~log ~component =
        our monitor. *)
     let on_eof ?partial:_ () =
       Log.info log (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component (Error.of_string "Unexpected EOF during QUIT")));
-      Deferred.Or_error.return Reply.closing_connection_221
+      Deferred.Or_error.return Smtp_reply.closing_connection_221
     in
-    send_receive ~on_eof t ~log ~component ~here:[%here] Command.Quit
+    send_receive ~on_eof t ~log ~component ~here:[%here] Smtp_command.Quit
     >>= function
     | Error e ->
       let error = Error.tag e ~tag:"Error sending QUIT" in
@@ -261,10 +260,10 @@ let do_quit t ~log ~component =
     | Ok result ->
       match result with
       | `Bsmtp -> return (Ok ())
-      | `Received { Reply.code=`Closing_connection_221; _ } ->
+      | `Received { Smtp_reply.code=`Closing_connection_221; _ } ->
         return (Ok ())
       | `Received reply->
-        return (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Reply}" reply))
+        return (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Smtp_reply}" reply))
   end
 
 let cleanup t =
@@ -296,29 +295,29 @@ let do_greeting t ~log ~component =
   receive t ~log ~component ~here:[%here]
   >>=? function
   | `Bsmtp -> return (Ok ())
-  | `Received { Reply.code=`Service_ready_220; raw_message } ->
+  | `Received { Smtp_reply.code=`Service_ready_220; raw_message } ->
     return (Peer_info.set_greeting (info_exn t) (String.concat ~sep:"\n" raw_message))
   | `Received reply ->
-    return (Or_error.errorf !"Unexpected greeting: %{Reply}" reply)
+    return (Or_error.errorf !"Unexpected greeting: %{Smtp_reply}" reply)
 
 let greeting t =
   let config = config t in
   Option.value config.greeting ~default:(Unix.gethostname ())
 
 let do_helo t  ~log ~component =
-  send_receive t ~log ~component ~here:[%here] (Command.Hello (greeting t))
+  send_receive t ~log ~component ~here:[%here] (Smtp_command.Hello (greeting t))
   >>=? function
   | `Bsmtp -> return (Ok ())
-  | `Received { Reply.code = `Ok_completed_250; raw_message } ->
+  | `Received { Smtp_reply.code = `Ok_completed_250; raw_message } ->
     return (Peer_info.set_hello (info_exn t) (`Simple (String.concat ~sep:"\n" raw_message)))
   | `Received reply ->
-    return (Or_error.errorf !"Unexpected response to HELO: %{Reply}" reply)
+    return (Or_error.errorf !"Unexpected response to HELO: %{Smtp_reply}" reply)
 
 let do_ehlo ~log ~component t =
-  send_receive t ~log ~component ~here:[%here] (Command.Extended_hello (greeting t))
+  send_receive t ~log ~component ~here:[%here] (Smtp_command.Extended_hello (greeting t))
   >>=? function
   | `Bsmtp -> return (Ok ())
-  | `Received { Reply.code =`Ok_completed_250; raw_message } ->
+  | `Received { Smtp_reply.code =`Ok_completed_250; raw_message } ->
     begin match raw_message with
     | ehlo_greeting :: extensions ->
       let extensions = List.map ~f:Smtp_extension.of_string extensions in
@@ -326,10 +325,10 @@ let do_ehlo ~log ~component t =
       |> return
     | [] -> failwith "IMPOSSIBLE: EHLO greeting expected, got empty response"
     end
-  | `Received { Reply.code = (`Command_not_recognized_500 | `Command_not_implemented_502); _ } ->
+  | `Received { Smtp_reply.code = (`Command_not_recognized_500 | `Command_not_implemented_502); _ } ->
     do_helo t ~log ~component
   | `Received reply ->
-    return (Or_error.errorf !"Unexpected response to EHLO: %{Reply}" reply)
+    return (Or_error.errorf !"Unexpected response to EHLO: %{Smtp_reply}" reply)
 
 let do_start_tls t ~log ~component tls_options =
   let component = component @ ["starttls"] in
@@ -451,19 +450,19 @@ let maybe_start_tls t ~log ~component =
   begin match should_try_tls t with
   | None -> return (Ok ())
   | Some tls_options ->
-    send_receive t ~log ~component ~here:[%here] Command.Start_tls
+    send_receive t ~log ~component ~here:[%here] Smtp_command.Start_tls
     >>=? function
     | `Bsmtp -> return (Ok ())
-    | `Received { Reply.code = `Service_ready_220; _ } ->
+    | `Received { Smtp_reply.code = `Service_ready_220; _ } ->
       do_start_tls t ~log  ~component tls_options
-    | `Received { Reply.code = ( `Command_not_recognized_500
-                               | `Command_not_implemented_502
-                               | `Parameter_not_implemented_504
-                               | `Tls_temporarily_unavailable_454
-                               ); _ } ->
+    | `Received { Smtp_reply.code = ( `Command_not_recognized_500
+                                    | `Command_not_implemented_502
+                                    | `Parameter_not_implemented_504
+                                    | `Tls_temporarily_unavailable_454
+                                    ); _ } ->
       return (Ok ())
     | `Received reply ->
-      return (Or_error.errorf !"Unexpected response to STARTTLS: %{Reply}" reply)
+      return (Or_error.errorf !"Unexpected response to STARTTLS: %{Smtp_reply}" reply)
   end
   >>=? fun () ->
   return (check_tls_security t)
@@ -473,13 +472,13 @@ let do_auth_login t ~log ~component ~username ~password =
   let password = Base64.encode password in
   send_receive_string t ~log ~component ~here:[%here] username
   >>=? function
-  | `Bsmtp | `Received { Reply.code=`Start_authentication_input_334; _ } -> begin
+  | `Bsmtp | `Received { Smtp_reply.code=`Start_authentication_input_334; _ } -> begin
       send_receive_string t ~log ~component ~here:[%here] password
       >>=? function
-      | `Bsmtp | `Received { Reply.code=`Authentication_successful_235; _ } -> return (Ok ())
-      | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
+      | `Bsmtp | `Received { Smtp_reply.code=`Authentication_successful_235; _ } -> return (Ok ())
+      | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Smtp_reply}" reply)
     end
-  | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Reply}" reply)
+  | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Smtp_reply}" reply)
 
 let maybe_auth_login t ~log ~component ~credentials =
   match is_using_auth_login t with
@@ -489,22 +488,22 @@ let maybe_auth_login t ~log ~component ~credentials =
     | None ->
       return (Ok ())
     | Some credentials ->
-      send_receive t ~log ~component ~here:[%here] (Command.Auth_login None)
+      send_receive t ~log ~component ~here:[%here] (Smtp_command.Auth_login None)
       >>=? function
       | `Bsmtp -> return (Ok ())
       | `Received reply ->
         match reply with
-        | { Reply.code=`Start_authentication_input_334; _ } ->
+        | { Smtp_reply.code=`Start_authentication_input_334; _ } ->
           let username = Credentials.username credentials in
           let password = Credentials.password credentials in
           do_auth_login t ~log ~component ~username ~password
-        | { Reply.code=
+        | { Smtp_reply.code=
               ( `Command_not_recognized_500
               | `Command_not_implemented_502
               | `Parameter_not_implemented_504 ); _ } ->
           return (Ok ())
         | reply ->
-          return (Or_error.errorf !"Unexpected response to AUTH LOGIN: %{Reply}" reply)
+          return (Or_error.errorf !"Unexpected response to AUTH LOGIN: %{Smtp_reply}" reply)
 
 let with_quit t ~log ~component ~f =
   let component = component @ ["quit"] in

@@ -26,34 +26,39 @@ let config =
   ; client = Smtp_client.Config.default
   }
 
-module Callbacks = struct
-  include Smtp_server.Callbacks.Simple
+module Server = Smtp_server.Make(struct
+    module Session = Smtp_server.Plugin.Simple.Session
+    module Envelope = struct
+      include Smtp_server.Plugin.Simple.Envelope
 
-  let destination =
-    `Inet (Host_and_port.create ~host:"localhost" ~port:25)
+      let destination =
+        `Inet (Host_and_port.create ~host:"localhost" ~port:25)
 
-  let process_envelope ~log:_ ~session:_ envelope =
-    return (`Send
-              [ Smtp_envelope_with_next_hop.create
-                  ~envelope
-                  ~next_hop_choices:[destination]
-                  ~retry_intervals:[]
-              ])
-end
+      let process ~log:_ _session t email =
+        let envelope = smtp_envelope t email in
+        return (`Send
+                  [ Smtp_envelope_with_next_hop.create
+                      ~envelope
+                      ~next_hop_choices:[destination]
+                      ~retry_intervals:[]
+                  ])
+    end
+    let rpcs () = []
+  end)
 
 let main () =
-  Smtp_server.start ~log:(Lazy.force Log.Global.log) ~config (module Callbacks : Smtp_server.Callbacks.S)
+  Server.start ~log:(Lazy.force Log.Global.log) ~config
   >>| Or_error.ok_exn
   >>= fun server ->
   let ports =
-    Smtp_server.ports server
+    Server.ports server
     |> List.map ~f:Int.to_string
     |> String.concat ~sep:", "
   in
   Log.Global.info "mailcore listening on ports %s" ports;
   Shutdown.set_default_force Deferred.never;
   Shutdown.at_shutdown (fun () ->
-    Smtp_server.close ~timeout:(Clock.after (sec 60.)) server
+    Server.close ~timeout:(Clock.after (sec 60.)) server
     >>| Or_error.ok_exn);
   Deferred.never ()
 ;;

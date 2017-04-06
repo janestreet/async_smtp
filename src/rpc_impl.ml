@@ -75,12 +75,6 @@ module Spool = struct
          let pipe = Spool.event_stream spool in
          return (Ok pipe))
   ;;
-
-  let set_max_concurrent_send_jobs () =
-    Rpc.Rpc.implement Rpc_intf.Spool.set_max_concurrent_send_jobs
-      (fun (_config, spool, _server_events) n ->
-         Spool.set_max_concurrent_jobs spool n |> return)
-  ;;
 end
 
 module Gc = struct

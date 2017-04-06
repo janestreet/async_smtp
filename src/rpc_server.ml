@@ -10,7 +10,6 @@ let implementations () =
   ; Spool.remove ()
   ; Spool.recover ()
   ; Spool.events ()
-  ; Spool.set_max_concurrent_send_jobs ()
   ; Gc.stat ()
   ; Gc.quick_stat ()
   ; Gc.full_major ()

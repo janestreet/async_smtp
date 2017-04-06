@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Types
+open Email_message.Std
 
 (** SMTP client API. Includes TLS support: http://tools.ietf.org/html/rfc3207
 
@@ -36,15 +36,15 @@ val is_using_tls : t -> bool
 
 module Envelope_status : sig
   type envelope_id = string
-  type rejected_recipients = (Email_address.t * Reply.t) list
+  type rejected_recipients = (Email_address.t * Smtp_reply.t) list
 
   type ok = envelope_id * rejected_recipients
 
   type err =
-    [ `Rejected_sender of Reply.t
+    [ `Rejected_sender of Smtp_reply.t
     | `No_recipients of rejected_recipients
-    | `Rejected_sender_and_recipients of Reply.t * rejected_recipients
-    | `Rejected_body of Reply.t * rejected_recipients
+    | `Rejected_sender_and_recipients of Smtp_reply.t * rejected_recipients
+    | `Rejected_body of Smtp_reply.t * rejected_recipients
     ] [@@deriving sexp_of]
 
   type t = (ok, err) Result.t [@@deriving sexp_of]
@@ -67,7 +67,7 @@ val send_envelope
 module Tcp : sig
   val with_
     : (?config:Client_config.t
-       -> ?credentials:Credentials.t option
+       -> ?credentials:Credentials.t
        -> log:Mail_log.t
        -> ?flows:Mail_log.Flows.t
        -> ?component:Mail_log.Component.t

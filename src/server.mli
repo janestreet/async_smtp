@@ -1,16 +1,21 @@
 open! Core
 open! Async
-open Types
 
-module Callbacks = Server_callbacks
+module Config = Server_config
+module Plugin = Server_plugin
 
-type t
+module type S = sig
+  type t
 
-val start : config:Server_config.t -> log:Mail_log.t -> (module Server_callbacks.S) -> t Deferred.Or_error.t
+  val start : config:Config.t -> log:Mail_log.t -> t Deferred.Or_error.t
 
-val config : t -> Server_config.t
+  val config : t -> Config.t
+  val ports  : t -> int list
 
-val close  : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
+  val close  : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
+end
+
+module Make(P : Plugin.S) : S
 
 (* Read messages from a bsmtp session transcript. *)
 val read_bsmtp
@@ -22,5 +27,3 @@ val read_mbox
   :  ?log:Mail_log.t
   -> Reader.t
   -> Envelope.t Or_error.t Pipe.Reader.t
-
-val ports : t -> int list

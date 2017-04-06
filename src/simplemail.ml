@@ -1,6 +1,5 @@
 open Core
 open Async
-open Types
 open Email_message.Std
 
 

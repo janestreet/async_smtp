@@ -2,6 +2,12 @@ open! Core
 
 (** See multispool_intf.ml for main documentation *)
 
+module Make_spoolable (S : Multispool_intf.Spoolable.Simple)
+  : Multispool_intf.Spoolable.S
+    with type t = S.t
+     and type Queue.t = S.Queue.t
+     and type Name_generator.t = S.Name_generator.t
+
 module Make (S : Multispool_intf.Spoolable.S)
   : Multispool_intf.S with module Spoolable := S
 

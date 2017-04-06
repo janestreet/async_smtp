@@ -42,11 +42,11 @@ end
 module Send : sig
   val spec :
     unit ->
-    (?retry_intervals:Time.Span.t list -> Smtp_spool.Send_info.t -> 'a, 'a)
+    (?retry_intervals:Retry_interval.t list -> Smtp_spool.Send_info.t -> 'a, 'a)
       Common.Command.Spec.t
 
   val dispatch
-    :  ?retry_intervals:Time.Span.t list
+    :  ?retry_intervals:Retry_interval.t list
     -> Smtp_spool.Send_info.t
     -> Rpc.Connection.t
     -> unit Deferred.t

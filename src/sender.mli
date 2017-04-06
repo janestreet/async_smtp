@@ -1,0 +1,46 @@
+open! Core
+open Email_message.Std
+
+
+(*
+   From 3.7 Relaying:
+
+   One way to prevent loops in error reporting is to specify a null reverse-path
+   in the MAIL command of a notification message.  When such a message is
+   transmitted the reverse-path MUST be set to null (see section 4.5.5 for
+   additional discussion).  A MAIL command with a null reverse-path appears as
+   follows:
+
+   MAIL FROM:<>
+*)
+type t =
+  [ `Null
+  | `Email of Email_address.t
+  ]
+[@@deriving bin_io, sexp, compare, hash]
+
+val of_string
+  :  ?default_domain:string
+  -> string
+  -> t Or_error.t
+
+val of_string_with_arguments
+  :  ?default_domain:string
+  -> allowed_extensions : Smtp_extension.t list  (* default: [] *)
+  -> string
+  -> (t * Sender_argument.t list) Or_error.t
+
+val to_string : t -> string
+
+val to_string_with_arguments : t * Sender_argument.t list -> string
+
+val map : t -> f:(Email_address.t -> Email_address.t) -> t
+
+include Comparable.S with type t := t
+include Hashable.S with type t := t
+
+module Caseless : sig
+  type nonrec t = t
+  include Comparable.S with type t := t
+  include Hashable.S with type t := t
+end

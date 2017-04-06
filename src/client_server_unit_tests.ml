@@ -39,16 +39,34 @@ let%test_module _ =
       in
       let finished = Ivar.create () in
       let envelope = envelope message in
-      let module Cb : Smtp_server.Callbacks.S = struct
-        include Smtp_server.Callbacks.Simple
-        let process_envelope ~log:_ ~session:_ envelope =
-          Ivar.fill finished envelope;
-          return (`Consume "done")
-      end in
-      Smtp_server.start ~log ~config:server_config (module Cb)
+      let module Server =
+        Smtp_server.Make(struct
+          module Session = struct
+            include Smtp_server.Plugin.Simple.Session
+            let extensions _ =
+              if expect_tls then
+                [ Smtp_server.Plugin.Extension.Start_tls (module struct
+                    type session = t
+                    let upgrade_to_tls ~log:_ session =
+                      return { session with tls=true }
+                  end : Smtp_server.Plugin.Start_tls with type session=t)
+                ]
+              else []
+          end
+          module Envelope = struct
+            include Smtp_server.Plugin.Simple.Envelope
+            let process ~log:_ _session t email =
+              let envelope = smtp_envelope t email in
+              Ivar.fill finished envelope;
+              return (`Consume "done")
+          end
+          let rpcs () = []
+        end)
+      in
+      Server.start ~log ~config:server_config
       >>| Or_error.ok_exn
       >>= fun server ->
-      let port = Smtp_server.ports server |> List.hd_exn in
+      let port = Server.ports server |> List.hd_exn in
       Clock.with_timeout (Time.Span.of_sec 10.) begin
         Deferred.all_ignore
           [ begin
@@ -90,7 +108,7 @@ let%test_module _ =
 
     let non_tls_test message =
       async_test_with_tmp_dir ~f:(fun tmp_dir ->
-        let server_config = Smtp_server.Config.empty in
+        let server_config = Smtp_server.Config.default in
         let client_config = Smtp_client.Config.default in
         test_client_and_server ~tmp_dir ~server_config ~client_config ~expect_tls:false
           message)
@@ -103,7 +121,7 @@ let%test_module _ =
 
     let tls_test message =
       async_test_with_tmp_dir ~f:(fun tmp_dir ->
-        let server_config = { Smtp_server.Config.empty with
+        let server_config = { Smtp_server.Config.default with
                               tls_options = Some { Smtp_server.Config.Tls.
                                                    version = None
                                                  ; options = None

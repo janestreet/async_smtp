@@ -1,6 +1,5 @@
 open Core
 open Email_message.Std
-open Types
 open Re2
 
 module Base = struct

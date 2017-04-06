@@ -19,7 +19,7 @@ module Event : sig
   [@@deriving sexp, bin_io]
 end
 
-val envelope_received : t -> Types.Envelope.t -> unit
+val envelope_received : t -> Envelope.t -> unit
 
 val create : unit -> t
 

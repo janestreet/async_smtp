@@ -12,8 +12,10 @@ module Test_name_generator = struct
 end
 
 module Widgetspool = Multispool.Make(struct
-    include Widget
-    module Name_generator = Test_name_generator
+    include Multispool.Make_spoolable(struct
+        include Widget
+        module Name_generator = Test_name_generator
+      end)
   end)
 
 let chdir_or_error dir =
@@ -85,9 +87,8 @@ let%expect_test "File Behavior" =
     in
 
     (* Enqueue a file, check its path(s) at various steps, and then remove it *)
-    let widget1 = Widget.Cog 1 in
     let%bind entry =
-      Widgetspool.enqueue spool Queue1 widget1 (`Reserve "q1_co_test_")
+      Widgetspool.enqueue spool Queue1 (Cog 1) (`Reserve "q1_co_test_")
     in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File exists in registry and queue *)
@@ -134,9 +135,8 @@ let%expect_test "File Behavior" =
 
     (* Enqueue some files and test nextname functionality *)
     let enqueue (queue : Widget.Queue.t) prefix text =
-      let w = Widget.Sprocket text in
       let%map (_ : Widgetspool.Entry.t) =
-        Widgetspool.enqueue spool queue w (`Reserve prefix)
+        Widgetspool.enqueue spool queue (Sprocket text) (`Reserve prefix)
       in
       ()
     in

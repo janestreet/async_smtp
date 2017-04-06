@@ -38,7 +38,7 @@ let load_exn file =
 
 let tmp_dir t = Option.value ~default:(spool_dir t ^/ "temp") (tmp_dir t)
 
-let empty =
+let default =
   { spool_dir = "."
   ; tmp_dir = None
   ; where_to_listen = []

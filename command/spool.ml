@@ -93,7 +93,7 @@ end
 module Send = struct
   let spec () =
     Command.Spec.(
-      step (fun m v -> m ?retry_intervals:(Some v))
+      step (fun m v -> m ?retry_intervals:(Some (List.map v ~f:(Retry_interval.create))))
       +> flag "retry-interval" (listed time_span) ~doc:"SPAN additional retry \
                                                         intervals (order matters)"
       ++ step (fun m ~all ~frozen -> function

@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open Types
 
 type t
 
@@ -8,7 +7,7 @@ type t
    there. *)
 val create
   :  config:Server_config.t
-  -> send:(Envelope_with_next_hop.t -> unit Or_error.t Deferred.t)
+  -> send:(Envelope.With_next_hop.t -> unit Or_error.t Deferred.t)
   -> t Or_error.t Deferred.t
 
 (* Write the message to disk.
@@ -19,7 +18,7 @@ val create
 val add :
   t
   -> original_msg:Envelope.t
-  -> Envelope_with_next_hop.t list
+  -> Envelope.With_next_hop.t list
   -> Envelope.Id.t Or_error.t Deferred.t
 
 val flush

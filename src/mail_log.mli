@@ -1,7 +1,6 @@
 open Core
 open Async
 open Email_message.Std
-open Types
 
 module Mail_fingerprint : sig
   type t =
@@ -38,6 +37,10 @@ end
    [`Outbound_envelope] -
    Included on all log messages related to an outbound envelope.
    This ID is issued when spooling a message, or when using the client directly,
+
+   [`Cached_connection] -
+   Included on all log messages related to opening/closing/using an SMTP connection.
+   Entries with the same ID are using the same underlying connection.
 *)
 module Flows : sig
   module Kind : sig
@@ -46,6 +49,7 @@ module Flows : sig
       | `Client_session
       | `Inbound_envelope
       | `Outbound_envelope
+      | `Cached_connection
       ] [@@deriving sexp, bin_io]
   end
   module Id : sig
@@ -126,8 +130,8 @@ module Message : sig
     -> ?recipients:[ `Email of Email_address.t | `String of string ] list
     -> ?spool_id:string
     -> ?dest:Address.t
-    -> ?command:Command.t
-    -> ?reply:Reply.t
+    -> ?command:Smtp_command.t
+    -> ?reply:Smtp_reply.t
     -> ?session_marker:Session_marker.t
     -> ?tags:(string * string) list
     -> 'a
@@ -187,9 +191,9 @@ module Message : sig
   (* tag 'remote-address' *)
   val remote_address : t -> Address.t option
   (* tag 'command' *)
-  val command : t -> Command.t option
+  val command : t -> Smtp_command.t option
   (* tag 'reply' *)
-  val reply : t -> Reply.t option
+  val reply : t -> Smtp_reply.t option
   (* tag 'session-marker' *)
   val session_marker : t -> Session_marker.t option
 end

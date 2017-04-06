@@ -1,7 +1,6 @@
 open Core
 open Async
 open Email_message.Std
-open Types
 
 open Json_wheel_jane_street_overlay.Std
 module J = struct
@@ -44,23 +43,24 @@ module Mail_fingerprint = struct
     ; parts   : t list [@default []]
     } [@@deriving sexp, fields]
 
-  let rec of_email ~headers email =
-    let headers = headers @ Email_headers.to_list (Email.headers email) in
-    match Email.content email with
-    | Email.Content.Data content ->
+  let rec of_email email =
+    let headers = Email_headers.to_list (Email.headers email) in
+    match Email.Content.parse email with
+    | Ok (Email.Content.Data _)
+    | Error _ ->
       { headers
-      ; md5 = Some (Octet_stream.to_string content
+      ; md5 = Some (Email.raw_content email
+                    |> Bigstring_shared.to_string
                     |> Digest.string
                     |> Digest.to_hex)
       ; parts = []
       }
-    | Email.Content.Multipart { Email.Multipart.parts; _ } ->
+    | Ok (Email.Content.Message email) -> of_email email
+    | Ok (Email.Content.Multipart { Email.Content.Multipart.parts; _ }) ->
       { headers
       ; md5 = None
-      ; parts = List.map parts ~f:(of_email ~headers:[])
+      ; parts = List.map parts ~f:(of_email)
       }
-
-  let of_email = of_email ~headers:[]
 
   let json_of_headers headers =
     String.Map.of_alist_multi headers
@@ -96,22 +96,22 @@ module Flows = struct
       | `Client_session
       | `Inbound_envelope
       | `Outbound_envelope
+      | `Cached_connection
       ] [@@deriving sexp, bin_io]
   end
   module Id = struct
     module T = struct
-      type t = string [@@deriving bin_io, sexp]
+      type t = string [@@deriving bin_io, sexp, compare, hash]
       let tag = function
         | `Server_session -> "srv#"
         | `Client_session -> "cli#"
         | `Inbound_envelope -> "in#"
         | `Outbound_envelope -> "out#"
+        | `Cached_connection -> "conn#"
       let create kind =
         sprintf !"%s#%{Uuid}" (tag kind) (Uuid.create ())
       let is t kind =
         String.is_prefix t ~prefix:(tag kind)
-      let hash = String.hash
-      let compare = String.compare
     end
     include T
     include Hashable.Make(T)
@@ -131,8 +131,7 @@ end
 module Component = struct
   module T = struct
     let module_name = "Async_smtp.Mail_log.Component"
-    type t = string list [@@deriving sexp, bin_io, compare]
-    let hash = Hashtbl.hash
+    type t = string list [@@deriving sexp, bin_io, compare, hash]
     let to_string = String.concat ~sep:"/"
     let of_string = String.split ~on:'/'
   end
@@ -230,8 +229,8 @@ module Message = struct
     -> ?recipients:Recipient.t list
     -> ?spool_id:string
     -> ?dest:Address.t
-    -> ?command:Command.t
-    -> ?reply:Reply.t
+    -> ?command:Smtp_command.t
+    -> ?reply:Smtp_reply.t
     -> ?session_marker:Session_marker.t
     -> ?tags:(string * string) list
     -> 'a
@@ -241,11 +240,11 @@ module Message = struct
         ?email ?rfc822_id ?local_id ?sender ?recipients ?spool_id
         ?dest ?command ?reply ?session_marker ?(tags=[]) =
     let tags = match reply with
-      | Some reply -> (Tag.reply, Reply.to_string reply) :: tags
+      | Some reply -> (Tag.reply, Smtp_reply.to_string reply) :: tags
       | None -> tags
     in
     let tags = match command with
-      | Some command -> (Tag.command, Command.to_string command) :: tags
+      | Some command -> (Tag.command, Smtp_command.to_string command) :: tags
       | None -> tags
     in
     let tags = match dest with
@@ -289,7 +288,8 @@ module Message = struct
       | None -> None
     in
     let tags = match email_fingerprint with
-      | Some fingerprint -> (Tag.email_fingerprint, sprintf !"%{sexp:Mail_fingerprint.t}" fingerprint) :: tags
+      | Some fingerprint ->
+        (Tag.email_fingerprint, sprintf !"%{sexp:Mail_fingerprint.t}" fingerprint) :: tags
       | None -> tags
     in
     let local_id = match local_id with
@@ -462,9 +462,9 @@ module Message = struct
 
   let remote_address = find_tag' ~tag:Tag.remote_address ~f:Address.of_string
 
-  let command = find_tag' ~tag:Tag.command ~f:Command.of_string
+  let command = find_tag' ~tag:Tag.command ~f:Smtp_command.of_string
 
-  let reply = find_tag' ~tag:Tag.reply ~f:Reply.of_string
+  let reply = find_tag' ~tag:Tag.reply ~f:Smtp_reply.of_string
 
   let session_marker = find_tag' ~tag:Tag.session_marker ~f:Session_marker.of_string
 

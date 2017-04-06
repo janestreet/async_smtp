@@ -47,7 +47,6 @@
 *)
 open! Core
 open! Async
-open Types
 
 module Message_id : Identifiable
 
@@ -63,13 +62,13 @@ val create
   -> t Deferred.Or_error.t
 
 (** Immediately write the message to disk and queue it for sending. The
-    [Envelope_with_next_hop.t list] represents the different "sections" of one
+    [Envelope.With_next_hop.t list] represents the different "sections" of one
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
   -> flows:Mail_log.Flows.t
   -> original_msg:Envelope.t
-  -> Envelope_with_next_hop.t list
+  -> Envelope.With_next_hop.t list
   -> Envelope.Id.t Deferred.Or_error.t
 
 (* Move the message into a special quarantine directory where it can be manually
@@ -79,7 +78,7 @@ val quarantine
   -> reason: string
   -> flows:Mail_log.Flows.t
   -> original_msg:Envelope.t
-  -> Envelope_with_next_hop.t list
+  -> Envelope.With_next_hop.t list
   -> unit Deferred.Or_error.t
 
 (** [kill_and_flush ~timeout t] makes sure no new delivery sessions are being
@@ -91,11 +90,6 @@ val kill_and_flush
   :  ?timeout:unit Deferred.t
   -> t
   -> [`Finished | `Timeout ] Deferred.t
-
-(** The call [set_max_concurrent_jobs t n] does not affect delivery sessions
-    that are already running. Of all the sessions that are started after this
-    call only [n] will be allowed to run in parallel. *)
-val set_max_concurrent_jobs : t -> int -> unit
 
 val freeze
   :  t
@@ -110,7 +104,7 @@ module Send_info : sig
 end
 
 val send
-  :  ?retry_intervals : Time.Span.t list
+  :  ?retry_intervals : Retry_interval.t list
   -> t
   -> Send_info.t
   -> unit Deferred.Or_error.t

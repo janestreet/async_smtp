@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open Types
 
 
 module Peer_info : sig
@@ -55,29 +54,29 @@ val send
   -> ?flows:Mail_log.Flows.t
   -> component:Mail_log.Component.t
   -> here:Lexing.position
-  -> Command.t
+  -> Smtp_command.t
   -> unit Deferred.Or_error.t
 
 val receive
-  :  ?on_eof:(?partial:Reply.partial -> unit -> Reply.t Deferred.Or_error.t)
+  :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
   -> ?timeout:Time.Span.t
   -> ?flows:Mail_log.Flows.t
   -> t
   -> log:Mail_log.t
   -> component:Mail_log.Component.t
   -> here:Lexing.position
-  -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
+  -> [ `Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
 
 val send_receive
-  :  ?on_eof:(?partial:Reply.partial -> unit -> Reply.t Deferred.Or_error.t)
+  :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
   -> ?timeout:Time.Span.t
   -> t
   -> log:Mail_log.t
   -> ?flows:Mail_log.Flows.t
   -> component:Mail_log.Component.t
   -> here:Lexing.position
-  -> Command.t
-  -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
+  -> Smtp_command.t
+  -> [ `Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
 
 val send_string
   :  t
@@ -89,7 +88,7 @@ val send_string
   -> unit Deferred.Or_error.t
 
 val send_receive_string
-  :  ?on_eof:(?partial:Reply.partial -> unit -> Reply.t Deferred.Or_error.t)
+  :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
   -> ?timeout:Time.Span.t
   -> t
   -> log:Mail_log.t
@@ -97,7 +96,7 @@ val send_receive_string
   -> component:Mail_log.Component.t
   -> here:Lexing.position
   -> string
-  -> [ `Bsmtp | `Received of Reply.t] Deferred.Or_error.t
+  -> [ `Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
 
 (* Low level access *)
 val writer : t -> Writer.t

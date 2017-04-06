@@ -17,8 +17,8 @@ end
 type t = { event_stream : (Event.t -> unit) Bus.Read_write.t }
 
 let envelope_received t envelope =
-  let sender = Types.Envelope.string_sender envelope in
-  let recipients = Types.Envelope.string_recipients envelope in
+  let sender = Envelope.string_sender envelope in
+  let recipients = Envelope.string_recipients envelope in
   let event =
     Time.now (), `Envelope_received { Event.Envelope_received. sender; recipients }
   in

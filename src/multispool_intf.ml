@@ -5,8 +5,8 @@ open Async
 
     Multispool allows multiple, separate processes to cooperate via a filesystem-based
     queue. The design was influenced by various UNIX tools that use typical POSIX-y
-    flush/close/rename semantics to provide atomic filesystem operations (Maildir, in
-    particular--see http://www.qmail.org/man/man5/maildir.html for an overview).
+    write/fsync/close/rename semantics to provide atomic filesystem operations (Maildir,
+    in particular--see http://www.qmail.org/man/man5/maildir.html for an overview).
 
     One or more processes may place files in a queue, wait for files to appear in queues
     (and handle them), or iterate over files in a queue.
@@ -52,9 +52,6 @@ module Spoolable = struct
   module type S = sig
     type t
 
-    (** Use Stringable.S interface for disk persistence *)
-    include Stringable.S with type t := t
-
     (** [Queue.t] is an enumerable type that represents the available queues the mapping
         to directory names on-disk. *)
     module Queue : sig
@@ -64,6 +61,43 @@ module Spoolable = struct
     end
 
     module Name_generator : Name_generator.S
+
+    val load_from_disk
+      :  path: string
+      -> t Deferred.Or_error.t
+
+    (** [save_to_disk] is responsible for file integrity.  [Make_spoolable] provides an
+        implementation that uses [temp_file] and implements typical
+        write/fsync/close/rename semantics. *)
+    val save_to_disk
+      :  ?temp_file:string
+      -> path: string
+      -> t
+      -> unit Deferred.Or_error.t
+
+    (** All operations that touch disk are passed through [Throttle.enqueue] *)
+    module Throttle : sig
+      val enqueue : (unit -> 'a Deferred.t) -> 'a Deferred.t
+    end
+  end
+
+  module type Simple = sig
+    type t
+
+    module Queue : sig
+      type t [@@deriving sexp, enumerate]
+
+      val to_dirname : t -> string
+    end
+
+    module Name_generator : Name_generator.S
+
+    (** Used to define [load_from_disk] and [save_to_disk] *)
+    include Stringable.S with type t := t
+
+    module Throttle : sig
+      val enqueue : (unit -> 'a Deferred.t) -> 'a Deferred.t
+    end
   end
 end
 
@@ -105,6 +139,15 @@ module type S = sig
         data is read directly from the queue file.  If you need to later update this data,
         consider revalidating the contents after checkout and before writing. *)
     val contents_unsafe : t -> Spoolable.t Deferred.Or_error.t
+
+    (** Save contents directly to the file path derived from [t]. This is unsafe because
+        there is no validation or exclusive access guarantees. This will atomically
+        clobber over any existing file. *)
+    val save_unsafe : t -> Spoolable.t -> unit Deferred.Or_error.t
+
+    (** Delete an [Entry.t] from disk (along with its registry file). This is unsafe
+        because there is no validation or exclusive access guarantees. *)
+    val remove_unsafe : t -> unit Deferred.Or_error.t
 
     val stat : t -> Unix.Stats.t Deferred.Or_error.t
 

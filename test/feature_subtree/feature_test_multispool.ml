@@ -5,8 +5,10 @@ open Async_smtp.Std
 open Test_async_smtp
 
 module Widgetspool = Multispool.For_testing.Make(struct
-    include Widget
-    module Name_generator = Multispool.For_testing.Lexicographic_time_order_name_generator
+    include Multispool.Make_spoolable(struct
+        include Widget
+        module Name_generator = Multispool.For_testing.Lexicographic_time_order_name_generator
+      end)
   end)
 
 module Test_active_and_passive_queues = struct
@@ -93,9 +95,9 @@ module Test_active_and_passive_queues = struct
       chdir_create_and_open_spool tmp_dir "spool"
       >>= fun spool ->
       let ivar = Ivar.create () in
-      let stop = Some (Ivar.read ivar) in
+      let stop = Ivar.read ivar in
       let iterations = 5 in
-      let pipeline = dequeue_and_move spool ~iterations ?stop ~print_detail:false in
+      let pipeline = dequeue_and_move spool ~iterations ~stop ~print_detail:false in
       enqueue spool ~iterations:(iterations - 1)
       >>= fun () ->
       print_string "Stopping [dequeue]...\n";
@@ -148,8 +150,7 @@ module Test_active_and_passive_queues = struct
     with_temp_dir (fun tmp_dir ->
       chdir_create_and_open_spool tmp_dir "spool"
       >>= fun spool ->
-      (* 30,000 iterations was sufficient to expose early implementation flaws *)
-      let iterations = 30_000 in
+      let iterations = 1_000 in
       let pipeline =
         dequeue_and_move spool
           ~iterations

@@ -35,4 +35,4 @@ val load_exn : string -> t Deferred.t
 
 val tmp_dir   : t -> string
 
-val empty : t
+val default : t
