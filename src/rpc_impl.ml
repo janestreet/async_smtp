@@ -12,7 +12,7 @@ module Monitor = struct
     Clock.every (sec 10.) (fun () ->
       Bus.write error_stream (!seqnum, None));
     (* Actual errors *)
-    let send_errors = Log.Output.create (fun messages ->
+    let send_errors = Log.Output.create ~flush:(fun () -> return ()) (fun messages ->
       Queue.iter messages ~f:(fun message ->
         match Log.Message.level message with
         | Some `Error ->

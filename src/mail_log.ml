@@ -504,19 +504,19 @@ let error = message ~level:`Error
 let null_log =
   Log.create
     ~level:`Error
-    ~output:[ Log.Output.create (fun _ -> Deferred.unit) ]
+    ~output:[ Log.Output.create ~flush:(fun () -> return ()) (fun _ -> Deferred.unit) ]
     ~on_error:(`Call ignore)
 
 let with_flow_and_component ~flows ~component t =
   Log.create
     ~level:(Log.level t)
-    ~output:[ Log.Output.create (fun msgs ->
+    ~output:[ Log.Output.create ~flush:(fun () -> Log.flushed t) (fun msgs ->
       Queue.iter msgs ~f:(fun msg ->
         let level = Message.level msg in
         if Level.(<=) (Log.level t) level then
           message ~level t
             (lazy (Message.with_flow_and_component ~flows ~component msg)));
-      Log.flushed t) ]
+      return ()) ]
     ~on_error:(`Call (fun err ->
       Log.Global.sexp
         ~level:`Error
@@ -533,7 +533,7 @@ let adjust_log_levels ?(minimum_level=`Debug) ?(remap_info_to=`Info) ?(remap_err
   else
     Log.create
       ~level:minimum_level
-      ~output:[ Log.Output.create (fun msgs ->
+      ~output:[ Log.Output.create ~flush:(fun () -> Log.flushed t) (fun msgs ->
         Queue.iter msgs ~f:(fun msg ->
           let level = match Log.Message.level msg with
             | None | Some `Info -> remap_info_to
@@ -542,7 +542,7 @@ let adjust_log_levels ?(minimum_level=`Debug) ?(remap_info_to=`Info) ?(remap_err
           in
           if Level.(<=) minimum_level level then
             message' ~level t msg);
-        Log.flushed t) ]
+        return ()) ]
       ~on_error:(`Call (fun err ->
         Log.Global.sexp
           ~level:`Error
