@@ -47,5 +47,6 @@ let json_of_t' ?message ?(tags=[]) () =
           | [v] -> J.string v
           | v -> List.map v ~f:(fun v -> J.string v) |> J.array))
     ) |> J.objekt)
+;;
 
 let json_of_t = Staged.unstage (json_of_t' ())
