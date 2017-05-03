@@ -10,8 +10,9 @@ module Config = Client_config
 module Peer_info = struct
   type t =
     { dest : Address.t
-    ; greeting : string Set_once.t
-    ; hello : [`Simple of string | `Extended of string * (Smtp_extension.t list) ] Set_once.t
+    ; greeting : string Set_once.Stable.V1.t
+    ; hello : [ `Simple of string
+              | `Extended of string * (Smtp_extension.t list) ] Set_once.Stable.V1.t
     } [@@deriving sexp, fields]
 
   let create ~dest () =
