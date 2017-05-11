@@ -22,10 +22,10 @@ module Peer_info = struct
     }
 
   let set field t value =
-    match Set_once.set (Field.get field t) value with
+    match Set_once.set (Field.get field t) [%here] value with
     | Ok () -> Ok ()
-    | Error s ->
-      Error (Error.tag (Error.of_string s) ~tag:(Field.name field))
+    | Error error ->
+      Error (Error.tag error ~tag:(Field.name field))
 
   let set_greeting = set Fields.greeting
   let set_hello = set Fields.hello

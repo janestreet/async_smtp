@@ -259,7 +259,7 @@ module Make(R : Resource_intf) = struct
         t.remaining_uses <- t.remaining_uses - 1;
         (* deliberately not filling [done_] here.
            It is filled in [set_idle] or [close]. *)
-        Monitor.try_with (fun () -> f (Set_once.get_exn t.resource))
+        Monitor.try_with (fun () -> f (Set_once.get_exn t.resource [%here]))
         >>| function
         | Ok res ->
           set_idle t;
@@ -278,7 +278,7 @@ module Make(R : Resource_intf) = struct
       | `Idle_since _ ->
         (* It is possible that [R.close] was called but [R.close_finished] is not
            determined yet. Use [R.is_closed] to prevent this race. *)
-        if R.is_closed (Set_once.get_exn t.resource) then
+        if R.is_closed (Set_once.get_exn t.resource [%here]) then
           `Resource_closed
         else (
           t.status <- `In_use_until (Ivar.create ());
@@ -320,7 +320,7 @@ module Make(R : Resource_intf) = struct
           (* A call to [close_and_flush] might have occurred *)
           if t.remaining_uses > 0 then (
             don't_wait_for (R.close_finished res >>= fun () -> close_when_idle t);
-            Set_once.set_exn t.resource res;
+            Set_once.set_exn t.resource [%here] res;
             unsafe_immediate t ~f:with_
             >>| fun r ->
             `Ok (args, r))
