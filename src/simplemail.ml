@@ -15,13 +15,13 @@ let client_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
 module Expert = struct
   include Email.Simple.Expert
 
-  let send' ?(log=Lazy.force client_log) ?(server=default_server) ~sender ?sender_args ~recipients email =
+  let send' ?(log=Lazy.force client_log) ?credentials ?(server=default_server) ~sender ?sender_args ~recipients email =
     let message = Envelope.create ~sender ?sender_args ~recipients ~rejected_recipients:[] ~email () in
-    Client.Tcp.with_ server ~log ~f:(fun client ->
+    Client.Tcp.with_ ?credentials server ~log ~f:(fun client ->
       Client.send_envelope client ~log message)
 
-  let send ?log ?server ~sender ?sender_args ~recipients email =
-    send' ?log ?server ~sender ?sender_args ~recipients email
+  let send ?log ?credentials ?server ~sender ?sender_args ~recipients email =
+    send' ?log ?credentials ?server ~sender ?sender_args ~recipients email
     >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
     >>| Or_error.join
     >>| Or_error.ignore
@@ -29,6 +29,7 @@ end
 
 let send'
       ?log
+      ?credentials
       ?server
       ?(from=Email_address.local_address ())
       ?sender_args
@@ -61,10 +62,11 @@ let send'
   let recipients = to_ @ cc @ bcc in
   let sender = `Email from in
   let server = Option.map server ~f:(fun hp -> `Inet hp) in
-  Expert.send' ?log ?server ~sender ?sender_args ~recipients email
+  Expert.send' ?log ?credentials ?server ~sender ?sender_args ~recipients email
 
 let send
       ?log
+      ?credentials
       ?server
       ?from
       ?sender_args
@@ -82,6 +84,7 @@ let send
       content =
   send'
     ?log
+    ?credentials
     ?server
     ?from
     ?sender_args

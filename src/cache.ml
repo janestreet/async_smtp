@@ -555,9 +555,12 @@ module Make(R : Resource_intf) = struct
     let close_and_flush' t =
       if not t.close_started then (
         t.close_started <- true;
-        Mvar.set t.trigger_queue_manager ();
-        List.iter t.resources ~f:(fun r ->
-          don't_wait_for (Resource.close_when_idle r)))
+        if List.is_empty t.resources
+        then (Ivar.fill t.close_finished ())
+        else (
+          Mvar.set t.trigger_queue_manager ();
+          List.iter t.resources ~f:(fun r ->
+            don't_wait_for (Resource.close_when_idle r))))
     ;;
   end
 

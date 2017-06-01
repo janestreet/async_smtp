@@ -108,6 +108,15 @@ module Session_marker : sig
     ]
 end
 
+(** Augment [Log.Level] with [`Error_send_to_monitor] which are errors that are reported
+    by the RPC [Monitor.errors] *)
+module Level : sig
+  type t =
+    [ Log.Level.t
+    | `Error_send_to_monitor
+    ]
+end
+
 (** Wrapper arround Log.Message.t that allows access to various standardised tag names. *)
 module Message : sig
 
@@ -139,7 +148,10 @@ module Message : sig
 
   type t = Log.Message.t [@@deriving sexp_of]
 
-  val json_of_t : t -> Json_wheel_jane_street_overlay.Std.Json_type.json_type
+  val json_of_t
+    :  ?add_tags:(string * Logstash_conv.Message.tag_format) list
+    -> t
+    -> Json_wheel_jane_street_overlay.Std.Json_type.json_type
 
   val create : (Action.t -> t) with_info
 
@@ -151,7 +163,7 @@ module Message : sig
   val info : (unit -> t) with_info
 
   (* Utility accessors for the standard info tags *)
-  val level : t -> Log.Level.t
+  val level : t -> Level.t
   val time : t -> Time.t
 
   (** Encoded as one tag 'flow' for each Flow id *)
@@ -216,12 +228,14 @@ val with_flow_and_component
 (* This function is to give external users of this library a chance to control
    the verbosity of our logs. *)
 val adjust_log_levels
-  :  ?minimum_level:Log.Level.t
+  :  ?minimum_level:Level.t
   (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
-  -> ?remap_info_to:Log.Level.t
+  -> ?remap_info_to:Level.t
   (* Rewrite messages with level [`Info] to level [remap_info_to] *)
-  -> ?remap_error_to:Log.Level.t
+  -> ?remap_error_to:Level.t
   (* Rewrite messages with level [`Error] to level [remap_error_to] *)
+  -> ?remap_error_send_to_monitor_to:Level.t
+  (* Rewrite messages with level [`Error_send_to_monitor] to level [remap_error_send_to_monitor_to] *)
   -> t -> t
 
 (** [message] outputs the given message (if appropriate for the current log level).
@@ -236,8 +250,8 @@ val adjust_log_levels
  * If [t] has information attached to it via [with_flow_and_component],
     add that information to the message.
 *)
-val message : t -> level:Log.Level.t -> Message.t Lazy.t -> unit
-val message' : t -> level:Log.Level.t -> Message.t -> unit
+val message : t -> level:Level.t -> Message.t Lazy.t -> unit
+val message' : t -> level:Level.t -> Message.t -> unit
 
 (** [info] is shorthand for [message ~level:`Info]. *)
 val info  : t -> Message.t Lazy.t -> unit
@@ -245,5 +259,5 @@ val info  : t -> Message.t Lazy.t -> unit
 (** [debug] is shorthand for [message ~level:`Debug]. *)
 val debug : t -> Message.t Lazy.t -> unit
 
-(** [error] is shorthand for [message ~level:`Error]. *)
-val error : t -> Message.t Lazy.t -> unit
+(** [error] is shorthand for [message ~level:`Error] or [message ~level:`Error_send_to_monitor] *)
+val error : send_to_monitor:bool -> t -> Message.t Lazy.t -> unit

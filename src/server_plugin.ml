@@ -159,7 +159,7 @@ module type Envelope = sig
     -> [ `Consume of string
        | `Reject of Smtp_reply.t
        | `Send of Envelope.With_next_hop.t list
-       | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * string
+       | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * Quarantine_reason.t
        ] Deferred.t
 
 end
@@ -235,7 +235,7 @@ module Simple : sig
       -> [ `Consume of string
          | `Reject of Smtp_reply.t
          | `Send of Envelope.With_next_hop.t list
-         | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * string
+         | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * Quarantine_reason.t
          ] Deferred.t
   end
 

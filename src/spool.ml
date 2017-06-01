@@ -19,7 +19,7 @@ module Event = struct
              | `Removed     of Message_id.t
              | `Unfrozen    of Message_id.t
              | `Recovered   of Message_id.t * [`From_quarantined | `From_removed]
-             | `Quarantined of Message_id.t * [`Reason of string]
+             | `Quarantined of Message_id.t * [`Reason of Quarantine_reason.t]
              | `Ping ]
     [@@deriving sexp, bin_io, compare]
 
@@ -92,23 +92,24 @@ let add_message t msg =
   match Hashtbl.add t.messages ~key:id ~data:msg with
   | `Ok -> ()
   | `Duplicate ->
-    Log.error t.log (lazy (Log.Message.create
-                             ~here:[%here]
-                             ~flows:(Message.flows msg)
-                             ~component:["spool";"admin"]
-                             ~spool_id:(Message_id.to_string id)
-                             "Message already in spool"))
+    Log.error ~send_to_monitor:true t.log (lazy (Log.Message.create
+                                                   ~here:[%here]
+                                                   ~flows:(Message.flows msg)
+                                                   ~component:["spool";"admin"]
+                                                   ~spool_id:(Message_id.to_string id)
+                                                   "Message already in spool"))
 
 let remove_message t msg =
   let id = Message.id msg in
-  if not (Hashtbl.mem t.messages id) then
-    Log.error t.log (lazy (Log.Message.create
-                             ~here:[%here]
-                             ~flows:(Message.flows msg)
-                             ~component:["spool";"admin"]
-                             ~spool_id:(Message_id.to_string id)
-                             "Trying to remove message that is not in spool"));
-  Hashtbl.remove t.messages id
+  if Hashtbl.mem t.messages id
+  then Hashtbl.remove t.messages id
+  else (
+    Log.error ~send_to_monitor:true t.log (lazy (Log.Message.create
+                                                   ~here:[%here]
+                                                   ~flows:(Message.flows msg)
+                                                   ~component:["spool";"admin"]
+                                                   ~spool_id:(Message_id.to_string id)
+                                                   "Trying to remove message that is not in spool")))
 
 let with_event_writer ~here spool spooled_msg ~f = f ~here ~log:spool.log spool.event_stream spooled_msg
 let spooled_event   = with_event_writer ~f:Event.spooled
@@ -194,12 +195,13 @@ let rec enqueue ?at t spooled_msg =
         Message.send spooled_msg ~log:t.log ~client_cache:t.client_cache
         >>| function
         | Error e ->
-          Log.error t.log (lazy (Log.Message.of_error
-                                   ~here:[%here]
-                                   ~flows:(Message.flows spooled_msg)
-                                   ~component:["spool";"send"]
-                                   ~spool_id:(Message_id.to_string msgid)
-                                   e))
+          Log.error ~send_to_monitor:true t.log
+            (lazy (Log.Message.of_error
+                     ~here:[%here]
+                     ~flows:(Message.flows spooled_msg)
+                     ~component:["spool";"send"]
+                     ~spool_id:(Message_id.to_string msgid)
+                     e))
         | Ok () ->
           match Message.status spooled_msg with
           | `Delivered ->
@@ -255,12 +257,13 @@ let load t =
     Message.load entry
     >>| function
     | Error e ->
-      Log.error t.log (lazy (Log.Message.of_error
-                               ~here:[%here]
-                               ~flows:Log.Flows.none
-                               ~component:["spool";"init"]
-                               ~tags:["entries", sprintf !"%{sexp:Message_spool.Entry.t list}" [entry]]
-                               e))
+      Log.error ~send_to_monitor:true t.log
+        (lazy (Log.Message.of_error
+                 ~here:[%here]
+                 ~flows:Log.Flows.none
+                 ~component:["spool";"init"]
+                 ~tags:["entries", sprintf !"%{sexp:Message_spool.Entry.t list}" [entry]]
+                 e))
     | Ok msg ->
       Log.info t.log (lazy (Log.Message.create
                               ~here:[%here]
@@ -409,12 +412,13 @@ let recover t (info : Recover_info.t) =
     >>= function
     | Error e ->
       let e = Error.tag e ~tag:"Failed to recover message" in
-      Log.error t.log (lazy (Log.Message.of_error
-                               ~here:[%here]
-                               ~flows:Log.Flows.none
-                               ~component:["spool";"admin"]
-                               ~spool_id:(Message_id.to_string id)
-                               e));
+      Log.error ~send_to_monitor:true t.log
+        (lazy (Log.Message.of_error
+                 ~here:[%here]
+                 ~flows:Log.Flows.none
+                 ~component:["spool";"admin"]
+                 ~spool_id:(Message_id.to_string id)
+                 e));
       return (Error e)
     | Ok msg ->
       Option.value_map info.wrapper ~default:Deferred.Or_error.ok_unit ~f:(fun wrapper ->

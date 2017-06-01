@@ -32,7 +32,7 @@ module Status = struct
     | `Sending
     | `Frozen
     | `Removed
-    | `Quarantined of string
+    | `Quarantined of Quarantine_reason.t
     | `Delivered
     ] [@@deriving sexp, bin_io, compare]
 end
@@ -415,8 +415,7 @@ let send_to_hops t ~log ~client_cache get_envelope =
       let envelope = Envelope.set envelope ~recipients:t.remaining_recipients () in
       Client.send_envelope client ~log ~flows ~component:["spool";"send"] envelope)
   >>= function
-  | `Ok (hop, (Error e))
-  | `Error_opening_resource (hop, e) ->
+  | `Ok (hop, (Error e)) ->
     (* The client logs many common failures, so this might be repetitive. But
        duplication in the error case is better than missing potential errors. *)
     let e = Error.tag ~tag:"Unable to send envelope" e in
@@ -427,6 +426,19 @@ let send_to_hops t ~log ~client_cache get_envelope =
                           ~spool_id:t.id
                           ~remote_address:hop
                           e));
+    t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
+    return `Try_later
+  | `Error_opening_resource hops_and_errors ->
+    List.iter hops_and_errors ~f:(fun (hop, e) ->
+      let e = Error.tag ~tag:"Unable to open connection for hop" e in
+      Log.info log (lazy (Log.Message.of_error
+                            ~here:[%here]
+                            ~flows:t.flows
+                            ~component:["spool"; "send"]
+                            ~spool_id:t.id
+                            ~remote_address:hop
+                            e)));
+    let e = Error.createf "No hops available" in
     t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
     return `Try_later
   | `Gave_up_waiting_for_resource ->

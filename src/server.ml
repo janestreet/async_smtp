@@ -300,12 +300,13 @@ module Make(Cb : Plugin.S) = struct
                               "session_helo:disconnect"));
         write_reply ~here:[%here] ~flows ~component reply
       | Error err ->
-        Log.error log (lazy (Log.Message.of_error
-                               ~here:[%here]
-                               ~flows
-                               ~component:(component @ ["plugin"; "Session.helo"])
-                               ~tags:["extended", Bool.to_string extended; "helo", helo]
-                               (Error.tag err ~tag:"session_helo")));
+        Log.error ~send_to_monitor:true log
+          (lazy (Log.Message.of_error
+                   ~here:[%here]
+                   ~flows
+                   ~component:(component @ ["plugin"; "Session.helo"])
+                   ~tags:["extended", Bool.to_string extended; "helo", helo]
+                   (Error.tag err ~tag:"session_helo")));
         service_unavailable ~here:[%here] ~flows ~component ()
     and top_start_tls ~flows ~session tls_options (module Tls_cb : Plugin.Start_tls with type session=Cb.Session.t) =
       let component = ["smtp-server"; "session"; "starttls"] in
@@ -332,10 +333,11 @@ module Make(Cb : Plugin.S) = struct
         ()
       >>= function
       | Error e ->
-        Log.error log (lazy (Log.Message.of_error
-                               ~here:[%here]
-                               ~flows
-                               ~component e));
+        Log.error ~send_to_monitor:false log
+          (lazy (Log.Message.of_error
+                   ~here:[%here]
+                   ~flows
+                   ~component e));
         return ()
       | Ok tls ->
         Reader.of_pipe (Info.of_string "SMTP/TLS") reader_pipe_r
@@ -361,10 +363,11 @@ module Make(Cb : Plugin.S) = struct
         don't_wait_for begin
           Ssl.Connection.closed tls
           >>| Result.iter_error ~f:(fun e ->
-            Log.error log (lazy (Log.Message.of_error
-                                   ~here:[%here]
-                                   ~flows
-                                   ~component e)))
+            Log.error ~send_to_monitor:false log
+              (lazy (Log.Message.of_error
+                       ~here:[%here]
+                       ~flows
+                       ~component e)))
           >>= teardown
         end;
         Monitor.protect (fun () ->
@@ -479,12 +482,13 @@ module Make(Cb : Plugin.S) = struct
           >>= fun () ->
           top ~session
         | Error err ->
-          Log.error log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows
-                                 ~component:(component @ ["plugin"; "Envelope.mail_from"])
-                                 ~sender:(`String sender_str)
-                                 (Error.tag err ~tag:"mail_from")));
+          Log.error ~send_to_monitor:true log
+            (lazy (Log.Message.of_error
+                     ~here:[%here]
+                     ~flows
+                     ~component:(component @ ["plugin"; "Envelope.mail_from"])
+                     ~sender:(`String sender_str)
+                     (Error.tag err ~tag:"mail_from")));
           service_unavailable ~here:[%here] ~flows ~component ()
           >>= fun () ->
           top ~session
@@ -556,12 +560,13 @@ module Make(Cb : Plugin.S) = struct
           >>= fun () ->
           envelope ~session ~flows data
         | Error err ->
-          Log.error log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows
-                                 ~component:(component @ ["plugin"; "Envelope.rcpt_to"])
-                                 ~recipients:[`Email recipient]
-                                 (Error.tag err ~tag:"rcpt_to")));
+          Log.error ~send_to_monitor:true log
+            (lazy (Log.Message.of_error
+                     ~here:[%here]
+                     ~flows
+                     ~component:(component @ ["plugin"; "Envelope.rcpt_to"])
+                     ~recipients:[`Email recipient]
+                     (Error.tag err ~tag:"rcpt_to")));
           service_unavailable ~here:[%here] ~flows ~component ()
           >>= fun () ->
           envelope ~session ~flows data
@@ -595,11 +600,12 @@ module Make(Cb : Plugin.S) = struct
         >>= fun () ->
         envelope ~session ~flows data
       | Error err ->
-        Log.error log (lazy (Log.Message.of_error
-                               ~here:[%here]
-                               ~flows
-                               ~component:(component @ ["plugin"; "Envelope.accept_data"])
-                               (Error.tag err ~tag:"process_envelope")));
+        Log.error ~send_to_monitor:true log
+          (lazy (Log.Message.of_error
+                   ~here:[%here]
+                   ~flows
+                   ~component:(component @ ["plugin"; "Envelope.accept_data"])
+                   (Error.tag err ~tag:"process_envelope")));
         service_unavailable ~here:[%here] ~flows ~component ()
         >>= fun () ->
         envelope ~session ~flows data
@@ -623,11 +629,12 @@ module Make(Cb : Plugin.S) = struct
             match Or_error.try_with (fun () -> Email.of_bigbuffer raw) with
             | Ok email -> Ok email
             | Error error ->
-              Log.error log (lazy (Log.Message.of_error
-                                     ~here:[%here]
-                                     ~flows
-                                     ~component
-                                     error));
+              Log.error ~send_to_monitor:false log
+                (lazy (Log.Message.of_error
+                         ~here:[%here]
+                         ~flows
+                         ~component
+                         error));
               match config.Config.malformed_emails with
               | `Reject ->
                 Error (Smtp_reply.syntax_error_501 "Malformed Message")
@@ -672,11 +679,12 @@ module Make(Cb : Plugin.S) = struct
               >>= fun () ->
               top ~session
             | Error err ->
-              Log.error log (lazy (Log.Message.of_error
-                                     ~here:[%here]
-                                     ~flows
-                                     ~component:(component @ ["plugin"; "Envelope.data"])
-                                     (Error.tag err ~tag:"process_envelope")));
+              Log.error ~send_to_monitor:true log
+                (lazy (Log.Message.of_error
+                         ~here:[%here]
+                         ~flows
+                         ~component:(component @ ["plugin"; "Envelope.data"])
+                         (Error.tag err ~tag:"process_envelope")));
               service_unavailable ~here:[%here] ~flows ~component ()
               >>= fun () ->
               top ~session
@@ -697,14 +705,15 @@ module Make(Cb : Plugin.S) = struct
                 >>= function
                 | Error err ->
                   List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                    Log.error log (lazy (Log.Message.of_error
-                                           ~here:[%here]
-                                           ~flows
-                                           ~component
-                                           ~email:(`Envelope (Envelope.With_next_hop.envelope envelope_with_next_hops))
-                                           ~tags:(List.map (Envelope.With_next_hop.next_hop_choices envelope_with_next_hops)
-                                                    ~f:(fun c -> "next-hop",Address.to_string c))
-                                           (Error.tag err ~tag:"quarantining"))));
+                    Log.error ~send_to_monitor:true log
+                      (lazy (Log.Message.of_error
+                               ~here:[%here]
+                               ~flows
+                               ~component
+                               ~email:(`Envelope (Envelope.With_next_hop.envelope envelope_with_next_hops))
+                               ~tags:(List.map (Envelope.With_next_hop.next_hop_choices envelope_with_next_hops)
+                                        ~f:(fun c -> "next-hop",Address.to_string c))
+                               (Error.tag err ~tag:"quarantining"))));
                   transaction_failed ~here:[%here] ~flows ~component "error spooling"
                   >>= fun () ->
                   top ~session
@@ -719,7 +728,7 @@ module Make(Cb : Plugin.S) = struct
                                           ~flows
                                           ~component
                                           ~spool_id:msg_id
-                                          ~tags:["quarantine-reason",reason]
+                                          ~tags:["quarantine-reason", Quarantine_reason.to_string reason]
                                           "QUARANTINED")));
                   write_reply ~here:[%here] ~flows ~component reply
                   >>= fun () ->
@@ -731,14 +740,15 @@ module Make(Cb : Plugin.S) = struct
               >>= function
               | Error err ->
                 List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                  Log.error log (lazy (Log.Message.of_error
-                                         ~here:[%here]
-                                         ~flows
-                                         ~component
-                                         ~email:(`Envelope (Envelope.With_next_hop.envelope envelope_with_next_hops))
-                                         ~tags:(List.map (Envelope.With_next_hop.next_hop_choices envelope_with_next_hops)
-                                                  ~f:(fun c -> "next-hop",Address.to_string c))
-                                         (Error.tag err ~tag:"spooling"))));
+                  Log.error ~send_to_monitor:true log
+                    (lazy (Log.Message.of_error
+                             ~here:[%here]
+                             ~flows
+                             ~component
+                             ~email:(`Envelope (Envelope.With_next_hop.envelope envelope_with_next_hops))
+                             ~tags:(List.map (Envelope.With_next_hop.next_hop_choices envelope_with_next_hops)
+                                      ~f:(fun c -> "next-hop",Address.to_string c))
+                             (Error.tag err ~tag:"spooling"))));
                 transaction_failed ~here:[%here] ~flows ~component "error spooling"
                 >>= fun () ->
                 top ~session
@@ -858,13 +868,14 @@ module Make(Cb : Plugin.S) = struct
       Tcp.Server.create (make_tcp_where_to_listen where)
         ~on_handler_error:(`Call (fun remote_address exn ->
           let remote_address = make_remote_address remote_address in
-          Log.error log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows:Log.Flows.none
-                                 ~component:["smtp-server";"tcp"]
-                                 ~local_address
-                                 ~remote_address
-                                 (Error.of_exn ~backtrace:`Get exn)))))
+          Log.error ~send_to_monitor:true log
+            (lazy (Log.Message.of_error
+                     ~here:[%here]
+                     ~flows:Log.Flows.none
+                     ~component:["smtp-server";"tcp"]
+                     ~local_address
+                     ~remote_address
+                     (Error.of_exn ~backtrace:`Get exn)))))
         ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
         (fun address_in reader writer ->
            let session_flows = Log.Flows.create `Server_session in
@@ -888,13 +899,14 @@ module Make(Cb : Plugin.S) = struct
                ()
            )
            >>| Result.iter_error ~f:(fun err ->
-             Log.error log (lazy (Log.Message.of_error
-                                    ~here:[%here]
-                                    ~flows:session_flows
-                                    ~component:["smtp-server"; "tcp"]
-                                    ~local_address
-                                    ~remote_address
-                                    err))))
+             Log.error ~send_to_monitor:true log
+               (lazy (Log.Message.of_error
+                        ~here:[%here]
+                        ~flows:session_flows
+                        ~component:["smtp-server"; "tcp"]
+                        ~local_address
+                        ~remote_address
+                        err))))
       >>| to_server
     in
     Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:(function

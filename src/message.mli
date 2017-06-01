@@ -11,7 +11,7 @@ module Status : sig
     | `Sending
     | `Frozen
     | `Removed
-    | `Quarantined of string
+    | `Quarantined of Quarantine_reason.t
     | `Delivered
     ] [@@deriving sexp]
 end

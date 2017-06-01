@@ -75,7 +75,7 @@ val add
    inspected and optionally manually injected back into the spool *)
 val quarantine
   :  t
-  -> reason: string
+  -> reason: Quarantine_reason.t
   -> flows:Mail_log.Flows.t
   -> original_msg:Envelope.t
   -> Envelope.With_next_hop.t list
@@ -146,7 +146,7 @@ module Spooled_message_info : sig
        | `Frozen
        | `Removed
        | `Delivered
-       | `Quarantined of string ]
+       | `Quarantined of Quarantine_reason.t ]
 
   (* These will not be populated for information obtained using [status].  Use
      [status_from_disk] if you want to see envelopes. Part of the reason is that
@@ -186,7 +186,7 @@ module Event : sig
            | `Removed     of Message_id.t
            | `Unfrozen    of Message_id.t
            | `Recovered   of Message_id.t * [`From_quarantined | `From_removed]
-           | `Quarantined of Message_id.t * [`Reason of string]
+           | `Quarantined of Message_id.t * [`Reason of Quarantine_reason.t]
            | `Ping ]
   [@@deriving sexp, bin_io]
 

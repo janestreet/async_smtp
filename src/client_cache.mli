@@ -43,7 +43,7 @@ module Tcp : sig
     -> cache:t
     -> Address.t list
     -> [ `Ok of Address.t * 'a Or_error.t
-       | `Error_opening_resource of Address.t * Error.t
+       | `Error_opening_resource of (Address.t * Error.t) list
        | `Gave_up_waiting_for_resource
        | `Cache_is_closed
        ] Deferred.t

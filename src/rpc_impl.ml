@@ -14,8 +14,8 @@ module Monitor = struct
     (* Actual errors *)
     let send_errors = Log.Output.create ~flush:(fun () -> return ()) (fun messages ->
       Queue.iter messages ~f:(fun message ->
-        match Log.Message.level message with
-        | Some `Error ->
+        match Mail_log.Message.level message with
+        | `Error_send_to_monitor ->
           let error =
             Log.Message.message message
             |> Error.of_string

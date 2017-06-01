@@ -11,11 +11,11 @@ let equal = [%compare.equal: t]
 
 let of_string str =
   let t =
-    match String.uppercase str with
-    | "STARTTLS" -> Start_tls
-    | "AUTH LOGIN" -> Auth_login
-    | "8BITMIME" -> Mime_8bit_transport
-    | str -> Other str
+    match String.uppercase str |> String.split ~on:' ' with
+    | ["STARTTLS"] -> Start_tls
+    | "AUTH" :: methods when List.mem methods "LOGIN" ~equal:String.equal -> Auth_login
+    | ["8BITMIME"] -> Mime_8bit_transport
+    | _ -> Other str
   in
   t
 ;;

@@ -64,12 +64,12 @@ module Bodies = struct
         let module Encoding = Octet_stream.Encoding in
         let encoding = Octet_stream.encoding octet_stream in
         octet_stream
-        |> Octet_stream.to_string
+        |> Octet_stream.encoded_contents_string
         |> hash_fun
         |> sprintf
              !"\nPART HIDDEN.\nORIGINAL_ENCODING:%{sexp:Encoding.t}\nHASH:%s\n"
              encoding
-        |> Octet_stream.of_string
+        |> Octet_stream.of_string ~encoding:Octet_stream.Encoding.default'
       in
       Envelope.modify_email ~f:(fun email ->
         (* This tool is used to hide the message body to optimize the message

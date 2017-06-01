@@ -264,6 +264,36 @@ let%expect_test "close_and_flush with nothing open" =
   return ()
 ;;
 
+let%expect_test "close_and_flush with empty resource list" =
+  let t = Test_cache.init ~config in
+  let%bind () =
+    Deferred.List.iter (List.init config.max_resource_reuse ~f:Fn.id) ~f:(fun _ ->
+      let%map (_ : Resource.t) = assert_resource_available_now t [0] in
+      ())
+  in
+  let%bind () =
+    [%expect {|
+      Opening 0,7
+      Got resource 0,7
+      Releasing resource 0,7
+      Got resource 0,7
+      Releasing resource 0,7
+      Closing 0,7 |}]
+  in
+  let%bind () =
+    match%map Clock.with_timeout (sec 1.) (close_and_flush t) with
+    | `Timeout -> printf "BUG: TIMEOUT\n"
+    | `Result () -> ()
+  in
+  let%bind () =
+    [%expect {|
+      Closing cache
+      Closed cache
+    |}]
+  in
+  return ()
+;;
+
 (* [close_and_flush] should close all open resources and not allow subsequent calls to
    open new resources *)
 let%expect_test "close_and_flush closes resources" =
@@ -271,15 +301,15 @@ let%expect_test "close_and_flush closes resources" =
   let%bind (_ : Resource.t) = assert_resource_available_now t [0] in
   let%bind () =
     [%expect {|
-      Opening 0,7
-      Got resource 0,7
-      Releasing resource 0,7 |}]
+      Opening 0,8
+      Got resource 0,8
+      Releasing resource 0,8 |}]
   in
   let%bind () = close_and_flush t  in
   let%bind () =
     [%expect {|
       Closing cache
-      Closing 0,7
+      Closing 0,8
       Closed cache |}]
   in
   assert (Test_cache.close_started t);
@@ -310,8 +340,8 @@ let%expect_test "close_and_flush clears queue, waits for all jobs to finish" =
   let%bind (_ : Resource.t) = Ivar.read r_ivar in
   let%bind () =
     [%expect {|
-      Opening 0,8
-      Got resource 0,8 |}]
+      Opening 0,9
+      Got resource 0,9 |}]
   in
   let waiting_for_0 = assert_no_resource_available t [0] in
   let closed_and_flushed = close_and_flush t in
@@ -323,8 +353,8 @@ let%expect_test "close_and_flush clears queue, waits for all jobs to finish" =
     [%expect {|
       Closing cache
       Error getting (0): "Cache is closed"
-      Releasing resource 0,8
-      Closing 0,8
+      Releasing resource 0,9
+      Closing 0,9
       Closed cache |}]
   in
   return ()

@@ -172,22 +172,38 @@ let close_started t = Client_cache.close_started t.cache
 module Tcp = struct
   let with_' ?give_up ~f ~cache addresses =
     let f (t : Resource.t) = f ~flows:t.flows t.client in
-    let args_list = List.map addresses ~f:(Resource.Args.create ~common:cache.common_args) in
-    Client_cache.with_any' ~open_timeout:(Time.Span.of_sec 10.) ?give_up cache.cache args_list
-      ~f:(fun r ->
-        f r
+    let args_list =
+      List.map addresses ~f:(Resource.Args.create ~common:cache.common_args)
+    in
+    let rec with_any_loop ~failed = function
+      | [] ->
+        return (`Error_opening_resource failed)
+      | args_list ->
+        Client_cache.with_any' ~open_timeout:(Time.Span.of_sec 10.)
+          ?give_up cache.cache args_list
+          ~f:(fun r ->
+            f r
+            >>= function
+            | (Error _) as err ->
+              (* Close the Connection if the callback returns an [Error] *)
+              Resource.close r
+              >>| const err
+            | (Ok _) as ok ->
+              return ok)
         >>= function
-        | (Error _) as err ->
-          (* Close the Connection if the callback returns an [Error] *)
-          Resource.close r
-          >>| const err
-        | (Ok _) as ok ->
-          return ok)
-    >>| function
-    | `Ok (args, res) ->
-      `Ok (Resource.Args.address args, res)
-    | `Error_opening_resource (args, e) ->
-      `Error_opening_resource (Resource.Args.address args, e)
-    | `Gave_up_waiting_for_resource
-    | `Cache_is_closed as res -> res
+        | `Ok (args, res) ->
+          return (`Ok (Resource.Args.address args, res))
+        | `Gave_up_waiting_for_resource
+        | `Cache_is_closed as res -> return res
+        | `Error_opening_resource (failed_args, e) ->
+          let remaining =
+            List.filter args_list
+              ~f:(fun args ->
+                not (Resource.Args.equal args failed_args))
+          in
+          with_any_loop
+            ~failed:((Resource.Args.address failed_args, e) :: failed)
+            remaining
+    in
+    with_any_loop ~failed:[] args_list
 end

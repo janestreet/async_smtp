@@ -11,29 +11,33 @@ module J = struct
     | vs -> array_of f vs
 end
 
-(* Level with a comparison function that has our desired behaviour *)
-module Level : Comparable.S with type t := Log.Level.t = struct
-  include Comparable.Make(struct
-      type t = Log.Level.t [@@deriving sexp]
-      let compare a b = match a, b with
-        | `Debug, `Debug -> 0
-        | `Debug, (`Info | `Error) -> -1
-        | `Info, `Debug -> 1
-        | `Info, `Info -> 0
-        | `Info, `Error -> -1
-        | `Error, (`Debug | `Info) -> 1
-        | `Error, `Error -> 0
-    end)
+module Level = struct
+  type t =
+    [ Log.Level.t
+    | `Error_send_to_monitor
+    ] [@@deriving sexp]
 
-  let%test _ = `Debug = `Debug
-  let%test _ = `Debug < `Info
-  let%test _ = `Debug < `Error
-  let%test _ = `Info > `Debug
-  let%test _ = `Info = `Info
-  let%test _ = `Info < `Error
-  let%test _ = `Error > `Debug
-  let%test _ = `Error > `Info
-  let%test _ = `Error = `Error
+  let severity = function
+    | `Debug                 -> 0
+    | `Info                  -> 1
+    | `Error                 -> 2
+    | `Error_send_to_monitor -> 3
+
+  let of_async_log_level = function
+    | `Debug -> `Debug
+    | `Info  -> `Info
+    | `Error -> `Error
+
+  let to_async_log_level = function
+    | `Debug                 -> `Debug
+    | `Info                  -> `Info
+    | `Error                 -> `Error
+    | `Error_send_to_monitor -> `Error
+
+  include Comparable.Make(struct
+      type nonrec t = t [@@deriving sexp]
+      let compare a b = Int.compare (severity a) (severity b)
+    end)
 end
 
 module Mail_fingerprint = struct
@@ -196,21 +200,22 @@ module Message = struct
   end
 
   module Tag = struct
-    let component         = "component"
-    let spool_id          = "spool-id"
-    let rfc822_id         = "rfc822-id"
-    let local_id          = "local-id"
-    let sender            = "sender"
-    let recipient         = "recipient"
-    let email_fingerprint = "email-fingerprint"
-    let local_address     = "local-address"
-    let remote_address    = "remote-address"
-    let command           = "command"
-    let dest              = "dest"
-    let reply             = "reply"
-    let session_marker    = "session_marker"
-    let flow              = "flow"
-    let location          = "location"
+    let component             = "component"
+    let spool_id              = "spool-id"
+    let rfc822_id             = "rfc822-id"
+    let local_id              = "local-id"
+    let sender                = "sender"
+    let recipient             = "recipient"
+    let email_fingerprint     = "email-fingerprint"
+    let local_address         = "local-address"
+    let remote_address        = "remote-address"
+    let command               = "command"
+    let dest                  = "dest"
+    let reply                 = "reply"
+    let session_marker        = "session_marker"
+    let flow                  = "flow"
+    let location              = "location"
+    let error_send_to_monitor = "error_send_to_monitor"
   end
 
   type 'a with_info
@@ -289,7 +294,7 @@ module Message = struct
     in
     let tags = match email_fingerprint with
       | Some fingerprint ->
-        (Tag.email_fingerprint, sprintf !"%{sexp:Mail_fingerprint.t}" fingerprint) :: tags
+        (Tag.email_fingerprint, Sexp.to_string (Mail_fingerprint.sexp_of_t fingerprint)) :: tags
       | None -> tags
     in
     let local_id = match local_id with
@@ -335,39 +340,39 @@ module Message = struct
 
   type t = Log.Message.t [@@deriving sexp_of]
 
-  let json_of_t =
+  let json_of_t ?(add_tags = []) =
     let tag name to_json = name, { Logstash_conv.Message.field = name; to_json } in
     let tag1 name to_json = tag name (J.val_or_array_of to_json) in
     Logstash_conv.Message.json_of_t' ()
       ~tags:
-        [ tag1 Tag.component   J.string
-        ; tag1 Tag.spool_id    J.string
-        ; tag1 Tag.rfc822_id   J.string
-        ; tag1 Tag.local_id    J.string
-        ; tag1 Tag.sender      J.string
-        ; tag  Tag.recipient
-            (fun strs ->
-               List.filter_map strs ~f:(function
-                 | "" -> None
-                 | str -> Some (J.string str))
-               |> J.array)
-        ; tag1 Tag.email_fingerprint
-            (fun str ->
-               Sexp.of_string_conv_exn str Mail_fingerprint.t_of_sexp
-               |> Mail_fingerprint.json_of_t)
-        ; tag1 Tag.local_address J.string
-        ; tag1 Tag.remote_address J.string
-        ; tag1 Tag.command J.string
-        ; tag1 Tag.dest (fun str ->
-            match Sexp.of_string_conv_exn str Address.t_of_sexp with
-            | `Unix file -> J.(objekt [ "unix", string file ])
-            | `Inet hp -> J.(objekt [ "inet", string (Host_and_port.to_string hp) ])
-            | exception _ -> J.string str)
-        ; tag1 Tag.reply J.string
-        ; tag1 Tag.session_marker J.string
-        ; tag  Tag.flow J.(array_of string)
-        ; tag1 Tag.location J.string
-        ]
+        ([ tag1 Tag.component   J.string
+         ; tag1 Tag.spool_id    J.string
+         ; tag1 Tag.rfc822_id   J.string
+         ; tag1 Tag.local_id    J.string
+         ; tag1 Tag.sender      J.string
+         ; tag  Tag.recipient
+             (fun strs ->
+                List.filter_map strs ~f:(function
+                  | "" -> None
+                  | str -> Some (J.string str))
+                |> J.array)
+         ; tag1 Tag.email_fingerprint
+             (fun str ->
+                Sexp.of_string_conv_exn str Mail_fingerprint.t_of_sexp
+                |> Mail_fingerprint.json_of_t)
+         ; tag1 Tag.local_address J.string
+         ; tag1 Tag.remote_address J.string
+         ; tag1 Tag.command J.string
+         ; tag1 Tag.dest (fun str ->
+             match Sexp.of_string_conv_exn str Address.t_of_sexp with
+             | `Unix file -> J.(objekt [ "unix", string file ])
+             | `Inet hp -> J.(objekt [ "inet", string (Host_and_port.to_string hp) ])
+             | exception _ -> J.string str)
+         ; tag1 Tag.reply J.string
+         ; tag1 Tag.session_marker J.string
+         ; tag  Tag.flow J.(array_of string)
+         ; tag1 Tag.location J.string
+         ] @ add_tags)
     |> Staged.unstage
 
   let create =
@@ -408,7 +413,52 @@ module Message = struct
       ~tags
       (Log.Message.raw_message t)
 
-  let level t = Log.Message.level t |> Option.value ~default:`Info
+  let find_tag' t ~tag ~f =
+    List.find_map (Log.Message.tags t) ~f:(fun (k, v) ->
+      if k = tag then
+        Option.try_with (fun () ->
+          f v)
+      else None)
+
+  let find_tag = find_tag' ~f:ident
+
+  let is_error_send_to_monitor t =
+    find_tag t ~tag:Tag.error_send_to_monitor
+    |> Option.is_some
+
+  let remove_send_to_monitor_tag t =
+    if is_error_send_to_monitor t
+    then (
+      let tags =
+        Log.Message.tags t |> List.filter ~f:(fun (tag, _) ->
+          not (String.equal tag Tag.error_send_to_monitor))
+      in
+      Log.Message.create
+        ?level:(Log.Message.level t)
+        ~time:(Log.Message.time t)
+        ~tags
+        (Log.Message.raw_message t))
+    else t
+
+  let set_level t level =
+    let t, level =
+      match level with
+      | `Error_send_to_monitor ->
+        Log.Message.add_tags t [Tag.error_send_to_monitor, "true"], `Error
+      | _ as level ->
+        remove_send_to_monitor_tag t, Level.to_async_log_level level
+    in
+    Log.Message.set_level t (Some level)
+
+  let level t =
+    Log.Message.level t
+    |> Option.value_map ~f:Level.of_async_log_level ~default:`Info
+    |> function
+    | `Error ->
+      if is_error_send_to_monitor t
+      then `Error_send_to_monitor
+      else `Error
+    | _ as level -> level
 
   let time = Log.Message.time
 
@@ -419,15 +469,6 @@ module Message = struct
     List.find_map (Log.Message.tags t) ~f:(fun (k,v) ->
       Option.some_if (k = Tag.component) v)
     |> Option.value_map ~f:Component.of_string ~default:Component.unknown
-
-  let find_tag' t ~tag ~f =
-    List.find_map (Log.Message.tags t) ~f:(fun (k, v) ->
-      if k = tag then
-        Option.try_with (fun () ->
-          f v)
-      else None)
-
-  let find_tag = find_tag' ~f:ident
 
   let rfc822_id = find_tag ~tag:Tag.rfc822_id
 
@@ -470,36 +511,41 @@ module Message = struct
 
   let flows t = List.filter_map (Log.Message.tags t) ~f:(fun (k,v) ->
     Option.some_if (k=Tag.flow) v)
-
 end
 
 type t = Log.t
 
 let message' t ~level msg =
-  if Level.(<=) (Log.level t) level &&
-     Level.(<=) level (Option.value (Log.Message.level msg) ~default:level) then
+  let log_level =  Level.of_async_log_level (Log.level t) in
+  let message_level = Message.level msg in
+  if Level.(<=) log_level level then (
     let msg =
-      if Log.Message.level msg = Some level then
+      if message_level = level then
         msg
       else
-        Log.Message.set_level msg (Some level)
+        Message.set_level msg level
     in
-    Log.message t msg
+    Log.message t msg)
 
 let message t ~level msg =
-  if Level.(<=) (Log.level t) level then
+  let log_level =  Level.of_async_log_level (Log.level t) in
+  if Level.(<=) log_level level then (
     let msg = Lazy.force msg in
+    let message_level = Message.level msg in
     let msg =
-      if Log.Message.level msg = Some level then
+      if message_level = level then
         msg
       else
-        Log.Message.set_level msg (Some level)
+        Message.set_level msg level
     in
-    Log.message t msg
+    Log.message t msg)
 
 let debug = message ~level:`Debug
 let info = message ~level:`Info
-let error = message ~level:`Error
+let error ~send_to_monitor =
+  if send_to_monitor
+  then message ~level:`Error_send_to_monitor
+  else message ~level:`Error
 
 let null_log =
   Log.create
@@ -513,7 +559,8 @@ let with_flow_and_component ~flows ~component t =
     ~output:[ Log.Output.create ~flush:(fun () -> Log.flushed t) (fun msgs ->
       Queue.iter msgs ~f:(fun msg ->
         let level = Message.level msg in
-        if Level.(<=) (Log.level t) level then
+        let log_level = Level.of_async_log_level (Log.level t) in
+        if Level.(<=) log_level level then
           message ~level t
             (lazy (Message.with_flow_and_component ~flows ~component msg)));
       return ()) ]
@@ -524,21 +571,37 @@ let with_flow_and_component ~flows ~component t =
                @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
         (Error.sexp_of_t err)))
 
-let adjust_log_levels ?(minimum_level=`Debug) ?(remap_info_to=`Info) ?(remap_error_to=`Error) t =
-  let minimum_level = Level.max (Log.level t) minimum_level in
-  if Level.(<) remap_info_to minimum_level && Level.(<) remap_error_to minimum_level then
+let adjust_log_levels
+      ?(minimum_level=`Debug)
+      ?(remap_info_to=`Info)
+      ?(remap_error_to=`Error)
+      ?(remap_error_send_to_monitor_to=`Error_send_to_monitor)
+      t =
+  let log_level = Level.of_async_log_level (Log.level t) in
+  let minimum_level = Level.max log_level minimum_level in
+  if
+    Level.(<) remap_info_to minimum_level &&
+    Level.(<) remap_error_to minimum_level &&
+    Level.(<) remap_error_send_to_monitor_to minimum_level
+  then
     null_log
-  else if minimum_level = Log.level t && remap_info_to = `Info && remap_error_to = `Error then
+  else if
+    minimum_level = log_level &&
+    remap_info_to = `Info &&
+    remap_error_to = `Error &&
+    remap_error_send_to_monitor_to = `Error_send_to_monitor
+  then
     t
   else
     Log.create
-      ~level:minimum_level
+      ~level:(Level.to_async_log_level minimum_level)
       ~output:[ Log.Output.create ~flush:(fun () -> Log.flushed t) (fun msgs ->
         Queue.iter msgs ~f:(fun msg ->
-          let level = match Log.Message.level msg with
-            | None | Some `Info -> remap_info_to
-            | Some `Error -> remap_error_to
-            | Some `Debug -> `Debug
+          let level = match Message.level msg with
+            | `Debug -> `Debug
+            | `Info  -> remap_info_to
+            | `Error -> remap_error_to
+            | `Error_send_to_monitor -> remap_error_send_to_monitor_to
           in
           if Level.(<=) minimum_level level then
             message' ~level t msg);

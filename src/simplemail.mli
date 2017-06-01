@@ -7,6 +7,7 @@ module Envelope_status = Client.Envelope_status
 module Expert : sig
   val send'
     :  ?log:Mail_log.t
+    -> ?credentials:Credentials.t
     -> ?server:Address.t
     -> sender:Sender.t
     -> ?sender_args:Sender_argument.t list
@@ -16,6 +17,7 @@ module Expert : sig
 
   val send
     :  ?log:Mail_log.t
+    -> ?credentials:Credentials.t
     -> ?server:Address.t
     -> sender:Sender.t
     -> ?sender_args:Sender_argument.t list
@@ -30,6 +32,7 @@ include (module type of Email.Simple with module Expert := Email.Simple.Expert)
 
 val send'
   :  ?log:Mail_log.t
+  -> ?credentials:Credentials.t
   -> ?server:Host_and_port.t
   -> ?from:Email_address.t (* defaults to <user@host> *)
   -> ?sender_args:Sender_argument.t list
@@ -49,6 +52,7 @@ val send'
 
 val send
   :  ?log:Mail_log.t
+  -> ?credentials:Credentials.t
   -> ?server:Host_and_port.t
   -> ?from:Email_address.t (* defaults to <user@host> *)
   -> ?sender_args:Sender_argument.t list
