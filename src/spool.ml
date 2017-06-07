@@ -92,24 +92,24 @@ let add_message t msg =
   match Hashtbl.add t.messages ~key:id ~data:msg with
   | `Ok -> ()
   | `Duplicate ->
-    Log.error ~send_to_monitor:true t.log (lazy (Log.Message.create
-                                                   ~here:[%here]
-                                                   ~flows:(Message.flows msg)
-                                                   ~component:["spool";"admin"]
-                                                   ~spool_id:(Message_id.to_string id)
-                                                   "Message already in spool"))
+    Log.error t.log (lazy (Log.Message.create
+                             ~here:[%here]
+                             ~flows:(Message.flows msg)
+                             ~component:["spool";"admin"]
+                             ~spool_id:(Message_id.to_string id)
+                             "Message already in spool"))
 
 let remove_message t msg =
   let id = Message.id msg in
   if Hashtbl.mem t.messages id
   then Hashtbl.remove t.messages id
   else (
-    Log.error ~send_to_monitor:true t.log (lazy (Log.Message.create
-                                                   ~here:[%here]
-                                                   ~flows:(Message.flows msg)
-                                                   ~component:["spool";"admin"]
-                                                   ~spool_id:(Message_id.to_string id)
-                                                   "Trying to remove message that is not in spool")))
+    Log.error t.log (lazy (Log.Message.create
+                             ~here:[%here]
+                             ~flows:(Message.flows msg)
+                             ~component:["spool";"admin"]
+                             ~spool_id:(Message_id.to_string id)
+                             "Trying to remove message that is not in spool")))
 
 let with_event_writer ~here spool spooled_msg ~f = f ~here ~log:spool.log spool.event_stream spooled_msg
 let spooled_event   = with_event_writer ~f:Event.spooled
@@ -195,7 +195,7 @@ let rec enqueue ?at t spooled_msg =
         Message.send spooled_msg ~log:t.log ~client_cache:t.client_cache
         >>| function
         | Error e ->
-          Log.error ~send_to_monitor:true t.log
+          Log.error t.log
             (lazy (Log.Message.of_error
                      ~here:[%here]
                      ~flows:(Message.flows spooled_msg)
@@ -257,7 +257,7 @@ let load t =
     Message.load entry
     >>| function
     | Error e ->
-      Log.error ~send_to_monitor:true t.log
+      Log.error t.log
         (lazy (Log.Message.of_error
                  ~here:[%here]
                  ~flows:Log.Flows.none
@@ -412,7 +412,7 @@ let recover t (info : Recover_info.t) =
     >>= function
     | Error e ->
       let e = Error.tag e ~tag:"Failed to recover message" in
-      Log.error ~send_to_monitor:true t.log
+      Log.error t.log
         (lazy (Log.Message.of_error
                  ~here:[%here]
                  ~flows:Log.Flows.none

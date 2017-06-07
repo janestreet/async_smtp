@@ -300,7 +300,7 @@ module Make(Cb : Plugin.S) = struct
                               "session_helo:disconnect"));
         write_reply ~here:[%here] ~flows ~component reply
       | Error err ->
-        Log.error ~send_to_monitor:true log
+        Log.error log
           (lazy (Log.Message.of_error
                    ~here:[%here]
                    ~flows
@@ -333,7 +333,7 @@ module Make(Cb : Plugin.S) = struct
         ()
       >>= function
       | Error e ->
-        Log.error ~send_to_monitor:false log
+        Log.error ~dont_send_to_monitor:() log
           (lazy (Log.Message.of_error
                    ~here:[%here]
                    ~flows
@@ -363,7 +363,7 @@ module Make(Cb : Plugin.S) = struct
         don't_wait_for begin
           Ssl.Connection.closed tls
           >>| Result.iter_error ~f:(fun e ->
-            Log.error ~send_to_monitor:false log
+            Log.error ~dont_send_to_monitor:() log
               (lazy (Log.Message.of_error
                        ~here:[%here]
                        ~flows
@@ -482,7 +482,7 @@ module Make(Cb : Plugin.S) = struct
           >>= fun () ->
           top ~session
         | Error err ->
-          Log.error ~send_to_monitor:true log
+          Log.error log
             (lazy (Log.Message.of_error
                      ~here:[%here]
                      ~flows
@@ -560,7 +560,7 @@ module Make(Cb : Plugin.S) = struct
           >>= fun () ->
           envelope ~session ~flows data
         | Error err ->
-          Log.error ~send_to_monitor:true log
+          Log.error log
             (lazy (Log.Message.of_error
                      ~here:[%here]
                      ~flows
@@ -600,7 +600,7 @@ module Make(Cb : Plugin.S) = struct
         >>= fun () ->
         envelope ~session ~flows data
       | Error err ->
-        Log.error ~send_to_monitor:true log
+        Log.error log
           (lazy (Log.Message.of_error
                    ~here:[%here]
                    ~flows
@@ -629,7 +629,7 @@ module Make(Cb : Plugin.S) = struct
             match Or_error.try_with (fun () -> Email.of_bigbuffer raw) with
             | Ok email -> Ok email
             | Error error ->
-              Log.error ~send_to_monitor:false log
+              Log.error ~dont_send_to_monitor:() log
                 (lazy (Log.Message.of_error
                          ~here:[%here]
                          ~flows
@@ -679,7 +679,7 @@ module Make(Cb : Plugin.S) = struct
               >>= fun () ->
               top ~session
             | Error err ->
-              Log.error ~send_to_monitor:true log
+              Log.error log
                 (lazy (Log.Message.of_error
                          ~here:[%here]
                          ~flows
@@ -705,7 +705,7 @@ module Make(Cb : Plugin.S) = struct
                 >>= function
                 | Error err ->
                   List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                    Log.error ~send_to_monitor:true log
+                    Log.error log
                       (lazy (Log.Message.of_error
                                ~here:[%here]
                                ~flows
@@ -740,7 +740,7 @@ module Make(Cb : Plugin.S) = struct
               >>= function
               | Error err ->
                 List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
-                  Log.error ~send_to_monitor:true log
+                  Log.error log
                     (lazy (Log.Message.of_error
                              ~here:[%here]
                              ~flows
@@ -868,7 +868,7 @@ module Make(Cb : Plugin.S) = struct
       Tcp.Server.create (make_tcp_where_to_listen where)
         ~on_handler_error:(`Call (fun remote_address exn ->
           let remote_address = make_remote_address remote_address in
-          Log.error ~send_to_monitor:true log
+          Log.error log
             (lazy (Log.Message.of_error
                      ~here:[%here]
                      ~flows:Log.Flows.none
@@ -899,7 +899,7 @@ module Make(Cb : Plugin.S) = struct
                ()
            )
            >>| Result.iter_error ~f:(fun err ->
-             Log.error ~send_to_monitor:true log
+             Log.error log
                (lazy (Log.Message.of_error
                         ~here:[%here]
                         ~flows:session_flows

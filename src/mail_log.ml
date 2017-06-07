@@ -14,14 +14,14 @@ end
 module Level = struct
   type t =
     [ Log.Level.t
-    | `Error_send_to_monitor
+    | `Error_no_monitor
     ] [@@deriving sexp]
 
   let severity = function
-    | `Debug                 -> 0
-    | `Info                  -> 1
-    | `Error                 -> 2
-    | `Error_send_to_monitor -> 3
+    | `Debug            -> 0
+    | `Info             -> 1
+    | `Error_no_monitor -> 2
+    | `Error            -> 3
 
   let of_async_log_level = function
     | `Debug -> `Debug
@@ -29,10 +29,10 @@ module Level = struct
     | `Error -> `Error
 
   let to_async_log_level = function
-    | `Debug                 -> `Debug
-    | `Info                  -> `Info
-    | `Error                 -> `Error
-    | `Error_send_to_monitor -> `Error
+    | `Debug            -> `Debug
+    | `Info             -> `Info
+    | `Error_no_monitor -> `Error
+    | `Error            -> `Error
 
   include Comparable.Make(struct
       type nonrec t = t [@@deriving sexp]
@@ -215,7 +215,7 @@ module Message = struct
     let session_marker        = "session_marker"
     let flow                  = "flow"
     let location              = "location"
-    let error_send_to_monitor = "error_send_to_monitor"
+    let error_no_monitor      = "error_no_monitor"
   end
 
   type 'a with_info
@@ -422,16 +422,16 @@ module Message = struct
 
   let find_tag = find_tag' ~f:ident
 
-  let is_error_send_to_monitor t =
-    find_tag t ~tag:Tag.error_send_to_monitor
+  let is_error_no_monitor t =
+    find_tag t ~tag:Tag.error_no_monitor
     |> Option.is_some
 
-  let remove_send_to_monitor_tag t =
-    if is_error_send_to_monitor t
+  let remove_error_no_monitor_tag t =
+    if is_error_no_monitor t
     then (
       let tags =
         Log.Message.tags t |> List.filter ~f:(fun (tag, _) ->
-          not (String.equal tag Tag.error_send_to_monitor))
+          not (String.equal tag Tag.error_no_monitor))
       in
       Log.Message.create
         ?level:(Log.Message.level t)
@@ -440,13 +440,19 @@ module Message = struct
         (Log.Message.raw_message t))
     else t
 
+  let add_error_no_monitor_tag t =
+    match find_tag t ~tag:Tag.error_no_monitor with
+    | None ->
+      Log.Message.add_tags t [Tag.error_no_monitor, ""]
+    | Some (_ : string) -> t
+
   let set_level t level =
     let t, level =
       match level with
-      | `Error_send_to_monitor ->
-        Log.Message.add_tags t [Tag.error_send_to_monitor, "true"], `Error
+      | `Error_no_monitor ->
+        add_error_no_monitor_tag t, `Error
       | _ as level ->
-        remove_send_to_monitor_tag t, Level.to_async_log_level level
+        remove_error_no_monitor_tag t, Level.to_async_log_level level
     in
     Log.Message.set_level t (Some level)
 
@@ -455,8 +461,8 @@ module Message = struct
     |> Option.value_map ~f:Level.of_async_log_level ~default:`Info
     |> function
     | `Error ->
-      if is_error_send_to_monitor t
-      then `Error_send_to_monitor
+      if is_error_no_monitor t
+      then `Error_no_monitor
       else `Error
     | _ as level -> level
 
@@ -515,6 +521,8 @@ end
 
 type t = Log.t
 
+let error_no_monitor_tag = Message.Tag.error_no_monitor, ""
+
 let message' t ~level msg =
   let log_level =  Level.of_async_log_level (Log.level t) in
   let message_level = Message.level msg in
@@ -542,9 +550,9 @@ let message t ~level msg =
 
 let debug = message ~level:`Debug
 let info = message ~level:`Info
-let error ~send_to_monitor =
-  if send_to_monitor
-  then message ~level:`Error_send_to_monitor
+let error ?dont_send_to_monitor =
+  if Option.is_some dont_send_to_monitor
+  then message ~level:`Error_no_monitor
   else message ~level:`Error
 
 let null_log =
@@ -574,22 +582,22 @@ let with_flow_and_component ~flows ~component t =
 let adjust_log_levels
       ?(minimum_level=`Debug)
       ?(remap_info_to=`Info)
+      ?(remap_error_no_monitor_to=`Error_no_monitor)
       ?(remap_error_to=`Error)
-      ?(remap_error_send_to_monitor_to=`Error_send_to_monitor)
       t =
   let log_level = Level.of_async_log_level (Log.level t) in
   let minimum_level = Level.max log_level minimum_level in
   if
     Level.(<) remap_info_to minimum_level &&
-    Level.(<) remap_error_to minimum_level &&
-    Level.(<) remap_error_send_to_monitor_to minimum_level
+    Level.(<) remap_error_no_monitor_to minimum_level &&
+    Level.(<) remap_error_to minimum_level
   then
     null_log
   else if
     minimum_level = log_level &&
     remap_info_to = `Info &&
-    remap_error_to = `Error &&
-    remap_error_send_to_monitor_to = `Error_send_to_monitor
+    remap_error_no_monitor_to = `Error_no_monitor &&
+    remap_error_to = `Error
   then
     t
   else
@@ -600,8 +608,8 @@ let adjust_log_levels
           let level = match Message.level msg with
             | `Debug -> `Debug
             | `Info  -> remap_info_to
+            | `Error_no_monitor -> remap_error_no_monitor_to
             | `Error -> remap_error_to
-            | `Error_send_to_monitor -> remap_error_send_to_monitor_to
           in
           if Level.(<=) minimum_level level then
             message' ~level t msg);

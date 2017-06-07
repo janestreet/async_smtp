@@ -193,11 +193,11 @@ let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
       Log.debug log (lazy (Log.Message.create ~here ~flows ~component ~reply:v "<-"));
       Ok (`Received v)
     | `Result (Error e) ->
-      Log.error ~send_to_monitor:false log (lazy (Log.Message.of_error ~here ~flows ~component e));
+      Log.error ~dont_send_to_monitor:() log (lazy (Log.Message.of_error ~here ~flows ~component e));
       Error e
     | `Timeout ->
       let e = Error.createf !"Timeout %{Time.Span} waiting for reply" timeout in
-      Log.error ~send_to_monitor:false log (lazy (Log.Message.of_error ~here ~flows ~component e));
+      Log.error ~dont_send_to_monitor:() log (lazy (Log.Message.of_error ~here ~flows ~component e));
       Error e
 
 
@@ -513,7 +513,8 @@ let with_quit t ~log ~component ~f =
     >>| function
     | Ok () -> ()
     | Error err ->
-      Log.error ~send_to_monitor:false log (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
+      Log.error ~dont_send_to_monitor:() log
+        (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
   in
   Monitor.protect f ~finally:(fun () -> quit_and_cleanup_with_log t)
 
