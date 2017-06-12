@@ -121,17 +121,21 @@ let%test_module _ =
 
     let tls_test message =
       async_test_with_tmp_dir ~f:(fun tmp_dir ->
-        let server_config = { Smtp_server.Config.default with
-                              tls_options = Some { Smtp_server.Config.Tls.
-                                                   version = None
-                                                 ; options = None
-                                                 ; name = Some "localhost"
-                                                 ; crt_file = "test-server.crt"
-                                                 ; key_file = "test-server.key"
-                                                 ; ca_file = Some "test-ca.crt"
-                                                 ; ca_path = None
-                                                 }
-                            }
+        let server_config =
+          { Smtp_server.Config.default with
+            tls_options =
+              Some
+                { Smtp_server.Config.Tls.
+                  version = None
+                ; options = None
+                ; name = Some "localhost"
+                ; crt_file = "test-server.crt"
+                ; key_file = "test-server.key"
+                ; ca_file = Some "test-ca.crt"
+                ; ca_path = None
+                ; allowed_ciphers = `Default
+                }
+          }
         in
         let client_config =
           { Smtp_client.Config.default with
@@ -145,6 +149,7 @@ let%test_module _ =
                 ; ca_path = None
                 ; mode = `Required
                 ; certificate_mode = `Verify
+                ; allowed_ciphers = `Default
                 }
               ]
           }

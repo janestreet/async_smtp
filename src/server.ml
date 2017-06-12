@@ -71,7 +71,9 @@ module Make(Cb : Plugin.S) = struct
     let write_reply_default reply =
       match raw_writer with
       | Some writer ->
-        Writer.write_line writer (Smtp_reply.to_string reply);
+        Writer.write writer
+          (Smtp_reply.to_string reply);
+        Writer.write writer "\r\n";
         Writer.flushed writer
       | None ->
         if Smtp_reply.is_ok reply then Deferred.unit
@@ -322,6 +324,7 @@ module Make(Cb : Plugin.S) = struct
         ?name:tls_options.Config.Tls.name
         ?ca_file:tls_options.Config.Tls.ca_file
         ?ca_path:tls_options.Config.Tls.ca_path
+        ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
         ~crt_file:tls_options.Config.Tls.crt_file
         ~key_file:tls_options.Config.Tls.key_file
         (* Closing ssl connection will close the pipes which will in turn close
@@ -343,7 +346,7 @@ module Make(Cb : Plugin.S) = struct
         Reader.of_pipe (Info.of_string "SMTP/TLS") reader_pipe_r
         >>= fun new_reader ->
         Writer.of_pipe (Info.of_string "SMTP/TLS") writer_pipe_w
-        >>= fun (new_writer, _) ->
+        >>= fun (new_writer, `Closed_and_flushed_downstream closed_and_flushed) ->
         let version = Ssl.Connection.version tls in
         let v = Sexp.to_string_hum (Ssl.Version.sexp_of_t version) in
         Log.info log (lazy (Log.Message.create
@@ -352,15 +355,11 @@ module Make(Cb : Plugin.S) = struct
                               ~component
                               (sprintf "Using TLS protocol %s" v)));
         let teardown () =
+          Writer.close new_writer
+          >>= fun () ->
+          closed_and_flushed
+          >>= fun () ->
           Ssl.Connection.close tls;
-          Deferred.all_unit
-            [ Reader.close new_reader
-            ; Writer.close new_writer
-            ; Writer.close old_writer
-            ; Reader.close old_reader
-            ]
-        in
-        don't_wait_for begin
           Ssl.Connection.closed tls
           >>| Result.iter_error ~f:(fun e ->
             Log.error ~dont_send_to_monitor:() log
@@ -368,8 +367,9 @@ module Make(Cb : Plugin.S) = struct
                        ~here:[%here]
                        ~flows
                        ~component e)))
-          >>= teardown
-        end;
+          >>= fun () ->
+          Reader.close new_reader
+        in
         Monitor.protect (fun () ->
           Tls_cb.upgrade_to_tls
             ~log:(Log.with_flow_and_component log
@@ -868,7 +868,8 @@ module Make(Cb : Plugin.S) = struct
       Tcp.Server.create (make_tcp_where_to_listen where)
         ~on_handler_error:(`Call (fun remote_address exn ->
           let remote_address = make_remote_address remote_address in
-          Log.error log
+          (* Silence the [inner_monitor] errors *)
+          Log.error log ~dont_send_to_monitor:()
             (lazy (Log.Message.of_error
                      ~here:[%here]
                      ~flows:Log.Flows.none

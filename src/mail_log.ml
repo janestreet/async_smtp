@@ -69,9 +69,13 @@ module Mail_fingerprint = struct
   let json_of_headers headers =
     String.Map.of_alist_multi headers
     |> Map.to_alist
-    |> List.Assoc.map ~f:(function
-      | [v] -> J.string v
-      | vs -> J.array (List.rev_map vs ~f:J.string))
+    |> List.map ~f:(fun (name,value) ->
+      let name = String.lowercase name in
+      let value = match List.map value ~f:String.strip with
+        | [v] -> J.string v
+        | vs -> J.array (List.rev_map vs ~f:J.string)
+      in
+      name, value)
     |> J.objekt
 
   let rec json_of_t t =

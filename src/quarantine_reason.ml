@@ -5,7 +5,7 @@ module T = struct
     { description     : string
     ; envelope_sender : Sender.t
     ; from_headers    : string
-    } [@@deriving bin_io, compare, sexp]
+    } [@@deriving bin_io, compare, fields, sexp]
 end
 
 include T

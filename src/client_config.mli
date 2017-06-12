@@ -30,6 +30,7 @@ module Tls : sig
         [ `Ignore
         (* Require that the certificate exists, matches, and has a valid chain *)
         | `Verify ]
+    ; allowed_ciphers : [`Default | `Only of string list]
     } [@@deriving sexp, fields]
 
   val default : t

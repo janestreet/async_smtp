@@ -211,7 +211,7 @@ let to_string t =
       to_string_lines ((sprintf "%d-%s" code s) :: acc) ss
   in
   to_string_lines [] t.raw_message
-  |> String.concat ~sep:"\n"
+  |> String.concat ~sep:"\r\n"
 ;;
 
 let of_code_message code raw_message =
@@ -310,5 +310,6 @@ let%test_module _ =
 
     let check_multiline a b = [%test_eq:t] b (of_string a)
 
-    let%test_unit _ = check_multiline "250-Ok: test1\n250-test2\n250 test3" (ok_completed_250 "test1\ntest2\ntest3")
+    let%test_unit _ = check_multiline "250-Ok: test1\r\n250-test2\r\n250 test3" (ok_completed_250 "test1\ntest2\ntest3")
+    let%test_unit _ = check_multiline "250-Ok: test1\r\n250-test2\r\n250 test3" (ok_completed_250 "test1\r\ntest2\r\ntest3")
   end)

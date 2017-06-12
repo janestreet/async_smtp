@@ -214,7 +214,8 @@ let send_gen ?command t ~log ?flows ~component ~here str =
                            ~component
                            ?command
                            "->"));
-    Writer.write_line (writer t) str;
+    Writer.write (writer t) str;
+    Writer.write (writer t) "\r\n";
     Writer.flushed (writer t))
 
 let send_string t ~log ?flows ~component ~here str =
@@ -354,6 +355,7 @@ let do_start_tls t ~log ~component tls_options =
       ?name:tls_options.Config.Tls.name
       ?ca_file:tls_options.Config.Tls.ca_file
       ?ca_path:tls_options.Config.Tls.ca_path
+      ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
       (* Closing ssl connection will close the pipes which will in turn close
          the readers. *)
       ~net_to_ssl:(Reader.pipe old_reader)

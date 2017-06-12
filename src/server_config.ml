@@ -11,6 +11,7 @@ module Tls = struct
     ; key_file:string
     ; ca_file:string option
     ; ca_path : string option
+    ; allowed_ciphers : [`Default | `Only of string list]
     } [@@deriving fields, sexp]
 end
 

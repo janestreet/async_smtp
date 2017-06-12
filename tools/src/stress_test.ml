@@ -13,10 +13,14 @@ module Config = struct
     ; port : int
     ; tls : bool
     ; send_n_messages : int
+    ; client_allowed_ciphers : [`Default | `Only of string list]
+    ; server_allowed_ciphers : [`Default | `Only of string list]
+    ; key_type : [`rsa of int | `ecdsa of string | `dsa of int]
     } [@@deriving fields, sexp]
 
   let make_tls_certificates t =
-    Async_shell.run "openssl"
+    let openssl args = Async_shell.run "openssl" args in
+    openssl
       [ "req"
       ; "-new"; "-x509" (* generate the request and sign in one step *)
       ; "-newkey"; "rsa:512" (* generate key *)
@@ -28,17 +32,39 @@ module Config = struct
       ; "-subj"; "/CN=stress-test-CA/"
       ]
     >>= fun () ->
-    Async_shell.run "openssl"
+    begin match t.key_type with
+    | `rsa bits ->
+      openssl
+        [ "genrsa"
+        ; "-out"; t.dir ^/ "server.key"
+        ; Int.to_string bits
+        ]
+    | `dsa bits ->
+      openssl
+        [ "dsaparam"
+        ; "-genkey"
+        ; "-out"; t.dir ^/ "server.key"
+        ; Int.to_string bits
+        ]
+    | `ecdsa curve ->
+      openssl
+        [ "ecparam"
+        ; "-name"; curve
+        ; "-genkey"
+        ; "-out"; t.dir ^/ "server.key"
+        ]
+    end
+    >>= fun () ->
+    openssl
       [ "req"; "-new"
-      ; "-newkey"; "rsa:512" (* generate key *)
+      ; "-key"; t.dir ^/ "server.key"
       ; "-nodes" (* don't encrypt the key *)
       ; "-batch" (* non interactive *)
-      ; "-keyout"; t.dir ^/ "server.key"
       ; "-out"; t.dir ^/ "server.csr"
       ; "-subj"; sprintf "/CN=%s/" t.host
       ]
     >>= fun () ->
-    Async_shell.run "openssl"
+    openssl
       [ "x509"; "-req"
       ; "-days"; "1" (* short shelf life is good for testing *)
       ; "-CA"; t.dir ^/ "ca.crt"
@@ -57,6 +83,7 @@ module Config = struct
       ; key_file = t.dir ^/ "server.key"
       ; ca_file = Some (t.dir ^/ "ca.crt")
       ; ca_path = None
+      ; allowed_ciphers = t.server_allowed_ciphers
       }
     in
     let client =
@@ -69,6 +96,7 @@ module Config = struct
         ; ca_path = None
         ; mode = `Required
         ; certificate_mode = `Verify
+        ; allowed_ciphers = t.client_allowed_ciphers
         }
       ; Smtp_client.Config.Domain_suffix.of_string "",
         { Smtp_client.Config.Tls.
@@ -79,6 +107,7 @@ module Config = struct
         ; ca_path = None
         ; mode = `Required
         ; certificate_mode = `Verify (* Causes the message to fail if we have to wrong host *)
+        ; allowed_ciphers = t.client_allowed_ciphers
         }
       ]
     in
@@ -146,13 +175,29 @@ let send ~config ~client_config envelope =
           )))
     >>| Result.iter_error ~f:(Log.Global.error !"buh???: %{Error#hum}"))
 
-let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies ~concurrent_senders ~concurrent_receivers ~message_from_stdin () =
+let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies
+      ~concurrent_senders ~concurrent_receivers ~message_from_stdin
+      ?client_allowed_ciphers ?server_allowed_ciphers ~key_type () =
   begin match dir with
   | Some dir -> return dir
   | None -> Unix.mkdtemp "/tmp/stress-test-"
   end
   >>= fun dir ->
-  let config = { Config.dir; host; port; tls; send_n_messages } in
+  let allowed_ciphers = function
+    | None -> `Default
+    | Some allowed_ciphers -> `Only allowed_ciphers
+  in
+  let config =
+    { Config.dir
+    ; host
+    ; port
+    ; tls
+    ; send_n_messages
+    ; client_allowed_ciphers = allowed_ciphers client_allowed_ciphers
+    ; server_allowed_ciphers = allowed_ciphers server_allowed_ciphers
+    ; key_type
+    }
+  in
   begin if message_from_stdin then begin
     let stdin = Lazy.force Reader.stdin in
     Smtp_server.read_bsmtp stdin
@@ -178,8 +223,18 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies ~concurrent_senders 
   let module Server =
     Smtp_server.Make(struct
       include (Smtp_server.Plugin.Simple : Smtp_server.Plugin.S
-               with module Session = Smtp_server.Plugin.Simple.Session
+               with module Session := Smtp_server.Plugin.Simple.Session
                 and module Envelope := Smtp_server.Plugin.Simple.Envelope)
+      module Session = struct
+        include Smtp_server.Plugin.Simple.Session
+        let extensions _ =
+          [ Smtp_server.Plugin.Extension.Start_tls
+              (module struct
+                type session = t
+                let upgrade_to_tls ~log:_ t = return { t with tls = true }
+              end : Smtp_server.Plugin.Start_tls with type session=t)
+          ]
+      end
       module Envelope = struct
         include Smtp_server.Plugin.Simple.Envelope
         let process ~log:_ _session t email =
@@ -210,6 +265,13 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies ~concurrent_senders 
   | Ok () ->
     Deferred.return ()
 
+let cipher_list = Command.Arg_type.create (String.split ~on:':')
+let key_type = Command.Arg_type.create (fun s ->
+  match String.split ~on:':' s with
+  | ["rsa"; bits] -> `rsa (Int.of_string bits)
+  | ["dsa"; bits] -> `dsa (Int.of_string bits)
+  | ["ecdsa"; curve] -> `ecdsa curve
+  | _ -> failwith "not a recognized key type. Supported rsa:BITS, dsa:BITS, ecdsa:CURVE")
 
 let command =
   Command.async
@@ -236,6 +298,12 @@ let command =
       +> flag "-message-from-stdin" no_arg ~doc:" Read the message from stdin, otherwise generate a simple message"
       ++ step (fun m v -> Option.iter ~f:Log.Global.set_level v; m)
       +> flag "-log-level" (optional Log.Level.arg) ~doc:" Log level"
+      ++ step (fun m v -> m ?client_allowed_ciphers:v)
+      +> flag "-client-allowed-ciphers" (optional cipher_list) ~doc:" Restrict client side SSL ciphers"
+      ++ step (fun m v -> m ?server_allowed_ciphers:v)
+      +> flag "-server-allowed-ciphers" (optional cipher_list) ~doc:" Restrict server side SSL ciphers"
+      ++ step (fun m v -> m ~key_type:v)
+      +> flag "-key-type" (optional_with_default (`rsa 2048) key_type) ~doc:" TLS Key type to use/generate"
     )
     main
 ;;

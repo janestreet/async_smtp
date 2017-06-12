@@ -207,10 +207,12 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
             Writer.write writer "."
           end;
           block_length := !block_length + String.length line;
-          Writer.write_line writer line
+          Writer.write writer line;
+          Writer.write writer "\r\n"
         )
         >>=? fun () ->
-        Writer.write_line writer ".";
+        Writer.write writer ".";
+        Writer.write writer "\r\n";
         flush ()
         >>=? fun () ->
         Log.debug log (lazy (Log.Message.create

@@ -22,6 +22,7 @@ let config =
         ; key_file = "/tmp/mailcore.key"
         ; ca_file = None
         ; ca_path  = None
+        ; allowed_ciphers = `Default
         }
   ; client = Smtp_client.Config.default
   }

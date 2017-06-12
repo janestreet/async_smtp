@@ -18,6 +18,7 @@ module Tls = struct
         [ `Ignore
         | `Verify
         ]
+    ; allowed_ciphers : [`Default | `Only of string list]
     } [@@deriving sexp, fields]
 
   let default =
@@ -28,6 +29,7 @@ module Tls = struct
     ; ca_path = None
     ; mode = `If_available
     ; certificate_mode = `Ignore
+    ; allowed_ciphers = `Default
     }
 end
 
