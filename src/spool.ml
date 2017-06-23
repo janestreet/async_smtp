@@ -24,6 +24,7 @@ module Event = struct
     [@@deriving sexp, bin_io, compare]
 
     let hash = Hashtbl.hash
+    let hash_fold_t h t = hash_fold_int h (hash t)
   end
 
   include T

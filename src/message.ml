@@ -551,8 +551,11 @@ module T = struct
   let compare t1 t2 =
     Id.compare t1.id t2.id
 
-  let hash t =
-    Id.hash t.id
+  let hash t = Id.hash t.id
+
+  let hash_fold_t h t =
+    Id.hash_fold_t h t.id
+
 end
 
 include Comparable.Make(T)

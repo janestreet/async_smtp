@@ -59,7 +59,8 @@ module Resource = struct
       let sexp_of_t t = Address.sexp_of_t t.address
 
       (* Make sure not to hash [t.common] because there is a [Deferred.t] in there *)
-      let hash t = Hashtbl.hash t.address
+      let hash_fold_t h t = Address.hash_fold_t h t.address
+      let hash = Hash.run hash_fold_t
 
       let compare t1 t2 = Address.compare t1.address t2.address
     end

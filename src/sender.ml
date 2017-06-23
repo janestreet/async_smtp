@@ -60,10 +60,10 @@ module T = struct
     | `Email _, `Null -> 1
   ;;
 
-  let hash = function
-    | `Null -> Hashtbl.hash `Null
-    | `Email email -> Email_address.hash email
-  ;;
+  let hash_fold_t h = function
+    | `Null -> h
+    | `Email email -> Email_address.hash_fold_t h email
+  let hash = Hash.run hash_fold_t
 end
 include Hashable.Make(T)
 include Comparable.Make(T)
@@ -77,9 +77,10 @@ module Caseless = struct
       | `Email a, `Email b -> Email_address.Caseless.compare a b
       | `Null, `Email _ -> -1
       | `Email _, `Null -> 1
-    let hash = function
-      | `Null -> 0
-      | `Email a -> Email_address.Caseless.hash a
+    let hash_fold_t h = function
+      | `Null -> h
+      | `Email a -> Email_address.Caseless.hash_fold_t h a
+    let hash = Hash.run hash_fold_t
   end
   include T
   include Comparable.Make(T)
