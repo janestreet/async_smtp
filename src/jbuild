@@ -11,8 +11,7 @@
     textutils
     email_message
     re2
-    json-wheel_jane_street_overlay
-    logstash_conv
+    
     ))
   (preprocess (pps (ppx_jane ppx_driver.runner)))
   ))

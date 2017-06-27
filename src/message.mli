@@ -16,18 +16,18 @@ module Status : sig
     ] [@@deriving sexp]
 end
 
+module Queue : sig
+  type t =
+    | Active
+    | Frozen
+    | Removed
+    | Quarantine
+  [@@deriving sexp, enumerate, compare, bin_io]
+end
+
 module On_disk_spool : sig
   type t
   type spool = t
-
-  module Queue : sig
-    type t =
-      | Active
-      | Frozen
-      | Removed
-      | Quarantine
-    [@@deriving sexp, enumerate, compare, bin_io]
-  end
 
   module Entry : sig
     type t [@@deriving sexp_of]

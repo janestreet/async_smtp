@@ -37,7 +37,7 @@ module Status = struct
     ] [@@deriving sexp, bin_io, compare]
 end
 
-module Meta_queue = struct
+module Queue = struct
   type t =
     | Active
     | Frozen
@@ -71,13 +71,30 @@ module Meta_queue = struct
   ;;
 end
 
-module Email_queue = struct
-  type t =
-    | Email
-  [@@deriving sexp, enumerate]
+module Data = struct
+  type t = Email.t
 
-  let to_dirname = function
-    | Email -> "email"
+  let load path =
+    let open Deferred.Or_error.Let_syntax in
+    let%bind contents =
+      Deferred.Or_error.try_with (fun () -> Reader.file_contents path)
+    in
+    return (Email.of_string contents)
+  ;;
+
+  let save ?temp_file t path =
+    Deferred.Or_error.try_with (fun () ->
+      Writer.with_file_atomic ?temp_file ~fsync:true path
+        ~f:(fun writer ->
+          String_monoid.iter (Email.to_string_monoid t) ~f:(function
+            | String_monoid.Underlying.Char c ->
+              Writer.write_char writer c
+            | String str ->
+              Writer.write writer str
+            | Bigstring bstr ->
+              Writer.schedule_bigstring writer bstr);
+          return ()))
+  ;;
 end
 
 (* A value of type t should only be modified via [On_disk_spool].  This guarantees
@@ -116,72 +133,26 @@ let status t =
   | status -> status
 ;;
 
-(* Both multispools share a registry directory, so we append ".body" for what we put in
-   the [Email] queue *)
-let email_filename str = str ^ ".body"
-
 (* Throttle to pass to multispool. Don't hit the max open files system limit *)
 let throttle = Throttle.create ~continue_on_error:true ~max_concurrent_jobs:400
 
-module Meta_on_disk = struct
-  module Simple = struct
+module On_disk = struct
+  module Metadata = struct
     module T = struct
       type t = meta [@@deriving sexp]
     end
 
     include T
     include Sexpable.To_stringable (T)
-
-    module Queue = Meta_queue
-
-    module Name_generator = struct
-      type t = Envelope.t
-      let next original_msg ~attempt:_ = Id.create ~original_msg
-    end
-
-    module Throttle = struct
-      let enqueue f = Throttle.enqueue throttle f
-    end
   end
 
-  include Multispool.Make_spoolable(Simple)
-end
+  module Data = Data
 
-module Email_on_disk = struct
-  type t = Email.t
-
-  let load_from_disk ~path =
-    let open Deferred.Or_error.Let_syntax in
-    let%map contents =
-      Deferred.Or_error.try_with (fun () ->
-        Reader.file_contents path)
-    in
-    Email.of_string contents
-  ;;
-
-  let save_to_disk ?temp_file ~path email =
-    Deferred.Or_error.try_with (fun () ->
-      Writer.with_file_atomic ?temp_file ~fsync:true path ~f:(fun writer ->
-        String_monoid.iter (Email.to_string_monoid email) ~f:(function
-          | String_monoid.Underlying.Char c ->
-            Writer.write_char writer c
-          | String str ->
-            Writer.write writer str
-          | Bigstring bstr ->
-            Writer.schedule_bigstring writer bstr);
-        return ()))
-  ;;
-
-  module Queue = Email_queue
+  module Queue = Queue
 
   module Name_generator = struct
-    type t = string
-
-    let next msgid ~attempt =
-      if attempt > 0
-      then raise_s [%message "Unexpected file in email queue" (msgid : string)];
-      email_filename msgid
-    ;;
+    type t = Envelope.t
+    let next original_msg ~attempt:_ = Id.create ~original_msg
   end
 
   module Throttle = struct
@@ -189,15 +160,8 @@ module Email_on_disk = struct
   end
 end
 
-module Email_spool = Multispool.Make(Email_on_disk)
-module Meta_spool = struct
-  include Multispool.Make(Meta_on_disk)
-
-  let create str =
-    let open Deferred.Or_error.Let_syntax in
-    let%bind (_ : Email_spool.t) = Email_spool.create str in
-    create str
-  ;;
+module On_disk_spool = struct
+  include Multispool.Make(On_disk)
 
   (* Hide optional argument from the interface *)
   let load str = load str
@@ -207,43 +171,20 @@ module Meta_spool = struct
   ;;
 end
 
-(* This name is more appropriate outside this module *)
-module On_disk_spool = struct
-  include Meta_spool
-
-  module Queue = Meta_queue
-end
-
-(* We use 2 multispools at the same path to get more type safety with the queues, but
-   unfortunately this means functions like this *)
-let email_spool_of_meta_spool meta_spool =
-  Email_spool.load_unsafe (Meta_spool.dir meta_spool)
-;;
-
-let email_entry_of_meta_entry meta_entry =
-  Email_spool.Entry.create
-    (email_spool_of_meta_spool (Meta_spool.Entry.spool meta_entry))
-    Email
-    ~name:(email_filename (Meta_spool.Entry.name meta_entry))
-;;
-
 let entry t =
   let open Deferred.Or_error.Let_syntax in
-  let open Meta_spool in
+  let open On_disk_spool in
   let spool = load_unsafe t.spool_dir in
-  let%map queue = Meta_queue.of_status' t.status |> Deferred.return in
+  let%map queue = Queue.of_status' t.status |> Deferred.return in
   Entry.create spool queue ~name:t.id
 ;;
 
 let enqueue meta_spool queue ~meta ~id ~email =
-  Meta_spool.enqueue meta_spool queue meta (`Use id)
-  >>=? fun (_ : Meta_spool.Entry.t) ->
-  let email_spool = email_spool_of_meta_spool meta_spool in
-  Email_spool.Unique_name.reserve email_spool (id :> string)
-  >>=? fun email_name ->
-  Email_spool.enqueue email_spool Email email (`Use email_name)
-  >>|? fun (_ : Email_spool.Entry.t) ->
-  ()
+  let open Deferred.Or_error.Let_syntax in
+  let%bind (_ : On_disk_spool.Entry.t) =
+    On_disk_spool.enqueue meta_spool queue meta email (`Use id)
+  in
+  Deferred.Or_error.ok_unit
 ;;
 
 let create spool ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_msg =
@@ -256,13 +197,13 @@ let create spool ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_
   in
   let envelope = Envelope.With_next_hop.envelope envelope_with_next_hop in
   let remaining_recipients = Envelope.recipients envelope in
-  Meta_queue.of_status' initial_status |> Deferred.return
+  Queue.of_status' initial_status |> Deferred.return
   >>=? fun queue ->
-  Meta_spool.Unique_name.reserve spool original_msg
+  On_disk_spool.Unique_name.reserve spool original_msg
   >>=? fun id ->
   let meta =
     Fields.create
-      ~spool_dir:(Meta_spool.dir spool)
+      ~spool_dir:(On_disk_spool.dir spool)
       ~spool_date:(Time.now ())
       ~remaining_recipients
       ~failed_recipients:[]
@@ -281,21 +222,16 @@ let create spool ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_
   meta
 ;;
 
-let load meta_entry =
-  Meta_spool.Entry.contents_unsafe meta_entry
+let load entry =
+  On_disk_spool.Entry.Direct.contents entry
 ;;
 
-let load_email meta_entry =
-  Email_spool.Entry.contents_unsafe (email_entry_of_meta_entry meta_entry)
-;;
-
-let load_with_envelope meta_entry =
+let load_with_envelope entry =
   let open Deferred.Or_error.Let_syntax in
-  let%bind meta = load meta_entry in
-  let%map email =
-    Email_spool.Entry.contents_unsafe (email_entry_of_meta_entry meta_entry)
-  in
-  meta, Envelope.create' ~info:(envelope_info meta) ~email
+  let%bind meta = load entry in
+  let data_file = On_disk_spool.Entry.Direct.data_file entry in
+  let%bind email = On_disk_spool.Data_file.load data_file in
+  return (meta, Envelope.create' ~info:(envelope_info meta) ~email)
 ;;
 
 let last_relay_attempt t =
@@ -307,40 +243,37 @@ let with_file t
        [`Sync_meta | `Sync_email of Email.t | `Unlink] Or_error.t Deferred.t)
   : unit Or_error.t Deferred.t =
   entry t
-  >>=? fun meta_entry ->
-  return (Meta_queue.of_status' t.status)
+  >>=? fun entry ->
+  return (Queue.of_status' t.status)
   >>=? fun original_queue ->
-  Meta_spool.with_entry meta_entry
-    ~f:(fun meta ->
+  On_disk_spool.with_entry entry
+    ~f:(fun meta data_file ->
       match compare t meta = 0 with
       | false ->
         let e =
           Error.create
             "spooled message in memory differs from spooled message on disk"
-            (`In_memory t, `On_disk meta, `Entry meta_entry)
-            [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`Entry of Meta_spool.Entry.t]]
+            (`In_memory t, `On_disk meta, `Entry entry)
+            [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`Entry of On_disk_spool.Entry.t]]
         in
         return (`Save (meta, original_queue), Error e)
       | true ->
         let get_envelope () =
-          load_email meta_entry
+          On_disk_spool.Data_file.load data_file
           >>|? fun email ->
           Envelope.create' ~info:(envelope_info meta) ~email
         in
         f get_envelope
         >>= function
         | Error _ as e -> return (`Save (meta, original_queue), e)
-        | Ok (`Unlink) ->
-          Email_spool.Entry.remove_unsafe (email_entry_of_meta_entry meta_entry)
-          >>= fun result ->
-          return (`Remove, result)
+        | Ok (`Unlink) -> return (`Remove, Ok ())
         | Ok (`Sync_email email) ->
-          Email_spool.Entry.save_unsafe (email_entry_of_meta_entry meta_entry) email
+          On_disk_spool.Data_file.save data_file ~contents:email
           >>| fun result ->
           (`Save (meta, original_queue), result)
         | Ok `Sync_meta ->
           (* Derive queue from mutable [t.status] as it may have changed in [~f] *)
-          Meta_queue.of_status' t.status
+          Queue.of_status' t.status
           |> Or_error.tag ~tag:(Sexp.to_string (sexp_of_t t))
           |> Deferred.return
           >>= function
@@ -535,10 +468,11 @@ let send t ~log ~client_cache =
 
 let size_of_file t =
   let open Deferred.Or_error.Let_syntax in
-  let%bind meta_entry = entry t in
-  let%map stats = Email_spool.Entry.stat (email_entry_of_meta_entry meta_entry) in
+  let%bind entry = entry t in
+  let data_file = On_disk_spool.Entry.Direct.data_file entry in
+  let%bind stats = On_disk_spool.Data_file.stat data_file in
   let size = Unix.Stats.size stats |> Float.of_int64 in
-  Byte_units.create `Bytes size
+  return (Byte_units.create `Bytes size)
 ;;
 
 let time_on_spool t =

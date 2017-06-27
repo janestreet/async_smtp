@@ -5,10 +5,8 @@ open Async_smtp.Std
 open Test_async_smtp
 
 module Widgetspool = Multispool.For_testing.Make(struct
-    include Multispool.Make_spoolable(struct
-        include Widget
-        module Name_generator = Multispool.For_testing.Lexicographic_time_order_name_generator
-      end)
+    include Widget
+    module Name_generator = Multispool.For_testing.Lexicographic_time_order_name_generator
   end)
 
 module Test_active_and_passive_queues = struct
@@ -34,7 +32,7 @@ module Test_active_and_passive_queues = struct
               Deferred.unit
             | `Checked_out (widget_co, new_reader) ->
               let widget = Expert.Checked_out_entry.contents widget_co in
-              if print_detail then printf !"Dequeued: %{Widget} in Queue1\n" widget;
+              if print_detail then printf !"Dequeued: %{Widget.Metadata} in Queue1\n" widget;
               begin match widget with
               | Sprocket _ ->
                 failwith "[dequeue_and_move] only supports Cogs, sorry Cosmo!"
@@ -46,7 +44,7 @@ module Test_active_and_passive_queues = struct
               end;
               Expert.Checked_out_entry.save widget_co Widget.Queue.Queue2 >>| ok_exn
               >>= fun () ->
-              if print_detail then printf !"   Moved: %{Widget} to Queue2\n" widget;
+              if print_detail then printf !"   Moved: %{Widget.Metadata} to Queue2\n" widget;
               loop new_reader ~timeout (i + 1)
           end
 
@@ -64,7 +62,13 @@ module Test_active_and_passive_queues = struct
     let rec enqueue_loop = function
       | x when x = iterations -> Deferred.unit
       | i ->
-        enqueue spool Widget.Queue.Queue1 (Cog i) (`Reserve i) >>| ok_exn
+        let data =
+          Widget.Data.Fields.create
+            ~customer:"Amalgamated Consolidated"
+            ~serial_number:i
+        in
+        enqueue spool Widget.Queue.Queue1 (Cog i) data (`Reserve i)
+        >>| ok_exn
         >>= fun (_ : Entry.t) ->
         enqueue_loop (i + 1)
     in
@@ -76,9 +80,9 @@ module Test_active_and_passive_queues = struct
     >>= fun entries ->
     printf "Contents of %s:\n" (Widget.Queue.to_dirname queue);
     Deferred.List.iter entries ~f:(fun entry ->
-      Entry.contents_unsafe entry >>| ok_exn
+      Entry.Direct.contents entry >>| ok_exn
       >>= fun widget ->
-      printf !"    %{Widget}\n" widget;
+      printf !"    %{Widget.Metadata}\n" widget;
       Deferred.unit
     )
   ;;

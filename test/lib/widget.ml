@@ -1,14 +1,37 @@
 open Core
+open Async
 
-module T = struct
-  type t =
-    | Sprocket of string
-    | Cog of int
-  [@@deriving sexp]
+module Metadata = struct
+  module T = struct
+    type t =
+      | Sprocket of string
+      | Cog of int
+    [@@deriving sexp]
+  end
+
+  include T
+  include Sexpable.To_stringable(T)
 end
 
-include T
-include Sexpable.To_stringable(T)
+module Data = struct
+  type t =
+    { serial_number : int
+    ; customer      : string
+    } [@@deriving sexp, fields]
+
+  let load path =
+    Reader.load_sexp path t_of_sexp
+  ;;
+
+  let save ?temp_file t path =
+    Deferred.Or_error.try_with (fun () ->
+      Writer.save_sexp ?temp_file ~hum:true path (sexp_of_t t))
+  ;;
+
+  let to_string t =
+    Sexp.to_string_hum (sexp_of_t t)
+  ;;
+end
 
 module Queue = struct
   type t =

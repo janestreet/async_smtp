@@ -12,10 +12,8 @@ module Test_name_generator = struct
 end
 
 module Widgetspool = Multispool.Make(struct
-    include Multispool.Make_spoolable(struct
-        include Widget
-        module Name_generator = Test_name_generator
-      end)
+    include Widget
+    module Name_generator = Test_name_generator
   end)
 
 let chdir_or_error dir =
@@ -78,6 +76,7 @@ let%expect_test "File Behavior" =
     let%bind () = [%expect {|
         spool
         spool/.checkout
+        spool/.data
         spool/.registry
         spool/.tmp
         spool/queue1
@@ -87,14 +86,22 @@ let%expect_test "File Behavior" =
     in
 
     (* Enqueue a file, check its path(s) at various steps, and then remove it *)
+    let data =
+      Widget.Data.Fields.create
+        ~serial_number:1234567890
+        ~customer:"Acme Incorporated"
+    in
+    let metadata = Widget.Metadata.Cog 1 in
     let%bind entry =
-      Widgetspool.enqueue spool Queue1 (Cog 1) (`Reserve "q1_co_test_")
+      Widgetspool.enqueue spool Queue1 metadata data (`Reserve "q1_co_test_")
     in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File exists in registry and queue *)
     let%bind () = [%expect {|
         spool
         spool/.checkout
+        spool/.data
+        spool/.data/q1_co_test_000000
         spool/.registry
         spool/.registry/q1_co_test_000000
         spool/.tmp
@@ -111,6 +118,8 @@ let%expect_test "File Behavior" =
         spool
         spool/.checkout
         spool/.checkout/q1_co_test_000000
+        spool/.data
+        spool/.data/q1_co_test_000000
         spool/.registry
         spool/.registry/q1_co_test_000000
         spool/.tmp
@@ -125,6 +134,7 @@ let%expect_test "File Behavior" =
     let%bind () = [%expect {|
         spool
         spool/.checkout
+        spool/.data
         spool/.registry
         spool/.tmp
         spool/queue1
@@ -134,22 +144,30 @@ let%expect_test "File Behavior" =
     in
 
     (* Enqueue some files and test nextname functionality *)
-    let enqueue (queue : Widget.Queue.t) prefix text =
-      let%map (_ : Widgetspool.Entry.t) =
-        Widgetspool.enqueue spool queue (Sprocket text) (`Reserve prefix)
+    let enqueue ~sn ~cust (queue : Widget.Queue.t) prefix text =
+      let data = Widget.Data.Fields.create ~serial_number:sn ~customer:cust in
+      let%bind (_ : Widgetspool.Entry.t) =
+        Widgetspool.enqueue spool queue (Sprocket text) data (`Reserve prefix)
       in
-      ()
+      return ()
     in
-    let%bind () = enqueue Queue1 "q1prefix1_" "Hello, world 1! q1prefix1_000000" in
-    let%bind () = enqueue Queue1 "q1prefix1_" "Hello, world 2! q1prefix1_000001" in
-    let%bind () = enqueue Queue1 "q1prefix2_" "Hello, world 3! q1prefix2_000000" in
-    let%bind () = enqueue Queue2 "q2prefix1_" "Hello, world 4! q2prefix1_000000" in
-    let%bind () = enqueue Queue2 "q2prefix2_" "Hello, world 5! q2prefix2_000000" in
-    let%bind () = enqueue Queue2 "q2prefix1_" "Hello, world 6! q2prefix1_000001" in
+    let%bind () = enqueue Queue1 "q1prefix1_" "Hello, world 1! q1prefix1_000000" ~sn:1000000 ~cust:"Acme Corporation"         in
+    let%bind () = enqueue Queue1 "q1prefix1_" "Hello, world 2! q1prefix1_000001" ~sn:1000001 ~cust:"Acme Corporation"         in
+    let%bind () = enqueue Queue1 "q1prefix2_" "Hello, world 3! q1prefix2_000000" ~sn:1000002 ~cust:"Amalgamated Consolidated" in
+    let%bind () = enqueue Queue2 "q2prefix1_" "Hello, world 4! q2prefix1_000000" ~sn:2000001 ~cust:"Consolidated Amalgamated" in
+    let%bind () = enqueue Queue2 "q2prefix2_" "Hello, world 5! q2prefix2_000000" ~sn:2000002 ~cust:"ABC Co."                  in
+    let%bind () = enqueue Queue2 "q2prefix1_" "Hello, world 6! q2prefix1_000001" ~sn:4444444 ~cust:"XYZ Co."                  in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     let%bind () = [%expect {|
         spool
         spool/.checkout
+        spool/.data
+        spool/.data/q1prefix1_000000
+        spool/.data/q1prefix1_000001
+        spool/.data/q1prefix2_000000
+        spool/.data/q2prefix1_000000
+        spool/.data/q2prefix1_000001
+        spool/.data/q2prefix2_000000
         spool/.registry
         spool/.registry/q1prefix1_000000
         spool/.registry/q1prefix1_000001
@@ -193,6 +211,13 @@ let%expect_test "File Behavior" =
     let%bind () = [%expect {|
         spool
         spool/.checkout
+        spool/.data
+        spool/.data/q1prefix1_000000
+        spool/.data/q1prefix1_000001
+        spool/.data/q1prefix2_000000
+        spool/.data/q2prefix1_000000
+        spool/.data/q2prefix1_000001
+        spool/.data/q2prefix2_000000
         spool/.registry
         spool/.registry/q1prefix1_000000
         spool/.registry/q1prefix1_000001
@@ -215,15 +240,25 @@ let%expect_test "File Behavior" =
 
     (* Use iter_exn to visit each file in queue2 in turn *)
     let%bind reader2 = Widgetspool.Queue_reader.create spool Queue2 in
-    let%bind () = Widgetspool.Queue_reader.iter_available reader2 ~f:(fun widget ->
-      print_s ~tmp_dir ([%sexp_of: Widget.t] widget);
-      Deferred.return (`Save (widget, Widget.Queue.Queue2))
+    let%bind () = Widgetspool.Queue_reader.iter_available reader2 ~f:(fun widget data_file ->
+      let open Deferred.Let_syntax in
+      print_s ~tmp_dir ([%sexp_of: Widget.Metadata.t] widget);
+      let%bind contents =
+        Widgetspool.Data_file.load data_file
+        |> Deferred.Or_error.ok_exn
+      in
+      printf !"    Data: %{Widget.Data}\n" contents;
+      return (`Save (widget, Widget.Queue.Queue2));
     ) in
     let%bind () = [%expect {|
         (Sprocket "Hello, world 1! q1prefix1_000000")
+            Data: ((serial_number 1000000) (customer "Acme Corporation"))
         (Sprocket "Hello, world 4! q2prefix1_000000")
+            Data: ((serial_number 2000001) (customer "Consolidated Amalgamated"))
         (Sprocket "Hello, world 6! q2prefix1_000001")
+            Data: ((serial_number 4444444) (customer "XYZ Co."))
         (Sprocket "Hello, world 5! q2prefix2_000000")
+            Data: ((serial_number 2000002) (customer "ABC Co."))
       |}] |> Deferred.ok
     in
 
@@ -231,15 +266,15 @@ let%expect_test "File Behavior" =
     let entry = Widgetspool.Entry.create spool Queue2 ~name:"q2prefix1_000000" in
     let%bind () =
       Widgetspool.with_entry entry
-        ~f:(fun widget ->
-          let new_widget = Widget.Cog 42 in
-          printf !"Replacing '%{sexp:Widget.t}' with '%{sexp:Widget.t}' ...\n"
+        ~f:(fun widget _data_file ->
+          let new_widget = Widget.Metadata.Cog 42 in
+          printf !"Replacing '%{sexp:Widget.Metadata.t}' with '%{sexp:Widget.Metadata.t}' ...\n"
             widget new_widget;
           Deferred.return (`Save (new_widget, Widget.Queue.Queue2), ()))
     in
     (* Print the list again *)
-    let%bind () = Widgetspool.Queue_reader.iter_available reader2 ~f:(fun widget ->
-      print_s ~tmp_dir ([%sexp_of: Widget.t] widget);
+    let%bind () = Widgetspool.Queue_reader.iter_available reader2 ~f:(fun widget _data_file ->
+      print_s ~tmp_dir ([%sexp_of: Widget.Metadata.t] widget);
       Deferred.return (`Save (widget, Widget.Queue.Queue2))
     ) in
     let%bind () = [%expect {|

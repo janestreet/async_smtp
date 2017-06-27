@@ -17,7 +17,7 @@ open Async
     applying the [Multispool] functor. A spool deals in a data type that implements the
     [Spoolable] interface. This interface tells the spool how to encode and decode items
     for on-disk storage and how to map queue names to directories on disk. See
-    ../test/lib/widget.ml for an example [Spoolable.t].
+    ../test/lib/widget.ml for an example [Spoolable] implementation.
 
     An existing spool is opened with [load] and a new one is created with [create].
 
@@ -40,8 +40,8 @@ open Async
     name while this name is in use within the spool. *)
 
 module Name_generator = struct
-  (** Generates filenames for enqueued [Spoolable.t]s.  [t] is a user-supplied input to
-      name generation via [name]. *)
+  (** Generates filenames for enqueued [Spoolable]s.  [t] is a user-supplied input to name
+      generation via [name]. *)
   module type S = sig
     type t
     val next : t -> attempt:int -> string
@@ -50,10 +50,33 @@ end
 
 module Spoolable = struct
   module type S = sig
-    type t
+    (** [Spoolable.Metadata.t] should be smallish since it is read and written more
+        frequently than [Spoolable.Data.t]. *)
+    module Metadata : sig
+      type t
 
-    (** [Queue.t] is an enumerable type that represents the available queues the mapping
-        to directory names on-disk. *)
+      (** [of_string] and [to_string] are used to persist and read [t] on disk. *)
+      include Stringable.S with type t := t
+    end
+
+    (** [Spoolable.Data.t] is where the "real" data lives and it allows for data-specific
+        [load] and [save] functionality. *)
+    module Data : sig
+      type t
+
+      val load
+        :  string
+        -> t Deferred.Or_error.t
+
+      val save
+        :  ?temp_file:string
+        -> t
+        -> string
+        -> unit Deferred.Or_error.t
+    end
+
+    (** [Queue.t] is an enumerable type that represents the available queues and the
+        mapping to directory names on-disk. *)
     module Queue : sig
       type t [@@deriving sexp, enumerate]
 
@@ -61,40 +84,8 @@ module Spoolable = struct
     end
 
     module Name_generator : Name_generator.S
-
-    val load_from_disk
-      :  path: string
-      -> t Deferred.Or_error.t
-
-    (** [save_to_disk] is responsible for file integrity.  [Make_spoolable] provides an
-        implementation that uses [temp_file] and implements typical
-        write/fsync/close/rename semantics. *)
-    val save_to_disk
-      :  ?temp_file:string
-      -> path: string
-      -> t
-      -> unit Deferred.Or_error.t
 
     (** All operations that touch disk are passed through [Throttle.enqueue] *)
-    module Throttle : sig
-      val enqueue : (unit -> 'a Deferred.t) -> 'a Deferred.t
-    end
-  end
-
-  module type Simple = sig
-    type t
-
-    module Queue : sig
-      type t [@@deriving sexp, enumerate]
-
-      val to_dirname : t -> string
-    end
-
-    module Name_generator : Name_generator.S
-
-    (** Used to define [load_from_disk] and [save_to_disk] *)
-    include Stringable.S with type t := t
-
     module Throttle : sig
       val enqueue : (unit -> 'a Deferred.t) -> 'a Deferred.t
     end
@@ -105,7 +96,7 @@ module type S = sig
   type t [@@deriving sexp_of]
   type spool = t
 
-  (** Set to a Spoolable module when including this module and when applying
+  (** Set to a [Spoolable] module when including this module and when applying
       [Multispool.Make] *)
   module Spoolable : Spoolable.S
 
@@ -127,33 +118,60 @@ module type S = sig
       functionally identical to [load ?create_if_missing:()]. *)
   val create : string -> t Deferred.Or_error.t
 
+  (** Provide access to a [Spoolable.Data.t].  [Data_file.t] functions as a "handle" to
+      the underlying data so the user can choose when to read a [Spoolable.Data.t]. *)
+  module Data_file : sig
+    type t
+
+    val load
+      :  t
+      -> Spoolable.Data.t Deferred.Or_error.t
+
+    val save
+      :  t
+      -> contents:Spoolable.Data.t
+      -> unit Deferred.Or_error.t
+
+    val stat
+      :  t
+      -> Unix.Stats.t Deferred.Or_error.t
+  end
+
   (** An [Entry] is associated with a particular queue *)
   module Entry : sig
     type t [@@deriving sexp_of]
-
-    (** Create an entry.  This is exposed so that an [Entry.t] may be created from a file
-        name on disk *)
-    val create : spool -> Spoolable.Queue.t -> name:string -> t
-
-    (** Get contents of this [Entry.t] in an unsafe way.  No checkout is performed and the
-        data is read directly from the queue file.  If you need to later update this data,
-        consider revalidating the contents after checkout and before writing. *)
-    val contents_unsafe : t -> Spoolable.t Deferred.Or_error.t
-
-    (** Save contents directly to the file path derived from [t]. This is unsafe because
-        there is no validation or exclusive access guarantees. This will atomically
-        clobber over any existing file. *)
-    val save_unsafe : t -> Spoolable.t -> unit Deferred.Or_error.t
-
-    (** Delete an [Entry.t] from disk (along with its registry file). This is unsafe
-        because there is no validation or exclusive access guarantees. *)
-    val remove_unsafe : t -> unit Deferred.Or_error.t
 
     val stat : t -> Unix.Stats.t Deferred.Or_error.t
 
     val spool : t -> spool
     val queue : t -> Spoolable.Queue.t
     val name  : t -> string
+
+    (** create an [Entry.t] from a file name on disk. There is no validation done to
+        ensure that the corresponding entry exists in the spool. The validation is
+        performed when using the [Entry.t]. *)
+    val create : spool -> Spoolable.Queue.t -> name:string -> t
+
+    (** Direct operations that provide no validation or exclusive access guarantees. *)
+    module Direct : sig
+      (** No checkout is performed and the data is read directly from the queue file.  If
+          you need to later update this data, consider revalidating the contents after
+          checkout and before writing. *)
+      val contents : t -> Spoolable.Metadata.t Deferred.Or_error.t
+
+      (** Get the data_file associated with an [Entry.t].  It is unsafe to operate on this
+          directly ouside of a checkout, much like [contents]. *)
+      val data_file : t -> Data_file.t
+
+      (** Save contents directly to the file path derived from [t]. There are no
+          validation or exclusive access guarantees. This will atomically clobber over any
+          existing file. *)
+      val save : t -> Spoolable.Metadata.t -> unit Deferred.Or_error.t
+
+      (** Delete an [Entry.t] from disk along with its registry file and data_file. There
+          are no validation or exclusive access guarantees. *)
+      val remove : t -> unit Deferred.Or_error.t
+    end
   end
 
   val list : t -> Spoolable.Queue.t -> Entry.t list Deferred.Or_error.t
@@ -167,22 +185,23 @@ module type S = sig
       -> t Deferred.Or_error.t
   end
 
-  (** Add a [Spoolable.t] to a queue.  An [Entry.t] is returned, but it may make sense to
+  (** Add a [Spoolable] to a queue.  An [Entry.t] is returned, but it may make sense to
       ignore it. *)
   val enqueue
     :  t
     -> Spoolable.Queue.t
-    -> Spoolable.t
+    -> Spoolable.Metadata.t
+    -> Spoolable.Data.t
     -> [ `Reserve of Spoolable.Name_generator.t | `Use of Unique_name.t ]
     -> Entry.t Deferred.Or_error.t
 
-  (** Do something with the contents of an entry within a user-supplied function [f].  Use
-      [with_entry] if you expect to be the only user of an [Entry.t] and it is an error if
-      the Entry.t is grabbed by another process (or otherwise disappears).  See [checkout]
-      for a lower-level interface. *)
+  (** Do something with the contents of an entry within [f].  Use [with_entry] if you
+      expect to be the only user of an [Entry.t] and it is an error if the Entry.t is
+      grabbed by another process (or otherwise disappears).  See [checkout] for a
+      lower-level interface. *)
   val with_entry
-    :  f:(Spoolable.t ->
-          ([ `Save of Spoolable.t * Spoolable.Queue.t | `Remove ] * 'a) Deferred.t)
+    :  f:(Spoolable.Metadata.t -> Data_file.t ->
+          ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a) Deferred.t)
     -> Entry.t
     -> 'a Deferred.Or_error.t
 
@@ -190,8 +209,8 @@ module type S = sig
       race to grab an [Entry.t] and want straightforward handling.  See [checkout'] for a
       lower-level interface.*)
   val with_entry'
-    :  f:(Spoolable.t ->
-          ([ `Save of Spoolable.t * Spoolable.Queue.t | `Remove ] * 'a) Deferred.t)
+    :  f:(Spoolable.Metadata.t -> Data_file.t ->
+          ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a) Deferred.t)
     -> Entry.t
     -> [ `Ok of 'a | `Not_found ] Deferred.Or_error.t
 
@@ -209,16 +228,16 @@ module type S = sig
         the list is exhausted. *)
     val iter
       :  ?stop:unit Deferred.t
-      -> f:(Spoolable.t ->
-            [ `Save of Spoolable.t * Spoolable.Queue.t | `Remove ] Deferred.t)
+      -> f:(Spoolable.Metadata.t -> Data_file.t ->
+            [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
 
     (** Iterate over entries in a queue and call [f] on each, if any are available.  Do
         not wait. *)
     val iter_available
-      :  f:(Spoolable.t ->
-            [ `Save of Spoolable.t * Spoolable.Queue.t | `Remove ] Deferred.t)
+      :  f:(Spoolable.Metadata.t -> Data_file.t ->
+            [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
   end
@@ -231,15 +250,16 @@ module type S = sig
     module Checked_out_entry : sig
       type t
 
-      val contents : t -> Spoolable.t
-      val update : t -> f:(Spoolable.t -> Spoolable.t) -> t
+      val contents : t -> Spoolable.Metadata.t
+      val update : t -> f:(Spoolable.Metadata.t -> Spoolable.Metadata.t) -> t
+      val data_file : t -> Data_file.t
 
       (** Atomically return a [Checked_out_entry.t] to a queue.  The [Checked_out_entry.t]
           should be forgotten after this. *)
       val save : t -> Spoolable.Queue.t -> unit Deferred.Or_error.t
 
-      (** Delete a [Checked_out_entry.t] from disk.  The [Checked_out_entry.t] should be
-          forgotten after this. *)
+      (** Delete a [Checked_out_entry.t] (along with its registry file and data_file).
+          The [Checked_out_entry.t] should be forgotten after this. *)
       val remove : t -> unit Deferred.Or_error.t
     end
 
@@ -259,12 +279,14 @@ module type S = sig
       val dequeue
         :  ?stop:unit Deferred.t
         -> Queue_reader.t
-        -> [ `Stopped | `Checked_out of (Checked_out_entry.t * Queue_reader.t)] Deferred.Or_error.t
+        -> [ `Stopped | `Checked_out of (Checked_out_entry.t * Queue_reader.t)]
+             Deferred.Or_error.t
 
       (** Dequeue the next entry that that is available, if any.  Do not wait. *)
       val dequeue_available
         :  Queue_reader.t
-        -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ] * Queue_reader.t) Deferred.Or_error.t
+        -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ]
+            * Queue_reader.t) Deferred.Or_error.t
     end
   end
 end

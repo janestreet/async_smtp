@@ -16,14 +16,13 @@ depends: [
   "core"
   "core_extended"
   "email_message"
-  "jbuilder"                       {build & >= "1.0+beta8"}
-  "json-wheel_jane_street_overlay"
+  "jbuilder"                {build & >= "1.0+beta8"}
   "ppx_driver"
   "ppx_jane"
   "re2"
   "textutils"
   "cryptokit"
-  "ocaml-migrate-parsetree"        {>= "0.4"}
+  "ocaml-migrate-parsetree" {>= "0.4"}
 ]
 available: [ ocaml-version >= "4.04.1" ]
 descr: "

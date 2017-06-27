@@ -6,7 +6,7 @@ module Config = Server_config
 
 module Message_id = Message.Id
 module Message_spool = Message.On_disk_spool
-module Message_queue = Message_spool.Queue
+module Message_queue = Message.Queue
 
 module Log = Mail_log
 
