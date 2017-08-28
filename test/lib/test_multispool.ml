@@ -88,7 +88,7 @@ let%expect_test "File Behavior" =
     (* Enqueue a file, check its path(s) at various steps, and then remove it *)
     let data =
       Widget.Data.Fields.create
-        ~serial_number:1234567890
+        ~serial_number:12345
         ~customer:"Acme Incorporated"
     in
     let metadata = Widget.Metadata.Cog 1 in
