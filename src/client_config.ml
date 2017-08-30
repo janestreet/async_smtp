@@ -7,6 +7,7 @@ module Tls = struct
     { version : Ssl.Version.t option
     ; options : Ssl.Opt.t list option
     ; name : string option
+    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; ca_file : string option
     ; ca_path : string option
     ; mode :
@@ -18,18 +19,17 @@ module Tls = struct
         [ `Ignore
         | `Verify
         ]
-    ; allowed_ciphers : [`Default | `Only of string list]
     } [@@deriving sexp, fields]
 
   let default =
     { version = None
     ; options = None
     ; name = None
+    ; allowed_ciphers = `Secure
     ; ca_file = None
     ; ca_path = None
     ; mode = `If_available
     ; certificate_mode = `Ignore
-    ; allowed_ciphers = `Default
     }
 end
 

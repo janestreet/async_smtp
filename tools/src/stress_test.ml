@@ -13,8 +13,8 @@ module Config = struct
     ; port : int
     ; tls : bool
     ; send_n_messages : int
-    ; client_allowed_ciphers : [`Default | `Only of string list]
-    ; server_allowed_ciphers : [`Default | `Only of string list]
+    ; client_allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
+    ; server_allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; key_type : [`rsa of int | `ecdsa of string | `dsa of int]
     } [@@deriving fields, sexp]
 
@@ -184,7 +184,7 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies
   end
   >>= fun dir ->
   let allowed_ciphers = function
-    | None -> `Default
+    | None -> `Secure
     | Some allowed_ciphers -> `Only allowed_ciphers
   in
   let config =

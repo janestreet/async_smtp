@@ -129,11 +129,11 @@ let%test_module _ =
                   version = None
                 ; options = None
                 ; name = Some "localhost"
+                ; allowed_ciphers = `Secure
                 ; crt_file = "test-server.crt"
                 ; key_file = "test-server.key"
                 ; ca_file = Some "test-ca.crt"
                 ; ca_path = None
-                ; allowed_ciphers = `Default
                 }
           }
         in
@@ -145,11 +145,11 @@ let%test_module _ =
                   version = None
                 ; options = None
                 ; name = None
+                ; allowed_ciphers = `Secure
                 ; ca_file = Some "test-ca.crt"
                 ; ca_path = None
                 ; mode = `Required
                 ; certificate_mode = `Verify
-                ; allowed_ciphers = `Default
                 }
               ]
           }

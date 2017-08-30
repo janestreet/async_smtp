@@ -18,11 +18,11 @@ let config =
           version = None
         ; options = None
         ; name = None
+        ; allowed_ciphers = `Secure
         ; crt_file = "/tmp/mailcore.crt"
         ; key_file = "/tmp/mailcore.key"
         ; ca_file = None
         ; ca_path  = None
-        ; allowed_ciphers = `Default
         }
   ; client = Smtp_client.Config.default
   }

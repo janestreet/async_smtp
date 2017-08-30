@@ -7,6 +7,7 @@ module Tls : sig
     { version : Ssl.Version.t option
     ; options : Ssl.Opt.t list option
     ; name : string option
+    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; ca_file : string option
     ; ca_path : string option
     (* All the modes except [Required] only provide security against a passive
@@ -30,7 +31,6 @@ module Tls : sig
         [ `Ignore
         (* Require that the certificate exists, matches, and has a valid chain *)
         | `Verify ]
-    ; allowed_ciphers : [`Default | `Only of string list]
     } [@@deriving sexp, fields]
 
   val default : t

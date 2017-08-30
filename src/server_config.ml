@@ -7,11 +7,11 @@ module Tls = struct
     { version:Ssl.Version.t option
     ; options:Ssl.Opt.t list option
     ; name:string option
+    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; crt_file:string
     ; key_file:string
     ; ca_file:string option
     ; ca_path : string option
-    ; allowed_ciphers : [`Default | `Only of string list]
     } [@@deriving fields, sexp]
 end
 
