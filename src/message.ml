@@ -1,5 +1,4 @@
 open Core
-open Core_extended.Std
 open Async
 open Email_message.Std
 

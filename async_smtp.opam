@@ -10,7 +10,7 @@ build: [
 ]
 depends: [
   "async"
-  "async_extended"
+  "async_inotify"
   "async_shell"
   "async_ssl"
   "core"

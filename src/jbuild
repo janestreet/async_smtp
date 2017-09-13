@@ -3,11 +3,10 @@
   (public_name async_smtp)
   (libraries
    (async
-    async_extended
+    async_inotify
     async_ssl
     core_extended.base64
     core
-    core_extended
     textutils
     email_message
     re2
