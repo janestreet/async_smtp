@@ -1,6 +1,14 @@
 open Core
 open Async
 
+module Address : sig
+  type t = Address.t [@@deriving sexp, bin_io]
+  include module type of Address with type t:=t
+end = struct
+  include Address
+  include (Address.Stable.V1 : sig type t [@@deriving sexp, bin_io] end with type t:=t)
+end
+
 module Log = Mail_log
 
 module Config = struct
@@ -9,9 +17,24 @@ module Config = struct
     ; cleanup_idle_connection_after : Time.Span.t
     ; max_connections_per_address   : int
     ; max_connection_reuse          : int
-    } [@@deriving sexp, fields]
+    } [@@deriving sexp, fields, bin_io, compare]
 
   let create = Fields.create
+
+  let to_cache_config t =
+    Cache.Config.create
+      ~max_resources:t.max_open_connections
+      ~idle_cleanup_after:t.cleanup_idle_connection_after
+      ~max_resources_per_id:t.max_connections_per_address
+      ~max_resource_reuse:t.max_connection_reuse
+
+  let of_cache_config (cache_config : Cache.Config.t) =
+    create
+      ~max_open_connections:cache_config.max_resources
+      ~cleanup_idle_connection_after:cache_config.idle_cleanup_after
+      ~max_connections_per_address:cache_config.max_resources_per_id
+      ~max_connection_reuse:cache_config.max_resource_reuse
+
 end
 
 module Tcp_options = struct
@@ -28,6 +51,19 @@ module Tcp_options = struct
     ; reader_buffer_size
     ; timeout
     }
+end
+
+module Address_and_route = struct
+  module T = struct
+    type t =
+      { address : Address.t
+      ; route   : string option
+      } [@@deriving bin_io, compare, hash, sexp, fields]
+    include Sexpable.To_stringable (struct type nonrec t = t [@@deriving sexp] end)
+    let module_name = "Async_smtp.Private.Client_cache.Address_and_route"
+  end
+  include T
+  include Identifiable.Make (T)
 end
 
 module Resource = struct
@@ -47,28 +83,20 @@ module Resource = struct
       }
   end
 
+  module Key = Address_and_route
+
   module Args = struct
-    module T = struct
-      type t =
-        { common : Common_args.t
-        ; address : Address.t
-        } [@@deriving fields]
+    type t =
+      { common  : Common_args.t
+      ; address : Address.t
+      ; route   : string option
+      } [@@deriving fields]
 
-      let to_string_hum t = Address.to_string t.address
+    let to_string_hum t = Address.to_string t.address
 
-      let sexp_of_t t = Address.sexp_of_t t.address
+    let key { address; route; _ } = { Key. address; route }
 
-      (* Make sure not to hash [t.common] because there is a [Deferred.t] in there *)
-      let hash_fold_t h t = Address.hash_fold_t h t.address
-      let hash = Hash.run hash_fold_t
-
-      let compare t1 t2 = Address.compare t1.address t2.address
-    end
-    include T
-    include Comparable.Make_plain(T)
-    include Hashable.  Make_plain(T)
-
-    let create ~common address = { common; address }
+    let create ~common ?route address = { common; route; address }
   end
 
   type t =
@@ -143,6 +171,8 @@ end
 
 module Client_cache = Cache.Make(Resource)
 
+module Status = Client_cache.Status
+
 type t =
   { cache : Client_cache.t
   ; common_args : Resource.Common_args.t
@@ -150,13 +180,7 @@ type t =
 
 let init ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout
       ?component ~log ~(cache_config : Config.t) ~client_config () =
-  let config =
-    Cache.Config.create
-      ~max_resources:cache_config.max_open_connections
-      ~idle_cleanup_after:cache_config.cleanup_idle_connection_after
-      ~max_resources_per_id:cache_config.max_connections_per_address
-      ~max_resource_reuse:cache_config.max_connection_reuse
-  in
+  let config = Config.to_cache_config cache_config in
   let tcp_options =
     Tcp_options.create ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout ()
   in
@@ -170,41 +194,33 @@ let close_and_flush t = Client_cache.close_and_flush t.cache
 let close_finished t = Client_cache.close_finished t.cache
 let close_started t = Client_cache.close_started t.cache
 
+let status t = Client_cache.status t.cache
+let config t = Config.of_cache_config (Client_cache.config t.cache)
+
 module Tcp = struct
-  let with_' ?give_up ~f ~cache addresses =
-    let f (t : Resource.t) = f ~flows:t.flows t.client in
+  let with_' ?give_up ~f ~cache ?route addresses =
+    let f (r : Resource.t) =
+      f ~flows:r.flows r.client
+      >>= function
+      | (Error _) as err ->
+        (* Close the Connection if the callback returns an [Error] *)
+        Resource.close r
+        >>| const err
+      | (Ok _) as ok ->
+        return ok
+    in
     let args_list =
-      List.map addresses ~f:(Resource.Args.create ~common:cache.common_args)
+      List.map addresses ~f:(Resource.Args.create ~common:cache.common_args ?route)
     in
-    let rec with_any_loop ~failed = function
-      | [] ->
-        return (`Error_opening_resource failed)
-      | args_list ->
-        Client_cache.with_any' ~open_timeout:(Time.Span.of_sec 10.)
-          ?give_up cache.cache args_list
-          ~f:(fun r ->
-            f r
-            >>= function
-            | (Error _) as err ->
-              (* Close the Connection if the callback returns an [Error] *)
-              Resource.close r
-              >>| const err
-            | (Ok _) as ok ->
-              return ok)
-        >>= function
-        | `Ok (args, res) ->
-          return (`Ok (Resource.Args.address args, res))
-        | `Gave_up_waiting_for_resource
-        | `Cache_is_closed as res -> return res
-        | `Error_opening_resource (failed_args, e) ->
-          let remaining =
-            List.filter args_list
-              ~f:(fun args ->
-                not (Resource.Args.equal args failed_args))
-          in
-          with_any_loop
-            ~failed:((Resource.Args.address failed_args, e) :: failed)
-            remaining
-    in
-    with_any_loop ~failed:[] args_list
+    Client_cache.with_any_loop ~open_timeout:(Time.Span.of_sec 10.)
+      ?give_up cache.cache args_list ~f
+    >>| function
+    | `Ok (args, res) ->
+      `Ok (args.address, res)
+    | `Error_opening_all_resources list ->
+      let address_list = List.map list ~f:(fun (args, err) -> args.address, err) in
+      `Error_opening_all_addresses address_list
+    | `Gave_up_waiting_for_resource -> `Gave_up_waiting_for_address
+    | `Cache_is_closed -> `Cache_is_closed
+  ;;
 end

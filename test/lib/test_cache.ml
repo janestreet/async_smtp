@@ -1,14 +1,15 @@
 open! Core
 open Async
+open Async_smtp.Private
 open Expect_test_helpers
 
-module Cache = Async_smtp.Cache
-
 module Resource = struct
+  module Key = Int
   module Args = struct
-    include Int
+    type t = Key.t
 
-    let to_string_hum t = to_string_hum t
+    let to_string_hum t = Key.to_string_hum t
+    let key = Fn.id
   end
 
   type t =

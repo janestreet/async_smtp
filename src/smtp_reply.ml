@@ -115,8 +115,6 @@ include Sexpable.Of_sexpable(struct
 
 let code t = Code.to_int t.code
 
-let my_name = Unix.gethostname ()
-
 let create code fmt =
   ksprintf (fun raw_message ->
     { code; raw_message = String.split_lines raw_message }) fmt
@@ -127,7 +125,7 @@ let service_ready_220 greeting =
 ;;
 
 let closing_connection_221 =
-  create `Closing_connection_221 "%s closing connection" my_name
+  create `Closing_connection_221 "closing connection"
 ;;
 
 let authentication_successful_235 =
@@ -147,7 +145,7 @@ let start_mail_input_354 =
 ;;
 
 let service_unavailable_421 =
-  create `Service_unavailable_421 "%s Service not available, closing transmission channel" my_name
+  create `Service_unavailable_421 "Service not available, closing transmission channel"
 ;;
 
 let local_error_451 msg =

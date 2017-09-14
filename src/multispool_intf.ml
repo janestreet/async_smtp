@@ -78,7 +78,7 @@ module Spoolable = struct
     (** [Queue.t] is an enumerable type that represents the available queues and the
         mapping to directory names on-disk. *)
     module Queue : sig
-      type t [@@deriving sexp, enumerate]
+      type t [@@deriving sexp_of, enumerate]
 
       val to_dirname : t -> string
     end

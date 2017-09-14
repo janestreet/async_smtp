@@ -1,6 +1,57 @@
+module Stable = struct
+  open Core.Core_stable
+  open Email_message.Email_message_stable
+
+  module Unstable_mail_log = Mail_log
+  module Mail_log = Mail_log.Stable
+  module Address = Address.Stable
+  module Retry_interval = Retry_interval.Stable
+  module Quarantine_reason = Quarantine_reason.Stable
+  module Envelope = Envelope.Stable
+
+  module Id = struct
+    module V1 = struct
+      type t = string [@@deriving sexp, bin_io]
+      let to_string t = t
+      let of_string t = t
+    end
+  end
+
+  module Status = struct
+    module V1 = struct
+      type t =
+        [ `Send_now
+        | `Send_at of Time.V1.t
+        | `Sending
+        | `Frozen
+        | `Removed
+        | `Quarantined of Quarantine_reason.V1.t
+        | `Delivered
+        ] [@@deriving sexp, bin_io]
+    end
+  end
+
+  module V1 = struct
+    type t =
+      { spool_dir                    : string
+      ; id                           : Id.V1.t
+      ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
+      ; parent_id                    : Envelope.Id.V1.t
+      ; spool_date                   : Time.V1.t
+      ; next_hop_choices             : Address.V1.t list
+      ; mutable retry_intervals      : Retry_interval.V2.t list
+      ; mutable remaining_recipients : Email_address.V1.t list
+      ; mutable failed_recipients    : Email_address.V1.t list
+      ; mutable relay_attempts       : (Time.V1.t * Error.V1.t) list
+      ; mutable status               : Status.V1.t
+      ; mutable envelope_info        : Envelope.Info.V1.t
+      } [@@deriving sexp, bin_io]
+  end
+end
+
 open Core
 open Async
-open Email_message.Std
+open Email_message
 
 module Log = Mail_log
 
@@ -33,7 +84,7 @@ module Status = struct
     | `Removed
     | `Quarantined of Quarantine_reason.t
     | `Delivered
-    ] [@@deriving sexp, bin_io, compare]
+    ] [@@deriving sexp_of, compare]
 end
 
 module Queue = struct
@@ -42,7 +93,7 @@ module Queue = struct
     | Frozen
     | Removed
     | Quarantine
-  [@@deriving sexp, enumerate, compare, bin_io]
+  [@@deriving sexp_of, enumerate, compare]
 
   let to_dirname = function
     | Active     -> "active"
@@ -82,45 +133,35 @@ module Data = struct
   ;;
 
   let save ?temp_file t path =
-    Deferred.Or_error.try_with (fun () ->
-      Writer.with_file_atomic ?temp_file ~fsync:true path
-        ~f:(fun writer ->
-          String_monoid.iter (Email.to_string_monoid t) ~f:(function
-            | String_monoid.Underlying.Char c ->
-              Writer.write_char writer c
-            | String str ->
-              Writer.write writer str
-            | Bigstring bstr ->
-              Writer.schedule_bigstring writer bstr);
-          return ()))
+    Deferred.Or_error.try_with (fun () -> Email.save ?temp_file ~fsync:true t path)
   ;;
 end
 
 (* A value of type t should only be modified via [On_disk_spool].  This guarantees
    that all changes are properly flushed to disk. *)
-type t =
+type t = Stable.V1.t =
   { spool_dir                    : string
   ; id                           : Id.t
   (* with default so that sexps without a flowid still parse. *)
-  ; flows                        : Log.Flows.t [@default Log.Flows.none]
+  ; flows                        : Log.Flows.t
   ; parent_id                    : Envelope.Id.t
   ; spool_date                   : Time.t
   ; next_hop_choices             : Address.t list
   (* The head of this list is the time at which we should attempt a delivery
      after the next time a delivery fails. *)
   ; mutable retry_intervals      : Retry_interval.t list
-  ; mutable remaining_recipients : Email_address.t list
+  ; mutable remaining_recipients : Email_address.Stable.V1.t list
   (* Currently not used, but saved to disk to aid in triaging frozen messages and failed
      deliveries. Addresses on this list will not be included in remaining_recipients,
      and would otherwise be lost to the ether. *)
-  ; mutable failed_recipients    : Email_address.t list
+  ; mutable failed_recipients    : Email_address.Stable.V1.t list
   ; mutable relay_attempts       : (Time.t * Error.t) list
   ; mutable status               : Status.t
   ; mutable envelope_info        : Envelope.Info.t
-  } [@@deriving fields, sexp, bin_io]
+  } [@@deriving fields, sexp_of]
 
 (* type alias to make code more readable below *)
-type meta = t [@@deriving sexp]
+type meta = t [@@deriving sexp_of]
 
 let compare t1 t2 =
   Sexp.compare (sexp_of_t t1) (sexp_of_t t2)
@@ -137,12 +178,8 @@ let throttle = Throttle.create ~continue_on_error:true ~max_concurrent_jobs:400
 
 module On_disk = struct
   module Metadata = struct
-    module T = struct
-      type t = meta [@@deriving sexp]
-    end
-
-    include T
-    include Sexpable.To_stringable (T)
+    include Stable.V1
+    include Sexpable.To_stringable (Stable.V1)
   end
 
   module Data = Data
@@ -340,6 +377,7 @@ let send_to_hops t ~log ~client_cache get_envelope =
   Client_cache.Tcp.with_'
     ~give_up:(Clock.after (sec 60.))
     ~cache:client_cache t.next_hop_choices
+    ?route:(Envelope.Info.route t.envelope_info)
     ~f:(fun ~flows client ->
       let flows = Log.Flows.union t.flows flows in
       get_envelope ()
@@ -360,7 +398,7 @@ let send_to_hops t ~log ~client_cache get_envelope =
                           e));
     t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
     return `Try_later
-  | `Error_opening_resource hops_and_errors ->
+  | `Error_opening_all_addresses hops_and_errors ->
     List.iter hops_and_errors ~f:(fun (hop, e) ->
       let e = Error.tag ~tag:"Unable to open connection for hop" e in
       Log.info log (lazy (Log.Message.of_error
@@ -373,7 +411,7 @@ let send_to_hops t ~log ~client_cache get_envelope =
     let e = Error.createf "No hops available" in
     t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
     return `Try_later
-  | `Gave_up_waiting_for_resource ->
+  | `Gave_up_waiting_for_address ->
     let e = Error.createf "Gave up waiting for client" in
     Log.info log (lazy (Log.Message.of_error
                           ~here:[%here]
@@ -479,7 +517,7 @@ let time_on_spool t =
 ;;
 
 module T = struct
-  type nonrec t = t [@@deriving sexp]
+  type nonrec t = t [@@deriving sexp_of]
 
   let compare t1 t2 =
     Id.compare t1.id t2.id
@@ -488,8 +526,7 @@ module T = struct
 
   let hash_fold_t h t =
     Id.hash_fold_t h t.id
-
 end
 
-include Comparable.Make(T)
-include Hashable.Make(T)
+include Comparable.Make_plain(T)
+include Hashable.Make_plain(T)

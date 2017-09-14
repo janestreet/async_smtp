@@ -1,5 +1,5 @@
 open! Core
-open Email_message.Std
+open Email_message
 
 
 (*
@@ -16,8 +16,7 @@ open Email_message.Std
 type t =
   [ `Null
   | `Email of Email_address.t
-  ]
-[@@deriving bin_io, sexp, compare, hash]
+  ] [@@deriving compare, hash, sexp_of]
 
 val of_string
   :  ?default_domain:string
@@ -36,11 +35,17 @@ val to_string_with_arguments : t * Sender_argument.t list -> string
 
 val map : t -> f:(Email_address.t -> Email_address.t) -> t
 
-include Comparable.S with type t := t
-include Hashable.S with type t := t
+include Comparable.S_plain with type t := t
+include Hashable.S_plain with type t := t
 
 module Caseless : sig
   type nonrec t = t
-  include Comparable.S with type t := t
-  include Hashable.S with type t := t
+  include Comparable.S_plain with type t := t
+  include Hashable.S_plain with type t := t
+end
+
+module Stable : sig
+  module V1 : sig
+    type nonrec t = t [@@deriving bin_io, sexp]
+  end
 end

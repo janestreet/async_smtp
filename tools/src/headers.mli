@@ -1,7 +1,7 @@
 open! Core
 open! Async
-open! Email_message.Std
-open! Async_smtp.Std
+open! Email_message
+open! Async_smtp
 
 module Config : sig
   module Header_cond : sig

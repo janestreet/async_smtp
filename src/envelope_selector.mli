@@ -1,5 +1,5 @@
 open! Core
-open Email_message.Std
+open Email_message
 open Re2
 
 module Base : sig

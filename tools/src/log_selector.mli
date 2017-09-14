@@ -1,6 +1,6 @@
 open! Core
 open Re2
-open Async_smtp.Std
+open Async_smtp
 
 module Base : sig
   type t =

@@ -64,19 +64,23 @@ let string         = binable (module String)
 let int            = binable (module Int)
 let unit           = binable (module Unit)
 let bool           = binable (module Bool)
-let retry_interval = binable (module Retry_interval)
-let error          = binable (module Error)
+let span           = binable (module Time.Span.Stable.V2)
+let retry_interval = binable (module Retry_interval.Stable.V2)
+let error          = binable (module Error.Stable.V2)
 
 let smtp_event = binable (module Smtp_events.Event)
 
-let id           = binable (module Spool.Message_id)
-let spool_status = binable (module Spool.Status)
-let spool_event  = binable (module Spool.Event)
-let send_info    = binable (module Spool.Send_info)
-let recover_info = binable (module Spool.Recover_info)
+let id           = binable (module Spool.Stable.Message_id.V1)
+let spool_status = binable (module Spool.Stable.Status.V1)
+let spool_event  = binable (module Spool.Stable.Event.V1)
+let send_info    = binable (module Spool.Stable.Send_info.V1)
+let recover_info = binable (module Spool.Stable.Recover_info.V1)
 
 let gc_stat      = binable (module Gc.Stat)
 let pid          = binable (module Pid.Stable.V1)
+
+let cache_status = binable (module Client_cache.Status)
+let cache_config = binable (module Client_cache.Config)
 
 module Monitor = struct
   (* Including a sequence number. We broadcast a heartbeat message (with error =
@@ -125,4 +129,9 @@ end
 
 module Process = struct
   let pid        = rpc ~name:"proc-pid"      unit pid
+end
+
+module Cache = struct
+  let status = pipe_rpc ~name:"cache-status" span cache_status error
+  let config = rpc      ~name:"cache-config" unit cache_config
 end

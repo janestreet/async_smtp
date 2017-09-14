@@ -19,6 +19,8 @@ let implementations () =
   ; Gc.stat_pipe ()
   ; Monitor.errors ()
   ; Process.pid ()
+  ; Cache.status ()
+  ; Cache.config ()
   ]
 ;;
 

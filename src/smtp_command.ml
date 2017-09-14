@@ -5,7 +5,7 @@ type t =
   | Extended_hello of string
   | Sender of string
   | Recipient of string
-  | Auth_login of string option
+  | Auth of string * string option
   | Data
   | Reset
   | Quit
@@ -23,9 +23,12 @@ let of_string = function
     Sender (String.drop_prefix str 10 |> String.lstrip)
   | str when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
     Recipient (String.drop_prefix str 8 |> String.lstrip)
-  | str when String.Caseless.is_prefix str ~prefix:"AUTH LOGIN " ->
-    Auth_login (Some (String.drop_prefix str 11 |> String.lstrip))
-  | str when String.Caseless.equal str "AUTH LOGIN" -> Auth_login None
+  | str when String.Caseless.is_prefix str ~prefix:"AUTH " -> begin
+      let str = String.chop_prefix_exn str ~prefix:"AUTH " in
+      match String.lsplit2 str ~on:' ' with
+      | None -> Auth (str, None)
+      | Some (method_,first_response) -> Auth (method_, Some first_response)
+    end
   | str when String.Caseless.equal str "DATA"     -> Data
   | str when String.Caseless.equal str "RSET"     -> Reset
   | str when String.Caseless.equal str "QUIT"     -> Quit
@@ -40,8 +43,8 @@ let to_string = function
   | Extended_hello string -> "EHLO " ^ string
   | Sender string -> "MAIL FROM: " ^ string
   | Recipient string -> "RCPT TO: " ^ string
-  | Auth_login arg ->
-    "AUTH LOGIN" ^ (Option.value_map arg ~default:"" ~f:(fun arg -> " " ^ arg))
+  | Auth (meth, arg) ->
+    "AUTH " ^ meth ^ (Option.value_map arg ~default:"" ~f:(fun arg -> " " ^ arg))
   | Data -> "DATA"
   | Reset-> "RSET"
   | Quit -> "QUIT"
@@ -69,9 +72,9 @@ let%test_unit _ =
     ~recipient:(fun _ ->
       check "RCPT TO:hi" (Recipient "hi");
       check "rcpt to:hi" (Recipient "hi"))
-    ~auth_login:(fun _ ->
-      check "AUTH LOGIN" (Auth_login None);
-      check "AUTH LOGIN foobar" (Auth_login (Some "foobar")))
+    ~auth:(fun _ ->
+      check "AUTH LOGIN" (Auth ("LOGIN", None));
+      check "AUTH SIMPLE foobar" (Auth ("SIMPLE", Some "foobar")))
     ~data:(fun _ ->
       check "DATA" Data;
       check "data" Data)
@@ -103,9 +106,9 @@ let%test_unit _ =
       check (Sender "Helo World!~"))
     ~recipient:(fun _ ->
       check (Recipient "Helo World!~"))
-    ~auth_login:(fun _ ->
-      check (Auth_login None);
-      check (Auth_login (Some "foobar")))
+    ~auth:(fun _ ->
+      check (Auth ("LOGIN", None));
+      check (Auth ("SIMPLE", Some  "foobar")))
     ~data:(fun _ ->
       check Data)
     ~reset:(fun _ ->
@@ -142,9 +145,9 @@ let%test_unit _ =
       check_round "RCPT TO: Helo World!~" (Recipient "Helo World!~");
       check_of_str (Recipient "Bye World!~") "RCPT TO:Bye World!~";
       check_of_str (Recipient "Bye World!~") "rcpt to:Bye World!~")
-    ~auth_login:(fun _ ->
-      check_round "AUTH LOGIN foobar" (Auth_login (Some "foobar"));
-      check_round "AUTH LOGIN" (Auth_login None))
+    ~auth:(fun _ ->
+      check_round "AUTH LOGIN foobar" (Auth ("LOGIN", Some "foobar"));
+      check_round "AUTH SIMPLE" (Auth ("SIMPLE", None)))
     ~data:(fun _ ->
       check_round "DATA" Data;
       check_of_str Data "data")

@@ -1,5 +1,21 @@
 open Core
-open Email_message.Std
+open Email_message
+
+module Email_selector : sig
+  module Base : sig
+    type t = [ | Email_selector.Base.t ] [@@deriving sexp]
+    include module type of Email_selector.Base with type t:=t
+  end
+end = struct
+  module Base = struct
+    include (Email_selector.Stable.Base.V1 : sig
+               type t = [ | Email_selector.Base.t] [@@deriving sexp]
+             end with type t:=Email_selector.Base.t)
+    include Email_selector.Base
+    let __t_of_sexp__ = t_of_sexp
+  end
+end
+
 open Re2
 
 module Base = struct

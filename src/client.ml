@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message.Std
+open Email_message
 
 module Config = Client_config
 
@@ -25,7 +25,7 @@ let with_reset t ~log ~flows ~component ~f =
 
 module Envelope_status = struct
   type envelope_id = string [@@deriving sexp]
-  type rejected_recipients = (Email_address.t * Smtp_reply.t) list [@@deriving sexp]
+  type rejected_recipients = (Email_address.Stable.V1.t * Smtp_reply.t) list [@@deriving sexp]
   type ok = envelope_id * rejected_recipients [@@deriving sexp]
   type err =
     [ `Rejected_sender of Smtp_reply.t
@@ -253,10 +253,26 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
           Error (`Rejected_body (reply, rejected_recipients)))
     end)
 
+module For_test = struct
+  let with_
+        ?(config = Config.default)
+        ?(credentials = Credentials.anon)
+        ~log
+        ?(flows=Log.Flows.none)
+        ?(component=[])
+        ?(emulate_tls=false)
+        ~dest
+        reader writer
+        ~f =
+    create ~dest ~flows ~emulate_tls_for_test:emulate_tls reader writer config
+    (* Flow already attatched to the session *)
+    |> with_session ~log ~component ~credentials ~f
+end
+
 module Tcp = struct
   let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout
         ?(config = Config.default)
-        ?credentials
+        ?(credentials = Credentials.anon)
         ~log
         ?(flows=Log.Flows.none)
         ?(component=[])
@@ -282,7 +298,7 @@ module Tcp = struct
                  ~component:(component @ ["tcp"])
                  ~remote_address:dest
                  "connection established"));
-      create ~dest ~flows reader writer config
+      create ~dest ~flows ~emulate_tls_for_test:false reader writer config
       (* Flow already attatched to the session *)
       |> with_session ~log ~component ~credentials ~f
     in

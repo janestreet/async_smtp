@@ -1,15 +1,28 @@
+module Stable = struct
+  open Core.Core_stable
+  module V1 = struct
+    type t = Time.Span.V2.t [@@deriving sexp]
+  end
+  module V2 = struct
+    type t =
+      { span   : Time.Span.V2.t
+      ; jitter : Time.Span.V2.t option
+      } [@@deriving bin_io, sexp]
+
+    let of_v1 span = { span; jitter = None }
+
+    let t_of_sexp sexp =
+      try t_of_sexp sexp with
+      | _ -> of_v1 (V1.t_of_sexp sexp)
+  end
+end
+
 open! Core
 
-type t =
+type t = Stable.V2.t =
   { span   : Time.Span.t
   ; jitter : Time.Span.t option
-  } [@@deriving bin_io, compare, hash, sexp]
-
-let t_of_sexp sexp =
-  match Or_error.try_with (fun () -> t_of_sexp sexp) with
-  | Ok t -> t
-  | Error _ -> { span = Time.Span.t_of_sexp sexp; jitter = None }
-;;
+  } [@@deriving compare, hash, sexp_of]
 
 let create ?jitter span = { span; jitter }
 

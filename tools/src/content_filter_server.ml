@@ -1,6 +1,6 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
 
 module Log = Smtp_mail_log
 

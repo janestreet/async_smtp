@@ -1,6 +1,6 @@
 open Core
 open! Async
-open Async_smtp.Std
+open Async_smtp
 
 module Message = Smtp_mail_log.Message
 module Flows = Smtp_mail_log.Flows
@@ -205,13 +205,13 @@ module Summary = struct
     ; rfc822_id : string sexp_list
     ; flow : Smtp_mail_log.Flows.Id.t
     ; recipients : (string list * Smtp_mail_log.Flows.Id.t) sexp_list
-    } [@@deriving sexp]
+    } [@@deriving sexp_of]
 
   type t =
     { connect_time : Time.t sexp_option
     ; emails : email list
     ; session_flow : Smtp_mail_log.Flows.Id.t
-    } [@@deriving sexp]
+    } [@@deriving sexp_of]
 end
 
 let summary t =

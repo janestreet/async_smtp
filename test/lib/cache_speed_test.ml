@@ -1,11 +1,12 @@
 open! Core
 open! Async
+open Async_smtp.Private
 
 module Test_cache = Test_cache.Test_cache
 
 let main ~iterations ~duration ~cache_slots =
   let config =
-    { Async_smtp.Cache.Config.
+    { Cache.Config.
       max_resources = cache_slots
     ; idle_cleanup_after = Time.Span.day
     ; max_resources_per_id = cache_slots

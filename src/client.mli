@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Email_message.Std
+open Email_message
 
 (** SMTP client API. Includes TLS support: http://tools.ietf.org/html/rfc3207
 
@@ -67,7 +67,7 @@ val send_envelope
 module Tcp : sig
   val with_
     : (?config:Client_config.t
-       -> ?credentials:Credentials.t
+       -> ?credentials:Credentials.t  (** default: [Credentials.Anon] *)
        -> log:Mail_log.t
        -> ?flows:Mail_log.Flows.t
        -> ?component:Mail_log.Component.t
@@ -75,6 +75,21 @@ module Tcp : sig
        -> f:(t -> 'a Deferred.Or_error.t)
        -> 'a Deferred.Or_error.t
       ) Tcp.with_connect_options
+end
+
+module For_test : sig
+  val with_
+    :  ?config:Client_config.t
+    -> ?credentials:Credentials.t
+    -> log:Mail_log.t
+    -> ?flows:Mail_log.Flows.t
+    -> ?component:Mail_log.Component.t
+    -> ?emulate_tls:bool
+    -> dest:Address.t
+    -> Reader.t
+    -> Writer.t
+    -> f:(t -> 'a Deferred.Or_error.t)
+    -> 'a Deferred.Or_error.t
 end
 
 (** BSMTP writing *)

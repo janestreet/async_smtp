@@ -15,6 +15,7 @@ type t
 
 val create
   :  ?flows:Mail_log.Flows.t
+  -> emulate_tls_for_test:bool
   -> dest:Address.t
   -> Reader.t
   -> Writer.t
@@ -32,13 +33,12 @@ val config : t -> Client_config.t
 val info : t -> Peer_info.t option
 
 val is_using_tls : t -> bool
-val is_using_auth_login : t -> bool
 
 val with_session
   :  t
   -> log:Mail_log.t
   -> component:Mail_log.Component.t
-  -> credentials:Credentials.t option
+  -> credentials:Credentials.t
   -> f:(t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.Or_error.t
 

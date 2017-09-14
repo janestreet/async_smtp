@@ -1,0 +1,146 @@
+open! Core
+open! Async
+
+module type Server = sig
+  type session
+  val mechanism : string
+  val negotiate
+    :  log:Mail_log.t
+    -> session
+    -> send_challenge_and_expect_response:
+         (string -> string Deferred.Or_error.t)
+    -> [ `Allow of session
+       | `Deny of Smtp_reply.t
+       ] Deferred.Or_error.t
+end
+
+module type Client = sig
+  val mechanism : string
+  val negotiate
+    :  log:Mail_log.t
+    -> send_response_and_expect_challenge:
+         ([`Start_auth | `Response of string]
+          -> [ `Challenge of string | `Auth_completed] Deferred.t)
+    -> unit Deferred.t
+end
+
+module Plain = struct
+  let mechanism = "PLAIN"
+
+  module Server(Session : sig
+      type t
+      val authenticate
+        :  log:Mail_log.t
+        -> ?on_behalf_of:string
+        -> t
+        -> username:string
+        -> password:string
+        -> [`Allow of t | `Deny of Smtp_reply.t] Deferred.Or_error.t
+    end) : Server with type session=Session.t = struct
+    type session = Session.t
+    let mechanism = mechanism
+
+    let negotiate ~log session ~send_challenge_and_expect_response =
+      send_challenge_and_expect_response
+        "Require ${ON_BEHALF}\\NULL${USERNAME}\\NULL${PASSWORD}"
+      >>|? String.split ~on:'\000'
+      >>=? function
+      | [ on_behalf_of; username; password ] ->
+        let on_behalf_of = match on_behalf_of with
+          | "" -> None
+          | _ -> Some on_behalf_of
+        in
+        Session.authenticate ~log session ?on_behalf_of ~username ~password
+      | _ ->
+        Deferred.Or_error.return
+          (`Deny (Smtp_reply.unable_to_accommodate_455
+                    "AUTH PLAIN request: malformed plain auth string. \
+                     Expected ${ON_BEHALF}\\NULL${USERNAME}\\NULL${PASSWORD}"))
+  end
+
+  module Client(Cred : sig
+      val on_behalf_of : string option
+      val username : string
+      val password : string
+    end) : Client = struct
+    let mechanism = mechanism
+
+    let negotiate ~log:_ ~send_response_and_expect_challenge =
+      let response =
+        sprintf "%s\000%s\000%s"
+          (Option.value ~default:"" Cred.on_behalf_of )
+          Cred.username
+          Cred.password
+      in
+      send_response_and_expect_challenge (`Response response)
+      >>| function
+      | `Auth_completed -> ()
+      | `Challenge challenge ->
+        raise_s [%message "Unexpected challenge from server"
+                            (mechanism : string)
+                            (challenge : string)]
+  end
+
+end
+
+module Login = struct
+  let mechanism = "LOGIN"
+
+  module Server(Session : sig
+      type t
+      val authenticate
+        :  log:Mail_log.t
+        -> t
+        -> username:string
+        -> password:string
+        -> [`Allow of t | `Deny of Smtp_reply.t] Deferred.Or_error.t
+    end) : Server with type session=Session.t = struct
+    type session = Session.t
+    let mechanism = mechanism
+
+    let negotiate ~log session ~send_challenge_and_expect_response =
+      send_challenge_and_expect_response "Username:"
+      >>=? fun username ->
+      send_challenge_and_expect_response "Password:"
+      >>=? fun password ->
+      Session.authenticate ~log session ~username ~password
+  end
+
+  module Client(Cred : sig
+      val username : string
+      val password : string
+    end) : Client = struct
+    let mechanism = mechanism
+
+    let negotiate ~log:_ ~send_response_and_expect_challenge =
+      send_response_and_expect_challenge `Start_auth
+      >>= function
+      | `Auth_completed ->
+        raise_s [%message "Auth completed before sending any credentials" (mechanism : string) ]
+      | `Challenge (_ : string) ->
+        send_response_and_expect_challenge (`Response Cred.username)
+        >>= function
+        | `Auth_completed ->
+          raise_s [%message "Unexpected AUTH termination" (mechanism : string)]
+        | `Challenge (_ : string) ->
+          send_response_and_expect_challenge (`Response Cred.password)
+          >>| function
+          | `Auth_completed -> ()
+          | `Challenge challenge ->
+            raise_s [%message "Unexpected challenge from server"
+                                (mechanism : string)
+                                (challenge : string)]
+  end
+end
+
+module Client = struct
+  module type S = Client
+  module Login = Login.Client
+  module Plain = Plain.Client
+end
+
+module Server = struct
+  module type S = Server
+  module Login = Login.Server
+  module Plain = Plain.Server
+end

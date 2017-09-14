@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open! Async_smtp.Std
+open! Async_smtp
 
 module Outbound_envelope : sig
   type t
@@ -31,7 +31,7 @@ val session_connect : t -> Time.t option
 val raw_messages : t -> Smtp_mail_log.Message.t list
 
 module Summary : sig
-  type t [@@deriving sexp]
+  type t [@@deriving sexp_of]
 end
 
 val summary : t -> Summary.t

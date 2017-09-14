@@ -1,12 +1,10 @@
 open Core
 open Async
-open Email_message.Std
+open Email_message
 
 module type Start_tls = sig
   type session
-
   (** [upgrade_to_tls] is called when initiating an upgrade to TLS.
-
       [Session.greeting] will be called to send a suitable greeting after the upgrade. *)
   val upgrade_to_tls
     :  log:Mail_log.t
@@ -14,33 +12,12 @@ module type Start_tls = sig
     -> session Deferred.t
 end
 
-module Auth = struct
-  module type Login = sig
-    type session
-
-    (** [login] is called to check the auth credentials and update the session.
-
-        [`Allow] sends [Smtp_reply.authentication_successful_235].
-
-        [`Deny] sends the given reply. *)
-    val login
-      :  log:Mail_log.t
-      -> session
-      -> username:string
-      -> password:string
-      -> [ `Allow of session
-         | `Deny of Smtp_reply.t
-         ] Deferred.t
-  end
-
-  type 'session t =
-    | Login of (module Login with type session = 'session)
-end
+module Auth = Auth.Server
 
 module Extension = struct
   type 'session t =
-    | Start_tls of (module Start_tls with type session = 'session)
-    | Auth of 'session Auth.t
+    | Start_tls of (module Start_tls with type session='session)
+    | Auth of (module Auth.S with type session='session)
 end
 
 module type Session = sig
@@ -202,7 +179,7 @@ module Simple : sig
 
     val smtp_envelope : t -> Email.t -> Envelope.t
 
-    (*_ include Envelope with type session:='a *)
+    (*_ include Envelope with type session := 'a *)
     val smtp_envelope_info : t -> Envelope.Info.t
     val mail_from
       :  log:Mail_log.t

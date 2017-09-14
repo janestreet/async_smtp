@@ -1,8 +1,6 @@
-module Local_std = Std
 open Core
 open Async
-open Local_std
-open Email_message.Std
+open Email_message
 
 let%test_module _ =
   (module struct
@@ -12,7 +10,7 @@ let%test_module _ =
       |> Mail_log.adjust_log_levels ~minimum_level:`Error
 
 
-    let sender = Smtp_sender.of_string "<>" |> Or_error.ok_exn
+    let sender = Sender.of_string "<>" |> Or_error.ok_exn
     let recipients = [Email_address.of_string_exn "mailcore-unit-test-recipient@example.com"]
 
     let email message =
@@ -24,14 +22,14 @@ let%test_module _ =
            ("Async_smtp unit test:\n  " ^ message))
 
     let envelope message =
-      Smtp_envelope.create ~sender ~recipients ~email:(email message) ()
+      Envelope.create ~sender ~recipients ~email:(email message) ()
 
     let test_client_and_server
           ~tmp_dir ~server_config ~client_config message ~expect_tls =
       Log.Global.set_level `Error;
       let server_config = { server_config with
                             (* let the system choose a port *)
-                            Smtp_server.Config.where_to_listen = [`Port 0]
+                            Server.Config.where_to_listen = [`Port 0]
                           ; rpc_port=0
                           ; spool_dir = tmp_dir ^/ "spool"
                           ; max_concurrent_receive_jobs_per_port = 1
@@ -40,21 +38,21 @@ let%test_module _ =
       let finished = Ivar.create () in
       let envelope = envelope message in
       let module Server =
-        Smtp_server.Make(struct
+        Server.Make(struct
           module Session = struct
-            include Smtp_server.Plugin.Simple.Session
+            include Server.Plugin.Simple.Session
             let extensions _ =
               if expect_tls then
-                [ Smtp_server.Plugin.Extension.Start_tls (module struct
+                [ Server.Plugin.Extension.Start_tls (module struct
                     type session = t
                     let upgrade_to_tls ~log:_ session =
                       return { session with tls=true }
-                  end : Smtp_server.Plugin.Start_tls with type session=t)
+                  end : Server.Plugin.Start_tls with type session=t)
                 ]
               else []
           end
           module Envelope = struct
-            include Smtp_server.Plugin.Simple.Envelope
+            include Server.Plugin.Simple.Envelope
             let process ~log:_ _session t email =
               let envelope = smtp_envelope t email in
               Ivar.fill finished envelope;
@@ -70,24 +68,24 @@ let%test_module _ =
       Clock.with_timeout (Time.Span.of_sec 10.) begin
         Deferred.all_ignore
           [ begin
-            Smtp_client.Tcp.with_
+            Client.Tcp.with_
               ~log
               ~config:client_config
               (`Inet (Host_and_port.create ~host:"localhost" ~port))
               ~f:(fun client ->
                 [%test_result: bool] (Client.is_using_tls client) ~expect:expect_tls;
-                Smtp_client.send_envelope ~log client envelope
-                >>|? Smtp_client.Envelope_status.ok_exn ~allow_rejected_recipients:false
+                Client.send_envelope ~log client envelope
+                >>|? Client.Envelope_status.ok_exn ~allow_rejected_recipients:false
                 >>|? ignore)
             >>| Or_error.ok_exn
           end
           ; begin
             Ivar.read finished
             >>| fun envelope' ->
-            if Smtp_envelope.compare envelope envelope' <> 0
+            if Envelope.compare envelope envelope' <> 0
             then failwithf !"Envelope mangled in transit: \
-                             \ngot: %{sexp:Smtp_envelope.t}\
-                             \nexpected: %{sexp:Smtp_envelope.t}"
+                             \ngot: %{sexp:Envelope.t}\
+                             \nexpected: %{sexp:Envelope.t}"
                    envelope' envelope ()
           end ]
       end
@@ -108,8 +106,8 @@ let%test_module _ =
 
     let non_tls_test message =
       async_test_with_tmp_dir ~f:(fun tmp_dir ->
-        let server_config = Smtp_server.Config.default in
-        let client_config = Smtp_client.Config.default in
+        let server_config = Server.Config.default in
+        let client_config = Client_config.default in
         test_client_and_server ~tmp_dir ~server_config ~client_config ~expect_tls:false
           message)
 
@@ -122,10 +120,10 @@ let%test_module _ =
     let tls_test message =
       async_test_with_tmp_dir ~f:(fun tmp_dir ->
         let server_config =
-          { Smtp_server.Config.default with
+          { Server.Config.default with
             tls_options =
               Some
-                { Smtp_server.Config.Tls.
+                { Server.Config.Tls.
                   version = None
                 ; options = None
                 ; name = Some "localhost"
@@ -138,10 +136,10 @@ let%test_module _ =
           }
         in
         let client_config =
-          { Smtp_client.Config.default with
+          { Client_config.default with
             tls =
-              [ Smtp_client.Config.Domain_suffix.of_string ""
-              , { Smtp_client.Config.Tls.
+              [ Client_config.Domain_suffix.of_string ""
+              , { Client_config.Tls.
                   version = None
                 ; options = None
                 ; name = None

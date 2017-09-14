@@ -1,6 +1,6 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
 
 module Host_and_port = struct
   include Host_and_port

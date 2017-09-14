@@ -1,11 +1,23 @@
+module Stable = struct
+  open Core.Core_stable
+  open Email_message.Email_message_stable
+
+  module V1 = struct
+    type t =
+      | Auth of Email_address.V1.t option
+      | Body of [`Mime_8bit | `Mime_7bit ]
+    [@@deriving bin_io, sexp]
+  end
+end
+
 open! Core
 open! Async
-open Email_message.Std
+open Email_message
 
-type t =
+type t = Stable.V1.t =
   | Auth of Email_address.t option
   | Body of [`Mime_8bit | `Mime_7bit ]
-[@@deriving bin_io, sexp, compare, hash]
+[@@deriving sexp_of, compare, hash]
 
 let of_string = function
   | "AUTH=<>" -> Ok (Auth None)
@@ -29,10 +41,15 @@ let to_string = function
     match email_address with
     | None -> "AUTH=<>"
     | Some email_address -> "AUTH=" ^ (Email_address.to_string email_address)
+;;
 
-let to_smtp_extension = function
-  | Auth _ -> Smtp_extension.Auth_login
-  | Body _ -> Smtp_extension.Mime_8bit_transport
+let is_valid_arg arg ~allowed_extensions =
+  List.exists allowed_extensions ~f:(fun ext ->
+    match arg, ext with
+    | Auth _, Smtp_extension.Auth _ -> true
+    | Body _, Smtp_extension.Mime_8bit_transport -> true
+    | _, _ -> false)
+;;
 
 let list_of_string ~allowed_extensions str =
   let open Or_error.Monad_infix in
@@ -43,7 +60,7 @@ let list_of_string ~allowed_extensions str =
   >>= fun args ->
   let has_invalid_arg =
     List.exists args ~f:(fun arg ->
-      not (List.mem allowed_extensions (to_smtp_extension arg) ~equal:Smtp_extension.equal))
+      not (is_valid_arg arg ~allowed_extensions))
   in
   if has_invalid_arg then
     Or_error.errorf "Unable to parse MAIL FROM arguments: %s" str

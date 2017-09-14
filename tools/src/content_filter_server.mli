@@ -1,6 +1,6 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
 
 (** It is common for some external content scanning software to accept messages over smtp,
     scan them, then return them back over smtp with some added headers. This module

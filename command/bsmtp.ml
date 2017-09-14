@@ -1,7 +1,7 @@
 open Core
 open Async
-open Async_smtp.Std
-open Email_message.Std
+open Async_smtp
+open Email_message
 
 let main () =
   let stdin  = Lazy.force Reader.stdin in

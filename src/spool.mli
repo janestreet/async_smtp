@@ -47,8 +47,9 @@
 *)
 open! Core
 open! Async
+open Email_message
 
-module Message_id : Identifiable
+module Message_id = Message.Id
 
 type t
 
@@ -100,7 +101,7 @@ module Send_info : sig
   type t =
     [ `All_messages
     | `Frozen_only
-    | `Some_messages of Message_id.t list ] [@@deriving bin_io]
+    | `Some_messages of Message_id.t list ]
 end
 
 val send
@@ -122,8 +123,8 @@ module Recover_info : sig
     { msgs :
         [ `Removed of Message_id.t list
         | `Quarantined of Message_id.t list ]
-    ; wrapper : Email_message.Wrapper.t option
-    } [@@deriving bin_io]
+    ; wrapper : Email_wrapper.t option
+    }
 end
 
 val recover
@@ -132,12 +133,13 @@ val recover
   -> unit Deferred.Or_error.t
 
 module Spooled_message_info : sig
-  type t [@@deriving sexp, bin_io]
+  type t [@@deriving sexp_of]
 
   val id                 : t -> Message_id.t
   val spool_date         : t -> Time.t
   val last_relay_attempt : t -> (Time.t * Error.t) option
   val parent_id          : t -> Envelope.Id.t
+  val envelope_info      : t -> Envelope.Info.t
   val status
     : t
     -> [ `Send_now
@@ -159,7 +161,7 @@ module Spooled_message_info : sig
 end
 
 module Status : sig
-  type t = Spooled_message_info.t list [@@deriving sexp, bin_io]
+  type t = Spooled_message_info.t list [@@deriving sexp_of]
 
   val to_formatted_string
     :  t
@@ -178,20 +180,22 @@ val status : t -> Status.t
 val status_from_disk : Server_config.t -> Status.t Deferred.Or_error.t
 val count_from_disk : Server_config.t -> int Or_error.t Deferred.t
 
-module Event : sig
-  type t = Time.t *
-           [ `Spooled     of Message_id.t
-           | `Delivered   of Message_id.t
-           | `Frozen      of Message_id.t
-           | `Removed     of Message_id.t
-           | `Unfrozen    of Message_id.t
-           | `Recovered   of Message_id.t * [`From_quarantined | `From_removed]
-           | `Quarantined of Message_id.t * [`Reason of Quarantine_reason.t]
-           | `Ping ]
-  [@@deriving sexp, bin_io]
+val client_cache : t -> Client_cache.t
 
-  include Comparable.S with type t := t
-  include Hashable.S   with type t := t
+module Event : sig
+  type spool_event =
+    [ `Spooled
+    | `Delivered
+    | `Frozen
+    | `Removed
+    | `Unfrozen
+    | `Recovered of [`From_quarantined | `From_removed]
+    | `Quarantined of [`Reason of Quarantine_reason.t]
+    ] * Message_id.t * Envelope.Info.t [@@deriving sexp_of]
+
+  type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of]
+
+  include Comparable.S_plain with type t := t
 
   val to_string : t -> string
 end
@@ -199,3 +203,27 @@ end
 val event_stream
   :  t
   -> Event.t Pipe.Reader.t
+
+module Stable : sig
+  module Message_id = Message.Stable.Id
+  module Status : sig
+    module V1 : sig
+      type t = Status.t [@@deriving bin_io]
+    end
+  end
+  module Send_info : sig
+    module V1 : sig
+      type t = Send_info.t [@@deriving bin_io]
+    end
+  end
+  module Recover_info : sig
+    module V1 : sig
+      type t = Recover_info.t [@@deriving bin_io]
+    end
+  end
+  module Event : sig
+    module V1 : sig
+      type t = Event.t [@@deriving bin_io]
+    end
+  end
+end

@@ -1,6 +1,6 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
 open Expect_test_helpers
 
 module Test_name_generator = struct

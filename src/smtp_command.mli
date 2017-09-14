@@ -5,7 +5,7 @@ type t =
   | Extended_hello of string
   | Sender of string
   | Recipient of string
-  | Auth_login of string option
+  | Auth of string * string option
   | Data
   | Reset
   | Quit

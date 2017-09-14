@@ -1,7 +1,7 @@
 open Core
 open Async
-open Email_message.Std
-open Async_smtp.Std
+open Email_message
+open Async_smtp
 
 (* We use this tool for testing Async_smtp.Server, but we use the server itself
    to read in the test outputs. This clearly has the potential to mask bugs. To

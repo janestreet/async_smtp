@@ -1,10 +1,9 @@
 open! Core
 open! Async
-open Async_smtp.Std
-open Email_message.Std
+open Async_smtp
+open Async_smtp.Private
+open Email_message
 open Expect_test_helpers
-
-module Spooled_message = Async_smtp.Message
 
 let main ~tmp_dir ~iterations ~msg_size =
   let%bind spool_dir = Spooled_message.On_disk_spool.create tmp_dir >>| ok_exn in

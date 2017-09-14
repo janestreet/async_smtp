@@ -1,5 +1,39 @@
+module Stable = struct
+  open Core.Core_stable
+  open Email_message.Email_message_stable
+
+  module Sender = Sender.Stable
+  module Sender_argument = Sender_argument.Stable
+
+  module Id = struct
+    module V1 = struct
+      type t = string [@@deriving bin_io, sexp]
+    end
+  end
+
+  module Info = struct
+    module V1 = struct
+      type t =
+        { sender              : Sender.V1.t
+        ; sender_args         : Sender_argument.V1.t sexp_list
+        ; recipients          : Email_address.V1.t list
+        ; rejected_recipients : Email_address.V1.t list
+        ; route               : string option
+        ; id                  : Id.V1.t
+        } [@@deriving bin_io, sexp]
+    end
+  end
+
+  module V1 = struct
+    type t =
+      { info : Info.V1.t
+      ; email : Email.V1.t
+      } [@@deriving bin_io, sexp]
+  end
+end
+
 open! Core
-open Email_message.Std
+open Email_message
 
 module Id = struct
   include String
@@ -31,45 +65,42 @@ module Id = struct
   ;;
 end
 
-type 'a no_compare = 'a [@@deriving sexp, bin_io]
-let compare_no_compare _ _ _ = 0
-let hash_fold_no_compare _ init _ = init
-
 module Info = struct
   module T = struct
-    type t =
+    type t = Stable.Info.V1.t =
       { sender              : Sender.t
       ; sender_args         : Sender_argument.t sexp_list
       ; recipients          : Email_address.t list
       ; rejected_recipients : Email_address.t list
-      ; id                  : Id.t no_compare
-      } [@@deriving fields, sexp, bin_io, compare, hash]
-    ;;
+      ; route               : string option
+      ; id                  : Id.t [@compare.ignore] [@hash.ignore]
+      } [@@deriving sexp_of, fields, compare, hash]
   end
-
   include T
-  include Comparable.Make(T)
-  include Hashable.Make(T)
+  include Comparable.Make_plain(T)
+  include Hashable.Make_plain(T)
 
   let string_sender t = sender t |> Sender.to_string
   let string_recipients t = recipients t |> List.map ~f:Email_address.to_string
 
   let set
-        { sender; sender_args; id; recipients; rejected_recipients }
+        { sender; sender_args; id; recipients; rejected_recipients; route }
         ?(sender = sender)
         ?(sender_args = sender_args)
         ?(recipients = recipients)
         ?(rejected_recipients=rejected_recipients)
+        ?(route = route)
         () =
-    { sender; sender_args; id; recipients; rejected_recipients }
+
+    { sender; sender_args; id; recipients; rejected_recipients; route }
   ;;
 
-  let create ?id ~sender ?(sender_args=[]) ~recipients ?(rejected_recipients=[]) () =
+  let create ?id ~sender ?(sender_args=[]) ~recipients ?(rejected_recipients=[]) ?route () =
     let id = match id with
       | Some id -> id
       | None -> Id.create ()
     in
-    Fields.create ~sender ~sender_args ~recipients ~rejected_recipients ~id
+    Fields.create ~sender ~sender_args ~recipients ~rejected_recipients ~route ~id
   ;;
 
   let of_email email =
@@ -105,6 +136,7 @@ module Infoable = struct
     val recipients          : t -> Email_address.t list
     val rejected_recipients : t -> Email_address.t list
     val string_recipients   : t -> string list
+    val route               : t -> string option
     val id                  : t -> Id.t
   end
 
@@ -120,26 +152,27 @@ module Infoable = struct
     let recipients          t = Info.recipients          (S.info t)
     let rejected_recipients t = Info.rejected_recipients (S.info t)
     let string_recipients   t = Info.string_recipients   (S.info t)
+    let route               t = Info.route               (S.info t)
     let id                  t = Info.id                  (S.info t)
   end
 end
 
 module T = struct
-  type t =
+  type t = Stable.V1.t =
     { info : Info.t
     ; email : Email.t
-    } [@@deriving fields, sexp, bin_io, compare, hash]
+    } [@@deriving sexp_of, fields, compare, hash]
 end
 
 include T
 include Infoable.Make(T)
-include Comparable.Make(T)
-include Hashable.Make(T)
+include Comparable.Make_plain(T)
+include Hashable.Make_plain(T)
 
-type envelope = t [@@deriving sexp, bin_io, compare, hash]
+type envelope = t [@@deriving sexp_of, compare, hash]
 
-let create ?id ~sender ?sender_args ~recipients ?rejected_recipients ~email () =
-  let info = Info.create ?id ~sender ?sender_args ~recipients ?rejected_recipients () in
+let create ?id ~sender ?sender_args ~recipients ?rejected_recipients ?route ~email () =
+  let info = Info.create ?id ~sender ?sender_args ~recipients ?rejected_recipients ?route () in
   { info; email }
 ;;
 
@@ -151,9 +184,10 @@ let set
       ?sender_args
       ?recipients
       ?rejected_recipients
+      ?route
       ?(email = email)
       () =
-  { info = Info.set info ?sender ?sender_args ?recipients ?rejected_recipients (); email }
+  { info = Info.set info ?sender ?sender_args ?recipients ?rejected_recipients ?route (); email }
 ;;
 
 let set' { info; email } ?(info = info) ?(email = email) () = { info; email }
@@ -221,21 +255,26 @@ let map_headers ?whitespace t ~f =
     Email_headers.map ?whitespace headers ~f)
 ;;
 
+let smash_and_add_header ?whitespace t ~name ~value =
+  modify_headers t ~f:(fun headers ->
+    Email_headers.smash_and_add ?whitespace headers ~name ~value)
+;;
+
 module With_next_hop = struct
   module T = struct
     type t =
       { envelope : envelope
       ; next_hop_choices : Address.t list
       ; retry_intervals : Retry_interval.t list
-      } [@@deriving fields, sexp, bin_io, compare, hash]
+      } [@@deriving fields, sexp_of, compare, hash]
 
     let info t = info t.envelope
   end
 
   include T
   include Infoable.Make(T)
-  include Comparable.Make(T)
-  include Hashable.Make(T)
+  include Comparable.Make_plain(T)
+  include Hashable.Make_plain(T)
 
   let create ~envelope ~next_hop_choices ~retry_intervals =
     Fields.create ~envelope ~next_hop_choices ~retry_intervals

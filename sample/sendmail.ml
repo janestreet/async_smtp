@@ -1,12 +1,12 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
 
 let key_value_pair = Command.Spec.Arg_type.create (String.lsplit2_exn ~on:':')
 let email_address = Command.Spec.Arg_type.create (Email_address.of_string_exn)
 
 let command =
-  Command.async_or_error ~summary:"simple demo of Async_smtp.Std.Simplemail.send"
+  Command.async_or_error ~summary:"simple demo of Async_smtp.Simplemail.send"
     Command.Spec.(
       empty
       ++ step (fun m v -> m ?server:v)

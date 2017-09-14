@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message.Std
+open Email_message
 
 module Mail_fingerprint : sig
   type t =
@@ -50,19 +50,19 @@ module Flows : sig
       | `Inbound_envelope
       | `Outbound_envelope
       | `Cached_connection
-      ] [@@deriving sexp, bin_io]
+      ] [@@deriving sexp_of]
   end
   module Id : sig
-    type t = private string [@@deriving sexp, bin_io]
+    type t = private string [@@deriving sexp_of]
     val is : t -> Kind.t -> bool
 
-    include Comparable.S with type t := t
-    include Hashable.S with type t := t
+    include Comparable.S_plain with type t := t
+    include Hashable.S_plain with type t := t
   end
   (* Represents a set of opaque flow ids.
      The internal list representation is exposed for use when analysing logs, however
      the order of elements is undefined. *)
-  type t = private Id.t list [@@deriving sexp, bin_io]
+  type t = private Id.t list [@@deriving sexp_of]
 
   val of_list : Id.t list -> t
 
@@ -262,3 +262,11 @@ val debug : t -> Message.t Lazy.t -> unit
 (** [error] is shorthand for [message ~level:`Error_no_monitor]
     or [message ~level:`Error] *)
 val error : ?dont_send_to_monitor:unit -> t -> Message.t Lazy.t -> unit
+
+module Stable : sig
+  module Flows : sig
+    module V1 : sig
+      type t = Flows.t [@@deriving sexp, bin_io]
+    end
+  end
+end

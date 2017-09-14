@@ -1,5 +1,5 @@
 open Core
-open Async_smtp.Std
+open Async_smtp
 open Re2
 
 let readme = "The query language is the Blang language:
@@ -36,7 +36,7 @@ module Base = struct
     | `recipient of Regex.t
     | `subject of Regex.t
     | `rfc822_id of Regex.t
-    | `flows of Smtp_mail_log.Flows.t
+    | `flows of Smtp_mail_log.Stable.Flows.V1.t
     ] [@@deriving sexp]
 
   let regex = function

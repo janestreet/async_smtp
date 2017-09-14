@@ -12,7 +12,7 @@ module Peer_info = struct
     ; greeting : string Set_once.Stable.V1.t
     ; hello : [ `Simple of string
               | `Extended of string * (Smtp_extension.t list) ] Set_once.Stable.V1.t
-    } [@@deriving sexp, fields]
+    } [@@deriving sexp_of, fields]
 
   let create ~dest () =
     { dest
@@ -84,6 +84,7 @@ type t =
   (* The only allowed transition is from Plain to Tls. *)
   ; mutable mode : [ `Bsmtp of Bsmtp.t
                    | `Plain of Plain.t
+                   | `Emulate_tls_for_test of Plain.t
                    | `Tls of Tls.t
                    ]
   } [@@deriving fields]
@@ -92,11 +93,13 @@ let remote_address t =
   match t.mode with
   | `Bsmtp _ -> None
   | `Plain { Plain.info; _ }
+  | `Emulate_tls_for_test { Plain.info; _ }
   | `Tls { Tls.info; _ } -> Some info.Peer_info.dest
 ;;
 
 let create
       ?flows
+      ~emulate_tls_for_test
       ~dest
       reader
       writer
@@ -106,7 +109,12 @@ let create
     | Some flows -> flows
     | None -> Log.Flows.create `Client_session
   in
-  let mode = `Plain (Plain.create ~reader ~writer ~info) in
+  let mode =
+    if emulate_tls_for_test then
+      `Emulate_tls_for_test (Plain.create ~reader ~writer ~info)
+    else
+      `Plain (Plain.create ~reader ~writer ~info)
+  in
   { mode; flows; config }
 
 let create_bsmtp
@@ -124,18 +132,21 @@ let reader t =
   match t.mode with
   | `Bsmtp _ -> None
   | `Plain plain -> Some (Plain.reader plain)
+  | `Emulate_tls_for_test plain -> Some (Plain.reader plain)
   | `Tls tls -> Some (Tls.reader tls)
 
 let writer t =
   match t.mode with
   | `Bsmtp bsmtp -> Bsmtp.writer bsmtp
   | `Plain plain -> Plain.writer plain
+  | `Emulate_tls_for_test plain -> Plain.writer plain
   | `Tls tls -> Tls.writer tls
 
 let info t =
   match t.mode with
   | `Bsmtp _ -> None
   | `Plain plain -> Some (Plain.info plain)
+  | `Emulate_tls_for_test plain -> Some (Plain.info plain)
   | `Tls tls -> Some (Tls.info tls)
 
 let supports_extension t extension =
@@ -143,19 +154,18 @@ let supports_extension t extension =
   | None -> false
   | Some info -> Peer_info.supports_extension info extension
 
+let extensions t =
+  match info t with
+  | None -> []
+  | Some info -> Option.value (Peer_info.extensions info) ~default:[]
+
 let info_exn t =
   Option.value_exn (info t)
 
-let tls t =
-  match t.mode with
-  | `Bsmtp _ | `Plain _ -> None
-  | `Tls tls -> Some (Tls.tls tls)
-
 let is_using_tls t =
-  Option.is_some (tls t)
-
-let is_using_auth_login t =
-  supports_extension t Smtp_extension.Auth_login
+  match t.mode with
+  | `Bsmtp _ | `Plain _ -> false
+  | `Emulate_tls_for_test _ | `Tls _ -> true
 
 let read_reply ?on_eof reader =
   let rec loop partial =
@@ -199,6 +209,15 @@ let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
       Log.error ~dont_send_to_monitor:() log (lazy (Log.Message.of_error ~here ~flows ~component e));
       Error e
 
+let writer_flushed_or_consumer_left cmd writer =
+  Deferred.choose [
+    choice (Writer.flushed writer) (fun () -> Ok ());
+    choice (Writer.consumer_left writer) (fun () ->
+      Or_error.error_s [%message "Server unexpectedly closed connection"
+                                   ~while_sending:(cmd : string)
+                                   (writer : Writer.t)
+      ])
+  ]
 
 (* entry point *)
 let send_gen ?command t ~log ?flows ~component ~here str =
@@ -206,7 +225,7 @@ let send_gen ?command t ~log ?flows ~component ~here str =
     | None -> t.flows
     | Some flows -> Log.Flows.union t.flows flows
   in
-  Deferred.Or_error.try_with (fun () ->
+  Deferred.Or_error.try_with_join (fun () ->
     Log.debug log (lazy (Log.Message.create
                            ~here
                            ~flows
@@ -215,7 +234,7 @@ let send_gen ?command t ~log ?flows ~component ~here str =
                            "->"));
     Writer.write (writer t) str;
     Writer.write (writer t) "\r\n";
-    Writer.flushed (writer t))
+    writer_flushed_or_consumer_left str (writer t))
 
 let send_string t ~log ?flows ~component ~here str =
   send_gen t ~log ?flows ~component ~here str
@@ -249,7 +268,8 @@ let do_quit t ~log ~component =
     (* Errors when we send a QUIT command are tolerable. Don't raise unnecessary noise to
        our monitor. *)
     let on_eof ?partial:_ () =
-      Log.info log (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component (Error.of_string "Unexpected EOF during QUIT")));
+      Log.info log (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component
+                            (Error.of_string "Unexpected EOF during QUIT")));
       Deferred.Or_error.return Smtp_reply.closing_connection_221
     in
     send_receive ~on_eof t ~log ~component ~here:[%here] Smtp_command.Quit
@@ -273,7 +293,7 @@ let cleanup t =
   Option.value_map (reader t) ~f:Reader.close ~default:Deferred.unit
   >>= fun () ->
   match t.mode with
-  | `Bsmtp _ | `Plain _ -> return (Ok ())
+  | `Bsmtp _ | `Plain _ | `Emulate_tls_for_test _ -> return (Ok ())
   | `Tls tls ->
     Ssl.Connection.close (Tls.tls tls);
     Ssl.Connection.closed (Tls.tls tls)
@@ -336,7 +356,7 @@ let do_start_tls t ~log ~component tls_options =
   match t.mode with
   | `Bsmtp _ ->
     failwith "do_start_tls: Cannot switch from bsmtp to TLS"
-  | `Tls _ ->
+  | `Tls _ | `Emulate_tls_for_test _ ->
     failwith "do_start_tls: TLS is already negotiated"
   | `Plain plain ->
     Log.debug log (lazy (Log.Message.create
@@ -401,6 +421,8 @@ let check_tls_security t =
         | `Required ->
           Or_error.errorf "TLS Required for %s:%d but not negotiated" host port
     end
+  | `Emulate_tls_for_test _emulate_tls ->
+    Ok ()
   | `Tls tls ->
     match Peer_info.dest (Tls.info tls) with
     | `Unix file ->
@@ -433,7 +455,7 @@ let check_tls_security t =
 
 let should_try_tls t : Config.Tls.t option =
   match t.mode with
-  | `Bsmtp _ | `Tls _ -> None
+  | `Bsmtp _ | `Tls _ | `Emulate_tls_for_test _ -> None
   | `Plain plain ->
     match Peer_info.dest (Plain.info plain) with
     | `Unix _file -> None
@@ -469,43 +491,89 @@ let maybe_start_tls t ~log ~component =
   >>=? fun () ->
   return (check_tls_security t)
 
-let do_auth_login t ~log ~component ~username ~password =
-  let username = Base64.encode username in
-  let password = Base64.encode password in
-  send_receive_string t ~log ~component ~here:[%here] username
-  >>=? function
-  | `Bsmtp | `Received { Smtp_reply.code=`Start_authentication_input_334; _ } -> begin
-      send_receive_string t ~log ~component ~here:[%here] password
-      >>=? function
-      | `Bsmtp | `Received { Smtp_reply.code=`Authentication_successful_235; _ } -> return (Ok ())
-      | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Smtp_reply}" reply)
+let do_auth t ~log ~component (module Auth : Auth.Client.S) =
+  let sent_auth_command = ref false in
+  let auth_result = ref None in
+  let consume_challenge_or_result resp =
+    match !auth_result with
+    | Some (Ok ()) ->
+      failwith "AUTH flow completed, can't send more challenge responses"
+    | Some (Error err) ->
+      Error.raise err
+    | None -> match resp with
+      | Ok `Bsmtp ->
+        failwith "AUTH not supported in BSMTP mode"
+      | Ok (`Received { Smtp_reply.code=`Authentication_successful_235; _ }) ->
+        auth_result := Some (Ok ());
+        `Auth_completed
+      | Ok (`Received { Smtp_reply.code=`Start_authentication_input_334; raw_message }) ->
+        let challenge = String.concat ~sep:"\n" raw_message |> Base64.decode_exn in
+        `Challenge challenge
+      | Ok (`Received reply) ->
+        let err = Error.createf !"AUTH failed: %{Smtp_reply}" reply in
+        auth_result := Some (Error err);
+        Error.raise err
+      | Error err ->
+        let err = Error.tag err ~tag:"AUTH failed" in
+        auth_result := Some (Error err);
+        Error.raise err
+  in
+  let send_response_and_expect_challenge msg =
+    if Option.is_some !auth_result then
+      failwith "AUTH flow completed, can't send more challenge responses"
+    else if not !sent_auth_command then begin
+      sent_auth_command := true;
+      let msg =
+        match msg with
+        | `Start_auth -> None
+        | `Response msg -> Some (Base64.encode msg)
+      in
+      send_receive t ~log ~component ~here:[%here]
+        (Smtp_command.Auth (Auth.mechanism, msg))
+      >>| consume_challenge_or_result
+    end else begin
+      let msg =
+        match msg with
+        | `Start_auth -> failwith "Unexpected use of [`Initial] once AUTH has been sent"
+        | `Response msg -> Base64.encode msg
+      in
+      send_receive_string t ~log ~component ~here:[%here] msg
+      >>| consume_challenge_or_result
     end
-  | `Received reply -> return (Or_error.errorf !"Unable to authenticate: %{Smtp_reply}" reply)
-
-let maybe_auth_login t ~log ~component ~credentials =
-  match is_using_auth_login t with
-  | false -> return (Ok ())
-  | true ->
-    match credentials with
+  in
+  let finish () =
+    match !auth_result with
+    | Some response ->
+      return response
     | None ->
-      return (Ok ())
-    | Some credentials ->
-      send_receive t ~log ~component ~here:[%here] (Smtp_command.Auth_login None)
-      >>=? function
-      | `Bsmtp -> return (Ok ())
-      | `Received reply ->
-        match reply with
-        | { Smtp_reply.code=`Start_authentication_input_334; _ } ->
-          let username = Credentials.username credentials in
-          let password = Credentials.password credentials in
-          do_auth_login t ~log ~component ~username ~password
-        | { Smtp_reply.code=
-              ( `Command_not_recognized_500
-              | `Command_not_implemented_502
-              | `Parameter_not_implemented_504 ); _ } ->
-          return (Ok ())
-        | reply ->
-          return (Or_error.errorf !"Unexpected response to AUTH LOGIN: %{Smtp_reply}" reply)
+      Deferred.Or_error.errorf "AUTH flow incomplete"
+  in
+  Deferred.Or_error.try_with (fun () ->
+    Auth.negotiate
+      ~log:(Log.with_flow_and_component log
+              ~flows:t.flows
+              ~component:(component @ ["authenticate"]))
+      ~send_response_and_expect_challenge)
+  >>=? finish
+
+let maybe_auth t ~log ~component ~credentials =
+  match t.mode with
+  | `Bsmtp _ when not (Credentials.allows_anon credentials) ->
+    let command = Smtp_command.Auth ("<mechanism>",None) in
+    Log.info log (lazy (Log.Message.create
+                          ~flows:t.flows
+                          ~here:[%here]
+                          ~component
+                          ~command
+                          "AUTH required but not supported in BSMTP, continuing"));
+    send_receive t ~log ~component ~here:[%here] command
+    >>|? ignore
+  | _ ->
+    return (Credentials.get_auth_client credentials ~tls:(is_using_tls t) (extensions t))
+    >>=? function
+    | `Anon -> Deferred.Or_error.ok_unit
+    | `Auth_with auth ->
+      do_auth t ~log ~component auth
 
 let with_quit t ~log ~component ~f =
   let component = component @ ["quit"] in
@@ -533,6 +601,6 @@ let with_session t ~log ~component ~credentials ~f =
     >>=? fun () ->
     maybe_start_tls t ~log ~component:(component @ ["starttls"])
     >>=? fun () ->
-    maybe_auth_login t ~log ~component:(component @ ["auth_login"]) ~credentials
+    maybe_auth t ~log ~component:(component @ ["auth_login"]) ~credentials
     >>=? fun () ->
     f t)

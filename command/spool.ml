@@ -1,12 +1,13 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
+open Email_message
 open Common
 
 
 let msgid =
   Command.Spec.Arg_type.create
-    Smtp_spool.Message_id.of_string
+    Smtp_spool.Stable.Message_id.V1.of_string
 
 module Status = struct
   type format = [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] [@@deriving sexp]
@@ -140,7 +141,7 @@ module Recover = struct
         let wrapper =
           let wrapper_of_file file =
             let header = In_channel.read_all file |> Email.of_string in
-            Email_message.Wrapper.create_from_email header
+            Email_wrapper.create_from_email header
           in
           match security_warning, custom_warning_file with
           | true, None ->

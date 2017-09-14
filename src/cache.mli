@@ -20,14 +20,16 @@ open Async
 *)
 
 module type Resource_intf = sig
+  module Key : Identifiable.S
+
   module Args : sig
+
     type t
+
+    val key : t -> Key.t
 
     (** Used in error messages *)
     val to_string_hum : t -> string
-
-    include Comparable.S_plain with type t := t
-    include Hashable.  S_plain with type t := t
   end
 
   type t
@@ -48,7 +50,7 @@ module Config : sig
     ; idle_cleanup_after   : Time.Span.t
     ; max_resources_per_id : int
     ; max_resource_reuse   : int
-    } [@@deriving fields, sexp]
+    } [@@deriving fields, sexp, bin_io, compare]
 
   val create
     :  max_resources : int
@@ -58,15 +60,48 @@ module Config : sig
     -> t
 end
 
+module type Status_intf = sig
+  module Key : Identifiable.S
+
+  module Resource : sig
+    type state = [ `Busy | `Idle | `Closing ] [@@deriving sexp, bin_io, compare]
+
+    type t =
+      { state : state
+      ; since : Time.Span.t
+      } [@@deriving fields, sexp, bin_io, compare]
+  end
+
+  module Resource_list : sig
+    type t =
+      { key               : Key.t
+      ; resources         : Resource.t list
+      ; queue_length      : int
+      ; max_time_on_queue : Time.Span.t option
+      } [@@deriving fields, sexp, bin_io, compare]
+  end
+
+  type t =
+    { resource_lists    : Resource_list.t list
+    ; num_jobs_in_cache : int
+    } [@@deriving fields, sexp, bin_io, compare]
+end
+
 module Make(R : Resource_intf) : sig
+
+  module Status : Status_intf with module Key := R.Key
+
   type t
 
   val init : config : Config.t -> t
 
+  val status : t -> Status.t
+  val config : t -> Config.t
+
   (** [with_ t args ~f] calls [f resource] where [resource] is either:
 
       1) An existing cached resource that was opened with args' such that
-      [R.Args.compare args args' = 0]
+      [R.Args.Key.equal (R.Args.key args) (R.Args.key args') = true]
       2) A newly opened resource created by [R.open_ args], respecting the
       limits of [t.config]
 
@@ -118,6 +153,20 @@ module Make(R : Resource_intf) : sig
     -> f : (R.t -> 'a Deferred.t)
     -> [ `Ok of R.Args.t * 'a
        | `Error_opening_resource of R.Args.t * Error.t
+       | `Gave_up_waiting_for_resource
+       | `Cache_is_closed
+       ] Deferred.t
+
+  (** Tries [with_any'] in a loop (removing args that have open errors) until receiving an
+      [`Ok], or until it has failed to open all resources in [args_list]. *)
+  val with_any_loop
+    :  ?open_timeout:Time.Span.t
+    -> ?give_up:unit Deferred.t
+    -> t
+    -> R.Args.t list
+    -> f : (R.t -> 'a Deferred.t)
+    -> [ `Ok of R.Args.t * 'a
+       | `Error_opening_all_resources of (R.Args.t * Error.t) list
        | `Gave_up_waiting_for_resource
        | `Cache_is_closed
        ] Deferred.t

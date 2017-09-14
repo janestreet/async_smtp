@@ -1,12 +1,37 @@
+module Stable0 = struct
+  open! Core.Core_stable
+
+  open Email_message.Email_message_stable
+
+  module V1_no_sexp = struct
+    type t =
+      [ `Null
+      | `Email of Email_address.V1.t
+      ] [@@deriving bin_io]
+  end
+end
+
 open! Core
-open Email_message.Std
+open Email_message
 
 open Or_error.Monad_infix
-type t =
-  [ `Null
-  | `Email of Email_address.t
-  ]
-[@@deriving bin_io, sexp, compare, hash]
+
+module T = struct
+  type t =
+    [ `Null
+    | `Email of Email_address.t
+    ] [@@deriving compare, hash]
+
+  let to_string = function
+    | `Null -> "<>"
+    | `Email email -> Email_address.to_string email
+  ;;
+
+  let sexp_of_t t = sexp_of_string (to_string t)
+end
+include T
+include Hashable.Make_plain(T)
+include Comparable.Make_plain(T)
 
 let of_string_with_arguments ?default_domain ~allowed_extensions str =
   Or_error.try_with (fun () -> Mail_from_lexer.parse_mail_from (Lexing.from_string str))
@@ -31,11 +56,6 @@ let of_string ?default_domain str =
   | _,(_::_) -> failwithf "impossible, unexpected extension arguments" ()
 ;;
 
-let to_string = function
-  | `Null -> "<>"
-  | `Email email -> Email_address.to_string email
-;;
-
 let to_string_with_arguments (sender,args) =
   to_string sender :: List.map args ~f:Sender_argument.to_string
   |> String.concat ~sep:" "
@@ -47,44 +67,17 @@ let map t ~f =
   | `Email email -> `Email (f email)
 ;;
 
-module T = struct
-  type nonrec t = t [@@deriving sexp, bin_io, compare]
-
-  let to_string = to_string
-  let of_string s = of_string s |> Or_error.ok_exn
-
-  let compare a b = match a,b with
-    | `Null, `Null -> 0
-    | `Email a, `Email b -> Email_address.compare a b
-    | `Null, `Email _ -> -1
-    | `Email _, `Null -> 1
-  ;;
-
-  let hash_fold_t h = function
-    | `Null -> h
-    | `Email email -> Email_address.hash_fold_t h email
-  let hash = Hash.run hash_fold_t
-end
-include Hashable.Make(T)
-include Comparable.Make(T)
-include Sexpable.Of_stringable(T)
-
 module Caseless = struct
   module T = struct
-    type nonrec t = t [@@deriving bin_io, sexp]
-    let compare a b = match a,b with
-      | `Null, `Null -> 0
-      | `Email a, `Email b -> Email_address.Caseless.compare a b
-      | `Null, `Email _ -> -1
-      | `Email _, `Null -> 1
-    let hash_fold_t h = function
-      | `Null -> h
-      | `Email a -> Email_address.Caseless.hash_fold_t h a
-    let hash = Hash.run hash_fold_t
+    type nonrec t = (* t = *)
+      [ `Null
+      | `Email of Email_address.Caseless.t
+      ] [@@deriving compare, hash]
+    let sexp_of_t = sexp_of_t
   end
   include T
-  include Comparable.Make(T)
-  include Hashable.Make(T)
+  include Comparable.Make_plain(T)
+  include Hashable.Make_plain(T)
 end
 
 let%test_module _ =
@@ -99,10 +92,22 @@ let%test_module _ =
     let%test _ = check ~should_fail:false [] "todd@lubin.us"
     let%test _ = check ~should_fail:false [] "<>"
     let%test _ = check ~should_fail:true [] "<> <>"
-    let%test _ = check ~should_fail:false [Auth_login] "<> AUTH=<>"
-    let%test _ = check ~should_fail:false [Auth_login] "todd lubin <todd@lubin.us> AUTH=<>"
-    let%test _ = check ~should_fail:false [Auth_login] "<todd@lubin.us> AUTH=foobar"
+    let%test _ = check ~should_fail:false [Auth []] "<> AUTH=<>"
+    let%test _ = check ~should_fail:false [Auth []] "todd lubin <todd@lubin.us> AUTH=<>"
+    let%test _ = check ~should_fail:false [Auth []] "<todd@lubin.us> AUTH=foobar"
     let%test _ = check ~should_fail:false [] "<todd@lubin.us>"
     let%test _ = check ~should_fail:true [] "<todd@lubin.us> AUTH=foobar"
-    let%test _ = check ~should_fail:true [Auth_login] "<todd@lubin.us> FOOBAR=foobar"
+    let%test _ = check ~should_fail:true [Auth []] "<todd@lubin.us> FOOBAR=foobar"
   end)
+
+module Stable = struct
+  include Stable0
+  module V1 = struct
+    include V1_no_sexp
+    include Sexpable.Of_stringable(struct
+        type nonrec t = t
+        let of_string s = Or_error.ok_exn (of_string s)
+        let to_string t = to_string t
+      end)
+  end
+end

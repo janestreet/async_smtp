@@ -1,6 +1,6 @@
 open Core
 open Async
-open Async_smtp.Std
+open Async_smtp
 
 module Envelope = Smtp_envelope
 
@@ -10,7 +10,7 @@ module Hash = Crypto.Hash
 module Config = struct
   module Header_cond = struct
     type t =
-      { name : Email_headers.Name.t;
+      { name : Email_headers.Stable.Name.V1.t;
         if_  : [ `Contains of string ] sexp_option;
       } [@@deriving sexp]
     ;;
@@ -18,7 +18,7 @@ module Config = struct
 
   module Listed_header_cond = struct
     type t =
-      { name : Email_headers.Name.t;
+      { name : Email_headers.Stable.Name.V1.t;
         if_ : [ `Contains of string ] sexp_option;
         remove_duplicates : unit sexp_option;
       } [@@deriving sexp]

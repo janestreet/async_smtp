@@ -1,8 +1,13 @@
 open! Core
 open! Async
-open Email_message.Std
+open Email_message
 
-module Id : Identifiable
+module Id : sig
+  type t [@@deriving sexp_of]
+  val to_string : t -> string
+  include Hashable.S_plain with type t:=t
+  include Comparable.S_plain with type t:=t
+end
 
 module Status : sig
   type t =
@@ -13,7 +18,7 @@ module Status : sig
     | `Removed
     | `Quarantined of Quarantine_reason.t
     | `Delivered
-    ] [@@deriving sexp]
+    ] [@@deriving sexp_of]
 end
 
 module Queue : sig
@@ -22,7 +27,7 @@ module Queue : sig
     | Frozen
     | Removed
     | Quarantine
-  [@@deriving sexp, enumerate, compare, bin_io]
+  [@@deriving sexp_of, enumerate, compare]
 end
 
 module On_disk_spool : sig
@@ -42,11 +47,11 @@ end
 
 (* Message.t does not contain the full envelope. The envelope is loaded from disk and then
    stored back to disk only when changes need to be made. *)
-type t [@@deriving sexp, bin_io]
+type t [@@deriving sexp_of]
 
 (* Comparison is based on ids. *)
-include Comparable.S with type t := t
-include Hashable.S with type t := t
+include Comparable.S_plain with type t := t
+include Hashable.S_plain with type t := t
 
 val spool_date         : t -> Time.t
 val last_relay_attempt : t -> (Time.t * Error.t) option
@@ -56,6 +61,7 @@ val flows              : t -> Mail_log.Flows.t
 val time_on_spool      : t -> Time.Span.t
 val status             : t -> Status.t
 val next_hop_choices   : t -> Address.t list
+val envelope_info      : t -> Envelope.Info.t
 
 val size_of_file       : t -> Byte_units.t Or_error.t Deferred.t
 
@@ -93,3 +99,15 @@ val mark_for_send_now
   -> unit Or_error.t Deferred.t
 
 val remove : t -> log:Mail_log.t -> unit Or_error.t Deferred.t
+
+module Stable : sig
+  module Id : sig
+    module V1 : sig
+      type t = Id.t [@@deriving sexp, bin_io]
+      include Stringable.S with type t:=t
+    end
+  end
+  module V1 : sig
+    type nonrec t = t [@@deriving sexp, bin_io]
+  end
+end

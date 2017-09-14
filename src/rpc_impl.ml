@@ -43,6 +43,22 @@ module Smtp_events = struct
   ;;
 end
 
+module Cache = struct
+  let status () =
+    Rpc.Pipe_rpc.implement Rpc_intf.Cache.status
+      (fun (_config, spool, _server_events) update_interval ->
+         let cache = Spool.client_cache spool in
+         let r, w = Pipe.create () in
+         Clock.every' ~stop:(Pipe.closed w) update_interval
+           (fun () -> Pipe.write w (Client_cache.status cache));
+         return (Ok r))
+
+  let config () =
+    Rpc.Rpc.implement Rpc_intf.Cache.config
+      (fun (_config, spool, _server_events) () ->
+         return (Client_cache.config (Spool.client_cache spool)))
+end
+
 module Spool = struct
   let status () =
     Rpc.Rpc.implement Rpc_intf.Spool.status

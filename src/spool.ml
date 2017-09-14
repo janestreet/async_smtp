@@ -1,10 +1,74 @@
+module Stable = struct
+  open Core.Core_stable
+  open Email_message.Email_message_stable
+  module Message = Message.Stable
+  module Quarantine_reason = Quarantine_reason.Stable
+  module Envelope = Envelope.Stable
+
+  module Message_id = Message.Id
+
+  module Send_info = struct
+    module V1 = struct
+      type t =
+        [ `All_messages
+        | `Frozen_only
+        | `Some_messages of Message_id.V1.t list ]
+      [@@deriving bin_io]
+    end
+  end
+
+  module Recover_info = struct
+    module V1 = struct
+      type t =
+        { msgs :
+            [ `Removed of Message_id.V1.t list
+            | `Quarantined of Message_id.V1.t list ]
+        ; wrapper : Email_wrapper.V1.t option
+        } [@@deriving bin_io]
+    end
+  end
+
+  module Spooled_message_info = struct
+    module V1 = struct
+      type t =
+        { message : Message.V1.t
+        ; file_size : Byte_units.V1.t option
+        ; envelope : Envelope.V1.t option
+        } [@@deriving bin_io]
+    end
+  end
+
+  module Status = struct
+    module V1 = struct
+      type t = Spooled_message_info.V1.t list [@@deriving bin_io]
+    end
+  end
+
+  module Event = struct
+    module V1 = struct
+      type spool_event =
+        [ `Spooled
+        | `Delivered
+        | `Frozen
+        | `Removed
+        | `Unfrozen
+        | `Recovered of [`From_quarantined | `From_removed]
+        | `Quarantined of [`Reason of Quarantine_reason.V1.t]
+        ] * Message_id.V1.t * Envelope.Info.V1.t [@@deriving bin_io]
+      type t = Time.V1.t * [ `Spool_event of spool_event | `Ping ] [@@deriving bin_io]
+    end
+  end
+end
+
 open Core
 open Async
+open Email_message
 
 module Config = Server_config
 
 
-module Message_id = Message.Id
+
+module Message_id    = Message.Id
 module Message_spool = Message.On_disk_spool
 module Message_queue = Message.Queue
 
@@ -12,44 +76,52 @@ module Log = Mail_log
 
 module Event = struct
   module T = struct
-    type t = Time.t *
-             [ `Spooled     of Message_id.t
-             | `Delivered   of Message_id.t
-             | `Frozen      of Message_id.t
-             | `Removed     of Message_id.t
-             | `Unfrozen    of Message_id.t
-             | `Recovered   of Message_id.t * [`From_quarantined | `From_removed]
-             | `Quarantined of Message_id.t * [`Reason of Quarantine_reason.t]
-             | `Ping ]
-    [@@deriving sexp, bin_io, compare]
-
-    let hash = Hashtbl.hash
-    let hash_fold_t h t = hash_fold_int h (hash t)
+    type spool_event =
+      [ `Spooled
+      | `Delivered
+      | `Frozen
+      | `Removed
+      | `Unfrozen
+      | `Recovered of [`From_quarantined | `From_removed]
+      | `Quarantined of [`Reason of Quarantine_reason.t]
+      ] * Message_id.t * Envelope.Info.t [@@deriving sexp_of, compare]
+    type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of, compare]
   end
 
   include T
-  include Comparable.Make(T)
-  include Hashable.Make(T)
+  include Comparable.Make_plain(T)
 
   let to_string (_rcvd_time, happening) =
     let without_time =
-      let id_to_s = Message_id.to_string in
       match happening with
-      | `Spooled    msgid             -> (id_to_s msgid) ^ " spooled"
-      | `Frozen     msgid             -> (id_to_s msgid) ^ " frozen"
-      | `Removed    msgid             -> (id_to_s msgid) ^ " removed"
-      | `Unfrozen   msgid             -> (id_to_s msgid) ^ " unfrozen"
-      | `Delivered  msgid             -> (id_to_s msgid) ^ " delivered"
-      | `Recovered (msgid, _from)     -> (id_to_s msgid) ^ " recovered"
-      | `Quarantined (msgid, _reason) -> (id_to_s msgid) ^ " quarantined"
-      | `Ping                         -> "ping"
+      | `Ping -> "ping"
+      | `Spool_event (spool_event, id, _info) ->
+        let event_string = match spool_event with
+          | `Spooled             -> "spooled"
+          | `Frozen              -> "frozen"
+          | `Removed             -> "removed"
+          | `Unfrozen            -> "unfrozen"
+          | `Delivered           -> "delivered"
+          | `Recovered _from     -> "recovered"
+          | `Quarantined _reason -> "quarantined"
+        in
+        (Message_id.to_string id) ^ " " ^ event_string
     in
     without_time
   ;;
 
-  let event_gen ~here ~log ~f event_stream spooled_msg =
+  let event_gen event ~(time: [`Now | `Of_msg of Message.t -> Time.t])
+        ~here ~log event_stream spooled_msg =
     let id = Message.id spooled_msg in
-    let t = f ~id spooled_msg in
+    let t =
+      let time =
+        match time with
+        | `Now -> Time.now ()
+        | `Of_msg f -> f spooled_msg
+      in
+      let info = Message.envelope_info spooled_msg in
+      time, `Spool_event (event, id, info)
+    in
     Log.debug log (lazy (Log.Message.create
                            ~here
                            ~flows:(Message.flows spooled_msg)
@@ -60,22 +132,14 @@ module Event = struct
     Bus.write event_stream t
   ;;
 
-  let spooled   =
-    event_gen ~f:(fun ~id  msg -> (Message.spool_date msg, `Spooled id))
-  ;;
+  let spooled   = event_gen `Spooled   ~time:(`Of_msg Message.spool_date)
+  let delivered = event_gen `Delivered ~time:`Now
+  let frozen    = event_gen `Frozen    ~time:`Now
+  let removed   = event_gen `Removed   ~time:`Now
+  let unfrozen  = event_gen `Unfrozen  ~time:`Now
 
-  let quarantine reason =
-    event_gen ~f:(fun ~id _msg -> Time.now (), `Quarantined (id, reason))
-  ;;
-
-  let recover from_where =
-    event_gen ~f:(fun ~id _msg -> Time.now (), `Recovered (id, from_where))
-  ;;
-
-  let delivered = event_gen ~f:(fun ~id _msg -> Time.now (), `Delivered id)
-  let frozen    = event_gen ~f:(fun ~id _msg -> Time.now (), `Frozen id)
-  let remove    = event_gen ~f:(fun ~id _msg -> Time.now (), `Removed id)
-  let unfrozen  = event_gen ~f:(fun ~id _msg -> Time.now (), `Unfrozen id)
+  let quarantined reason      = event_gen (`Quarantined reason)   ~time:`Now
+  let recovered   from_where  = event_gen (`Recovered from_where) ~time:`Now
 end
 
 type t =
@@ -116,10 +180,10 @@ let with_event_writer ~here spool spooled_msg ~f = f ~here ~log:spool.log spool.
 let spooled_event   = with_event_writer ~f:Event.spooled
 let delivered_event = with_event_writer ~f:Event.delivered
 let frozen_event    = with_event_writer ~f:Event.frozen
-let remove_event    = with_event_writer ~f:Event.remove
+let removed_event   = with_event_writer ~f:Event.removed
 let unfrozen_event  = with_event_writer ~f:Event.unfrozen
-let recover_event t from_where = with_event_writer t ~f:(Event.recover from_where)
-let quarantine_event t reason = with_event_writer t ~f:(Event.quarantine reason)
+let recovered_event t from_where = with_event_writer t ~f:(Event.recovered from_where)
+let quarantined_event t reason = with_event_writer t ~f:(Event.quarantined reason)
 
 let create ~config ~log : t Deferred.Or_error.t =
   let spool_dir = Config.spool_dir config in
@@ -316,7 +380,7 @@ let quarantine t ~reason ~flows ~original_msg messages =
         envelope_with_next_hop
         ~original_msg
       >>|? fun quarantined_msg ->
-      quarantine_event ~here:[%here] t (`Reason reason) quarantined_msg)
+      quarantined_event ~here:[%here] t (`Reason reason) quarantined_msg)
 ;;
 
 let kill_and_flush ?(timeout = Deferred.never ()) t =
@@ -348,7 +412,7 @@ module Send_info = struct
   type t =
     [ `All_messages
     | `Frozen_only
-    | `Some_messages of Message_id.t list ] [@@deriving bin_io]
+    | `Some_messages of Message_id.t list ]
 end
 
 let send_msgs ?(retry_intervals = []) t ids =
@@ -387,17 +451,17 @@ let remove t ids =
       end
       >>=? fun () ->
       remove_message t spooled_msg;
-      remove_event t ~here:[%here] spooled_msg;
+      removed_event t ~here:[%here] spooled_msg;
       Deferred.Or_error.ok_unit))
 ;;
 
 module Recover_info = struct
-  type t =
+  type t = Stable.Recover_info.V1.t =
     { msgs :
         [ `Removed of Message_id.t list
         | `Quarantined of Message_id.t list ]
-    ; wrapper : Email_message.Wrapper.t option
-    } [@@deriving bin_io]
+    ; wrapper : Email_wrapper.t option
+    }
 end
 
 let recover t (info : Recover_info.t) =
@@ -424,12 +488,12 @@ let recover t (info : Recover_info.t) =
     | Ok msg ->
       Option.value_map info.wrapper ~default:Deferred.Or_error.ok_unit ~f:(fun wrapper ->
         Message.map_email msg ~f:(fun email ->
-          Email_message.Wrapper.add wrapper email))
+          Email_wrapper.add wrapper email))
       >>=? fun () ->
       Message.freeze msg ~log:t.log
       >>=? fun () ->
       add_message t msg;
-      recover_event t ~here:[%here] from_queue' msg;
+      recovered_event t ~here:[%here] from_queue' msg;
       Deferred.Or_error.ok_unit)
 ;;
 
@@ -451,11 +515,11 @@ let send ?retry_intervals t send_info =
   | `Some_messages msgids -> send_msgs ?retry_intervals t msgids
 
 module Spooled_message_info = struct
-  type t =
+  type t = Stable.Spooled_message_info.V1.t =
     { message : Message.t
     ; file_size : Byte_units.t option
     ; envelope : Envelope.t option
-    } [@@deriving fields, sexp, bin_io]
+    } [@@deriving fields, sexp_of]
 
   let sp f t = f t.message
 
@@ -463,6 +527,7 @@ module Spooled_message_info = struct
   let spool_date         = sp Message.spool_date
   let last_relay_attempt = sp Message.last_relay_attempt
   let parent_id          = sp Message.parent_id
+  let envelope_info      = sp Message.envelope_info
   let status             = sp Message.status
 
   (* Internal *)
@@ -471,7 +536,7 @@ module Spooled_message_info = struct
 end
 
 module Status = struct
-  type t = Spooled_message_info.t list [@@deriving sexp, bin_io]
+  type t = Spooled_message_info.t list [@@deriving sexp_of]
 
   let sort t =
     let cmp a b =

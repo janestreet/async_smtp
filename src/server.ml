@@ -1,7 +1,7 @@
 open Core
 open Async
 open Async_ssl.Std
-open Email_message.Std
+open Email_message
 
 module Config = Server_config
 module Plugin = Server_plugin
@@ -17,6 +17,22 @@ module type S = sig
   val ports  : t -> int list
 
   val close  : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
+end
+
+module type For_test = sig
+  val session
+    :  ?send:(Envelope.With_next_hop.t list -> string Deferred.Or_error.t)
+    -> ?quarantine:(reason:Quarantine_reason.t -> Envelope.With_next_hop.t list -> unit Deferred.Or_error.t)
+    -> log:Mail_log.t
+    -> ?max_message_size:Byte_units.t
+    -> ?tls_options:Config.Tls.t
+    -> ?emulate_tls:bool
+    -> ?malformed_emails:[`Reject|`Wrap]
+    -> ?local:Address.t
+    -> remote:Address.t
+    -> Reader.t
+    -> Writer.t
+    -> unit Deferred.t
 end
 
 
@@ -91,9 +107,32 @@ module Make(Cb : Plugin.S) = struct
     Staged.stage write_reply
   ;;
 
+  let extensions (type session) ~tls_options (plugins:session Plugin.Extension.t list) =
+    let auth_extensions =
+      List.filter_map plugins ~f:(function
+        | Plugin.Extension.Auth (module Auth : Plugin.Auth.S with type session=session) ->
+          Some Auth.mechanism
+        | _ -> None)
+      |> function
+      | [] -> []
+      | (_::_) as mechs ->
+        [ Smtp_extension.Auth mechs ]
+    in
+    let other_extensions =
+      List.filter_map plugins ~f:(function
+        | Plugin.Extension.Auth _ -> None (* handled above *)
+        | Plugin.Extension.Start_tls _ ->
+          Option.map tls_options ~f:(const Smtp_extension.Start_tls))
+    in
+    [ Smtp_extension.Mime_8bit_transport ]
+    @ auth_extensions
+    @ other_extensions
+
   let rec session_loop
             ~log
-            ~config
+            ~tls_options
+            ~max_message_size
+            ~malformed_emails
             ~server_events
             ~send_envelope
             ~quarantine
@@ -102,24 +141,8 @@ module Make(Cb : Plugin.S) = struct
             ?raw_writer
             ?write_reply
             (session:Cb.Session.t) =
-    let extensions session =
-      [ Smtp_extension.Mime_8bit_transport ]
-      @ List.filter_map (Cb.Session.extensions session) ~f:(function
-        | Plugin.Extension.Auth (Login _) -> Some Smtp_extension.Auth_login
-        | Plugin.Extension.Start_tls _ ->
-          Option.map config.Config.tls_options ~f:(const Smtp_extension.Start_tls))
-    in
+    let extensions session = extensions ~tls_options (Cb.Session.extensions session) in
     let write_reply = write_reply_impl ~log ?raw_writer ?write_reply () |> Staged.unstage in
-    let authentication_input ~msg ~here ~flows ~component () =
-      let msg = Base64.encode msg in
-      write_reply ~here ~flows ~component (Smtp_reply.start_authentication_input_334 msg)
-    in
-    let authentication_successful ~here ~flows ~component () =
-      write_reply ~here ~flows ~component (Smtp_reply.authentication_successful_235)
-    in
-    let authentication_unsuccessful ~here ~flows ~component () =
-      write_reply ~here ~flows ~component (Smtp_reply.authentication_credentials_invalid_535)
-    in
     let bad_sequence_of_commands ~here ~flows ~component cmd =
       write_reply ~here ~flows ~component (Smtp_reply.bad_sequence_of_commands_503 cmd)
     in
@@ -215,8 +238,8 @@ module Make(Cb : Plugin.S) = struct
           top_helo ~extended:false ~flows ~session helo
         | Smtp_command.Extended_hello helo ->
           top_helo ~extended:true ~flows ~session helo
-        | Smtp_command.Auth_login username ->
-          top_auth_login ~flows ~session ~username
+        | Smtp_command.Auth (meth,initial_resp) ->
+          top_auth ~flows ~session ~meth ~initial_resp
         | Smtp_command.Start_tls ->
           begin match
             (* We assume that [Cb.Session.extensions] only changes after a protocol
@@ -224,7 +247,7 @@ module Make(Cb : Plugin.S) = struct
             Cb.Session.extensions session
             |> List.find_map ~f:(function
               | Plugin.Extension.Start_tls cb ->
-                Option.map config.Config.tls_options ~f:(fun opts -> opts, cb)
+                Option.map tls_options ~f:(fun opts -> opts, cb)
               | _ -> None)
           with
           | None ->
@@ -378,7 +401,9 @@ module Make(Cb : Plugin.S) = struct
           >>= fun session ->
           session_loop
             ~log
-            ~config
+            ~tls_options:(Some tls_options)
+            ~max_message_size
+            ~malformed_emails
             ~server_events
             ~send_envelope
             ~quarantine
@@ -387,66 +412,81 @@ module Make(Cb : Plugin.S) = struct
             ~raw_writer:new_writer
             session)
           ~finally:teardown
-    and top_auth_login ~flows ~session ~username =
-      let component = [ "Auth"; "Login" ] in
+    and top_auth ~flows ~session ~meth ~initial_resp =
+      let component = ["smtp-server"; "session"; "auth"] in
       match Cb.Session.extensions session
             |> List.find_map ~f:(function
-              | Plugin.Extension.Auth (Login cb) -> Some cb
+              | Plugin.Extension.Auth
+                  ((module Auth : Plugin.Auth.S with type session=Cb.Session.t) as auth) ->
+                Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
               | _ -> None)
       with
       | None ->
         command_not_implemented ~here:[%here] ~flows ~component
-          (Smtp_command.Auth_login username)
-      | Some (module Auth_cb : Plugin.Auth.Login with type session=Cb.Session.t) ->
-        let get_input ~msg ~here ~flows ~component =
-          authentication_input ~msg ~here ~flows ~component ()
-          >>= fun () ->
-          Reader.read_line reader
-          >>| function
-          | `Eof -> None
-          | `Ok line -> Option.try_with (fun () -> Base64.decode_exn line)
+          (Smtp_command.Auth (meth, None))
+      | Some (module Auth : Plugin.Auth.S with type session=Cb.Session.t) ->
+        let initial_resp = ref initial_resp in
+        let auth_finished = ref false in
+        let challenge_lock = ref false in
+        let send_challenge_and_expect_response msg =
+          if !auth_finished then
+            failwith "Calling [send_challenge] after [authenticate] flow completed/aborted."
+          else if !challenge_lock then
+            failwith "Concurrent calls of [send_challenge]"
+          else match !initial_resp with
+            | Some resp ->
+              initial_resp := None;
+              Deferred.Or_error.return (Base64.decode_exn resp)
+            | None ->
+              challenge_lock := true;
+              write_reply ~here:[%here] ~flows ~component
+                (Smtp_reply.start_authentication_input_334
+                   (Base64.encode msg))
+              >>= fun () ->
+              Reader.read_line reader
+              >>| function
+              | `Eof -> Error (Error.of_string "Client disconnected during authentication flow")
+              | `Ok resp ->
+                let resp = Base64.decode_exn resp in
+                (* Deliberately only release the lock on success.
+                   This ensures that calls after failure will continue to fail. *)
+                challenge_lock := false;
+                Ok resp
         in
-        let component = ["smtp-server"; "session"; "auth"] in
-        begin match username with
-        | None -> get_input ~msg:"Username:" ~here:[%here] ~flows ~component
-        | Some username -> Option.try_with (fun () -> Base64.decode_exn username) |> return
-        end >>= function
-        | None ->
-          authentication_unsuccessful ~here:[%here] ~flows ~component ()
+        Deferred.Or_error.try_with (fun () ->
+          Auth.negotiate
+            ~log:(Log.with_flow_and_component log
+                    ~flows
+                    ~component:(component @ ["plugin"; "Auth.authenticate"]))
+            session ~send_challenge_and_expect_response)
+        >>| (fun res -> auth_finished := true; res)
+        >>= function
+        | Error err ->
+          Log.error log (lazy (Log.Message.of_error
+                                 ~here:[%here]
+                                 ~flows
+                                 ~component:(component @ ["plugin"; "Auth.authenticate"])
+                                 err));
+          write_reply ~here:[%here] ~flows ~component
+            Smtp_reply.authentication_credentials_invalid_535
           >>= fun () ->
           top ~session
-        | Some username ->
-          get_input ~msg:"Password:" ~here:[%here] ~flows ~component
-          >>= function
-          | None ->
-            authentication_unsuccessful ~here:[%here] ~flows ~component ()
-            >>= fun () ->
-            top ~session
-          | Some password ->
-            Deferred.Or_error.try_with (fun () ->
-              Auth_cb.login
-                ~log:(Log.with_flow_and_component log
-                        ~flows
-                        ~component:(component @ ["plugin"; "Auth.Login.login"]))
-                session ~username ~password)
-            >>= function
-            | Ok (`Allow session) ->
-              authentication_successful ~here:[%here] ~flows ~component ()
-              >>= fun () ->
-              top ~session
-            | Ok (`Deny reject) ->
-              write_reply ~here:[%here] ~flows ~component reject
-              >>= fun () ->
-              top ~session
-            | Error err ->
-              Log.info log (lazy (Log.Message.of_error
-                                    ~here:[%here]
-                                    ~flows
-                                    ~component:(component @ ["plugin"; "Auth.Login.login"])
-                                    err));
-              authentication_unsuccessful ~here:[%here] ~flows ~component ()
-              >>= fun () ->
-              top ~session
+        | Ok (Error err) ->
+          Log.info log (lazy (Log.Message.of_error
+                                ~here:[%here]
+                                ~flows
+                                ~component:(component @ ["plugin"; "Auth.authenticate"])
+                                err));
+          Deferred.unit
+        | Ok (Ok (`Deny reply)) ->
+          write_reply ~here:[%here] ~flows ~component reply
+          >>= fun () ->
+          top ~session
+        | Ok (Ok (`Allow session)) ->
+          write_reply ~here:[%here] ~flows ~component
+            Smtp_reply.authentication_successful_235
+          >>= fun () ->
+          top ~session
     and top_envelope ~flows ~session sender_str =
       let flows = Log.Flows.extend flows `Inbound_envelope in
       let component = ["smtp-server"; "session"; "envelope"; "sender"] in
@@ -517,7 +557,7 @@ module Make(Cb : Plugin.S) = struct
           envelope_data ~session ~flows data
         | ( Smtp_command.Hello _ | Smtp_command.Extended_hello _
           | Smtp_command.Sender _ | Smtp_command.Start_tls
-          | Smtp_command.Auth_login _) as cmd ->
+          | Smtp_command.Auth _) as cmd ->
           bad_sequence_of_commands ~here:[%here] ~flows ~component cmd
           >>= fun () ->
           envelope ~session ~flows data
@@ -611,7 +651,7 @@ module Make(Cb : Plugin.S) = struct
       | Ok (`Continue data) ->
         start_mail_input ~here:[%here] ~flows ~component ()
         >>= fun () ->
-        read_data ~max_size:config.Config.max_message_size reader
+        read_data ~max_size:max_message_size reader
         >>= function
         | `Too_much_data ->
           write_reply ~here:[%here] ~flows ~component Smtp_reply.exceeded_storage_allocation_552
@@ -634,7 +674,7 @@ module Make(Cb : Plugin.S) = struct
                          ~flows
                          ~component
                          error));
-              match config.Config.malformed_emails with
+              match malformed_emails with
               | `Reject ->
                 Error (Smtp_reply.syntax_error_501 "Malformed Message")
               | `Wrap ->
@@ -770,7 +810,10 @@ module Make(Cb : Plugin.S) = struct
 
   let start_session
         ~log
-        ~config
+        ~malformed_emails
+        ~tls_options
+        ~emulate_tls_for_test
+        ~max_message_size
         ~reader
         ~server_events
         ?raw_writer
@@ -824,30 +867,61 @@ module Make(Cb : Plugin.S) = struct
       write_reply' ~here:[%here] ~flows ~component
         Smtp_reply.service_unavailable_421
     | Ok (`Accept session) ->
-      let greeting = Cb.Session.greeting session in
-      Log.info log (lazy (Log.Message.create
-                            ~here:[%here]
-                            ~flows
-                            ~component
-                            ~tags:["greeting", greeting]
-                            "Session.connect:accepted"));
-      Monitor.protect (fun () ->
+      begin if emulate_tls_for_test then (
+        match
+          List.find_map (Cb.Session.extensions session) ~f:(function
+            | Plugin.Extension.Start_tls cb -> Some cb
+            | _ -> None)
+        with
+        | None ->
+          Deferred.Or_error.errorf
+            "Session initiated with claim of pre-established TLS \
+             but Plugin does not provide TLS callback"
+        | Some (module Tls : Plugin.Start_tls with type session = Cb.Session.t) ->
+          Deferred.Or_error.try_with (fun () ->
+            Tls.upgrade_to_tls
+              ~log:(Log.with_flow_and_component log
+                      ~flows
+                      ~component:(component @ ["plugin"; "Tls.upgrade_to_tls"]))
+              session))
+        else Deferred.Or_error.return session
+      end
+      >>= function
+      | Error err ->
+        Log.info log (lazy (Log.Message.of_error
+                              ~here:[%here]
+                              ~flows
+                              ~component
+                              (Error.tag err ~tag:"Session.connect")));
         write_reply' ~here:[%here] ~flows ~component
-          (Smtp_reply.service_ready_220 greeting)
-        >>= fun () ->
-        session_loop
-          ~log
-          ~config
-          ~server_events
-          ~reader
-          ?raw_writer
-          ?write_reply
-          ~send_envelope
-          ~quarantine
-          ~session_flows
-          session)
-        ~finally:(fun () ->
-          Cb.Session.disconnect ~log session)
+          Smtp_reply.service_unavailable_421
+      | Ok session ->
+        let greeting = Cb.Session.greeting session in
+        Log.info log (lazy (Log.Message.create
+                              ~here:[%here]
+                              ~flows
+                              ~component
+                              ~tags:["greeting", greeting]
+                              "Session.connect:accepted"));
+        Monitor.protect (fun () ->
+          write_reply' ~here:[%here] ~flows ~component
+            (Smtp_reply.service_ready_220 greeting)
+          >>= fun () ->
+          session_loop
+            ~log
+            ~tls_options
+            ~max_message_size
+            ~malformed_emails
+            ~server_events
+            ~reader
+            ?raw_writer
+            ?write_reply
+            ~send_envelope
+            ~quarantine
+            ~session_flows
+            session)
+          ~finally:(fun () ->
+            Cb.Session.disconnect ~log session)
   ;;
 
   type server = Inet of Tcp.Server.inet | Unix of Tcp.Server.unix
@@ -891,7 +965,10 @@ module Make(Cb : Plugin.S) = struct
              start_session
                ~log
                ~server_events
-               ~config
+               ~tls_options:config.Config.tls_options
+               ~emulate_tls_for_test:false
+               ~malformed_emails:config.Config.malformed_emails
+               ~max_message_size:config.Config.max_message_size
                ~session_flows
                ~reader ~raw_writer:writer ~send_envelope ~quarantine
                ~local_address
@@ -961,6 +1038,37 @@ module Make(Cb : Plugin.S) = struct
     | `Timeout  -> Deferred.Or_error.error_string "Messages remaining in queue"
 end
 
+module For_test(P : Plugin.S) = struct
+  include Make(P)
+  let session
+        ?(send=(fun _ -> failwith "Sending is not implemented"))
+        ?(quarantine=(fun ~reason:_ _ -> failwith "Quarantine is not implemented"))
+        ~log
+        ?(max_message_size=Byte_units.create `Bytes (Float.of_int Int.max_value_30_bits))
+        ?tls_options
+        ?(emulate_tls=false)
+        ?(malformed_emails=`Reject)
+        ?(local=(`Inet (Host_and_port.create ~host:"0.0.0.0" ~port:0)))
+        ~remote
+        reader
+        writer =
+    start_session
+      ~log
+      ~malformed_emails
+      ~tls_options
+      ~emulate_tls_for_test:emulate_tls
+      ~max_message_size
+      ~reader
+      ~server_events:(Smtp_events.create ())
+      ~raw_writer:writer
+      ~send_envelope:(fun ~flows:_ ~original_msg:_ msgs -> send msgs)
+      ~quarantine:(fun ~flows:_ ~reason ~original_msg:_ msgs -> quarantine ~reason msgs)
+      ~session_flows:(Mail_log.Flows.create `Server_session)
+      ~local_address:local
+      ~remote_address:remote
+      ()
+end
+
 let bsmtp_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
   log
   |> Log.adjust_log_levels ~remap_info_to:`Debug)
@@ -985,7 +1093,10 @@ let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
     in
     Smtp.start_session
       ~log
-      ~config:Config.default
+      ~tls_options:Config.default.tls_options
+      ~emulate_tls_for_test:false
+      ~max_message_size:Config.default.max_message_size
+      ~malformed_emails:Config.default.malformed_emails
       ~reader
       ~server_events
       ~session_flows

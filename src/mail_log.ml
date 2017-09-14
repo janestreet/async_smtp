@@ -1,6 +1,15 @@
+module Stable = struct
+  open Core.Core_stable
+  module Flows = struct
+    module V1 = struct
+      type t = string list [@@deriving sexp, bin_io]
+    end
+  end
+end
+
 open Core
 open Async
-open Email_message.Std
+open Email_message
 
 module Level = struct
   type t =
@@ -66,11 +75,11 @@ module Flows = struct
       | `Inbound_envelope
       | `Outbound_envelope
       | `Cached_connection
-      ] [@@deriving sexp, bin_io]
+      ] [@@deriving sexp_of]
   end
   module Id = struct
     module T = struct
-      type t = string [@@deriving bin_io, sexp, compare, hash]
+      type t = string [@@deriving sexp_of, compare, hash]
       let tag = function
         | `Server_session -> "srv#"
         | `Client_session -> "cli#"
@@ -83,11 +92,11 @@ module Flows = struct
         String.is_prefix t ~prefix:(tag kind)
     end
     include T
-    include Hashable.Make(T)
-    include Comparable.Make(T)
+    include Hashable.Make_plain(T)
+    include Comparable.Make_plain(T)
     let equal = String.equal
   end
-  type t = Id.t list [@@deriving bin_io, sexp]
+  type t = Id.t list [@@deriving sexp_of]
   let none = []
   let of_list = Fn.id
   let create kind = [ Id.create kind ]
@@ -99,7 +108,7 @@ end
 
 module Component = struct
   module T = struct
-    let module_name = "Async_smtp.Mail_log.Component"
+    let module_name = "Async_smtp.Smtp_mail_log.Component"
     type t = string list [@@deriving sexp, bin_io, compare, hash]
     let to_string = String.concat ~sep:"/"
     let of_string = String.split ~on:'/'
@@ -201,7 +210,7 @@ module Message = struct
       | None -> tags
     in
     let tags = match dest with
-      | Some dest -> (Tag.dest, Address.to_string dest) :: tags
+      | Some dest -> (Tag.dest, Address.Stable.V1.to_string dest) :: tags
       | None -> tags
     in
     let tags = match spool_id with
@@ -270,11 +279,11 @@ module Message = struct
       | None -> tags
     in
     let tags = match remote_address with
-      | Some remote_address -> (Tag.remote_address, Address.to_string remote_address) :: tags
+      | Some remote_address -> (Tag.remote_address, Address.Stable.V1.to_string remote_address) :: tags
       | None -> tags
     in
     let tags = match local_address with
-      | Some local_address -> (Tag.local_address, Address.to_string local_address) :: tags
+      | Some local_address -> (Tag.local_address, Address.Stable.V1.to_string local_address) :: tags
       | None -> tags
     in
     let tags = match session_marker with
@@ -395,7 +404,7 @@ module Message = struct
 
   let spool_id = find_tag ~tag:Tag.spool_id
 
-  let dest = find_tag' ~tag:Tag.dest ~f:Address.of_string
+  let dest = find_tag' ~tag:Tag.dest ~f:Address.Stable.V1.of_string
 
   let of_string str ~of_sexp =
     Sexp.of_string_conv_exn str of_sexp
@@ -418,9 +427,9 @@ module Message = struct
 
   let email = find_tag' ~tag:Tag.email_fingerprint ~f:(of_string ~of_sexp:Mail_fingerprint.t_of_sexp)
 
-  let local_address = find_tag' ~tag:Tag.local_address ~f:Address.of_string
+  let local_address = find_tag' ~tag:Tag.local_address ~f:Address.Stable.V1.of_string
 
-  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Address.of_string
+  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Address.Stable.V1.of_string
 
   let command = find_tag' ~tag:Tag.command ~f:Smtp_command.of_string
 

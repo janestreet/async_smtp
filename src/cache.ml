@@ -3,13 +3,13 @@ open Async
 
 
 module type Resource_intf = sig
+  module Key : Identifiable.S
+
   module Args : sig
     type t
 
+    val key : t -> Key.t
     val to_string_hum : t -> string
-
-    include Comparable.S_plain with type t := t
-    include Hashable.  S_plain with type t := t
   end
 
   type t
@@ -27,14 +27,67 @@ module Config = struct
     ; idle_cleanup_after   : Time.Span.t
     ; max_resources_per_id : int
     ; max_resource_reuse   : int
-    } [@@deriving fields, sexp]
+    } [@@deriving fields, sexp, bin_io, compare]
 
   let create = Fields.create
 end
 
 module Uid = Unique_id.Int ()
 
+module type Status_intf = sig
+  module Key : Identifiable.S
+
+  module Resource : sig
+    type state = [ `Busy | `Idle | `Closing ] [@@deriving sexp, bin_io, compare]
+
+    type t =
+      { state : state
+      ; since : Time.Span.t
+      } [@@deriving fields, sexp, bin_io, compare]
+  end
+
+  module Resource_list : sig
+    type t =
+      { key               : Key.t
+      ; resources         : Resource.t list
+      ; queue_length      : int
+      ; max_time_on_queue : Time.Span.t option
+      } [@@deriving fields, sexp, bin_io, compare]
+  end
+
+  type t =
+    { resource_lists    : Resource_list.t list
+    ; num_jobs_in_cache : int
+    } [@@deriving fields, sexp, bin_io, compare]
+end
+
 module Make(R : Resource_intf) = struct
+
+  module Status = struct
+    module Key = R.Key
+    module Resource = struct
+      type state = [ `Busy | `Idle | `Closing ] [@@deriving sexp, bin_io, compare]
+
+      type t =
+        { state : state
+        ; since : Time.Span.t
+        } [@@deriving fields, sexp, bin_io, compare]
+    end
+
+    module Resource_list = struct
+      type t =
+        { key               : Key.t
+        ; resources         : Resource.t list
+        ; queue_length      : int
+        ; max_time_on_queue : Time.Span.t option
+        } [@@deriving fields, sexp, bin_io, compare]
+    end
+
+    type t =
+      { resource_lists    : Resource_list.t list
+      ; num_jobs_in_cache : int
+      } [@@deriving fields, sexp, bin_io, compare]
+  end
 
   module Delayed_failures = struct
     type t =
@@ -66,6 +119,7 @@ module Make(R : Resource_intf) = struct
 
     val f : 'a t -> (R.t -> 'a Deferred.t)
     val open_timeout : 'a t -> Time.Span.t option
+    val created_at : 'a t -> Time.t
 
     val mark_result_from_available_resource
       :  'a t
@@ -93,6 +147,7 @@ module Make(R : Resource_intf) = struct
           | Delayed_failures.t
           ] Deferred.t Ivar.t
       ; open_timeout : Time.Span.t option
+      ; created_at : Time.t
       } [@@deriving fields]
 
     let create ?open_timeout ~give_up ~f =
@@ -102,6 +157,7 @@ module Make(R : Resource_intf) = struct
       { f
       ; result_ivar
       ; open_timeout
+      ; created_at = Time.now ()
       }
     ;;
 
@@ -131,6 +187,7 @@ module Make(R : Resource_intf) = struct
      It will trigger [close] once the [max_resource_reuse] or [idle_cleanup_after] are
      exceeded. *)
   module Resource : sig
+
     type t
 
     (* [create] will immediately produce a [Resource.t] that is initially
@@ -148,6 +205,8 @@ module Make(R : Resource_intf) = struct
       -> R.Args.t
       -> with_:(R.t -> 'a Deferred.t)
       -> t * ([> `Ok of (R.Args.t * 'a) | Delayed_failures.t] Deferred.t)
+
+    val status : t -> Status.Resource.t
 
     (* [close_when_idle] forces the resource to shutdown either now or when the currently
        running [f] completes *)
@@ -172,13 +231,15 @@ module Make(R : Resource_intf) = struct
 
     val equal : t -> t -> bool
   end = struct
+
     type t =
       { uid                    : Uid.t
       ; args                   : R.Args.t
       ; resource               : R.t Set_once.t
-      ; mutable status         : [ `Idle_since of Time.t
+      ; mutable state          : [ `Idle
                                  | `In_use_until of unit Ivar.t
                                  | `Closing ]
+      ; mutable in_state_since : Time.t
       ; config                 : Config.t
       ; mutable remaining_uses : int
       ; close_finished         : unit Ivar.t
@@ -186,11 +247,25 @@ module Make(R : Resource_intf) = struct
 
     let equal a b = Uid.equal a.uid b.uid
 
+    let status t =
+      let state = match t.state with
+        | `Idle           -> `Idle
+        | `In_use_until _ -> `Busy
+        | `Closing        -> `Closing
+      in
+      { Status.Resource. state; since = Time.diff (Time.now ()) t.in_state_since }
+    ;;
+
+    let set_state t state =
+      t.state <- state;
+      t.in_state_since <- Time.now ()
+    ;;
+
     let close_finished t = Ivar.read t.close_finished
 
     let close t =
       let really_close () =
-        t.status <- `Closing;
+        set_state t `Closing;
         let closed =
           match Set_once.get t.resource with
           | None -> Deferred.unit
@@ -208,9 +283,9 @@ module Make(R : Resource_intf) = struct
         >>| function `Result () | `Timeout ->
           Ivar.fill t.close_finished ()
       in
-      match t.status with
+      match t.state with
       | `Closing -> close_finished t
-      | `Idle_since _ -> really_close ()
+      | `Idle -> really_close ()
       | `In_use_until done_ ->
         assert (not (Ivar.is_full done_));
         close_finished t >>> Ivar.fill done_;
@@ -218,9 +293,9 @@ module Make(R : Resource_intf) = struct
     ;;
 
     let close_when_idle t =
-      match t.status with
+      match t.state with
       | `Closing -> close_finished t
-      | `Idle_since _ -> close t
+      | `Idle -> close t
       | `In_use_until _ ->
         (* This will trigger a [close] when the current task completes. *)
         t.remaining_uses <- 0;
@@ -228,30 +303,31 @@ module Make(R : Resource_intf) = struct
     ;;
 
     let set_idle t =
-      match t.status with
+      match t.state with
       | `Closing -> failwith "Impossible, can't set a closed resource to idle"
-      | `Idle_since _ -> failwith "Impossible, already marked as idle"
+      | `Idle -> failwith "Impossible, already marked as idle"
       | `In_use_until done_ ->
         assert (Ivar.is_empty done_);
         if t.remaining_uses <= 0 then
           don't_wait_for (close t)
         else (
-          t.status <- `Idle_since (Time.now ());
+          set_state t `Idle;
           Ivar.fill done_ ();
           Clock.after t.config.idle_cleanup_after
           >>> fun () ->
-          match t.status with
+          match t.state with
           | `Closing | `In_use_until _ -> ()
-          | `Idle_since now ->
-            if Time.diff (Time.now ()) now >= t.config.idle_cleanup_after then
+          | `Idle ->
+            let idle_time = Time.diff (Time.now ()) t.in_state_since in
+            if idle_time >= t.config.idle_cleanup_after then
               don't_wait_for (close t))
     ;;
 
     let unsafe_immediate t ~f =
-      match t.status with
+      match t.state with
       | `Closing ->
         failwith "Can't [unsafe_immediate] a closed resource"
-      | `Idle_since _ ->
+      | `Idle ->
         failwith "Can't [unsafe_immediate] an idle resource"
       | `In_use_until done_ ->
         assert (Ivar.is_empty done_);
@@ -270,18 +346,18 @@ module Make(R : Resource_intf) = struct
     ;;
 
     let immediate t ~f =
-      match t.status with
+      match t.state with
       | `Closing ->
         `Resource_closed
       | `In_use_until done_ ->
         `Resource_unavailable_until (Ivar.read done_)
-      | `Idle_since _ ->
+      | `Idle ->
         (* It is possible that [R.close] was called but [R.close_finished] is not
            determined yet. Use [R.is_closed] to prevent this race. *)
         if R.is_closed (Set_once.get_exn t.resource [%here]) then
           `Resource_closed
         else (
-          t.status <- `In_use_until (Ivar.create ());
+          set_state t (`In_use_until (Ivar.create ()));
           `Ok (unsafe_immediate t ~f))
     ;;
 
@@ -290,7 +366,8 @@ module Make(R : Resource_intf) = struct
         { uid = Uid.create ()
         ; args
         ; resource = Set_once.create ()
-        ; status = `In_use_until (Ivar.create ())
+        ; state = `In_use_until (Ivar.create ())
+        ; in_state_since = Time.now ()
         ; config
         ; remaining_uses = config.Config.max_resource_reuse
         ; close_finished = Ivar.create ()
@@ -389,6 +466,7 @@ module Make(R : Resource_intf) = struct
 
   (* Limit the number of concurrent [Resource.t]s locally *)
   module Resource_list : sig
+
     type t
 
     val create
@@ -396,6 +474,8 @@ module Make(R : Resource_intf) = struct
       -> Global_resource_limiter.t
       -> R.Args.t
       -> t
+
+    val status : t -> Status.Resource_list.t
 
     (* [is_empty] is true iff there are no currently connected/connecting resources. *)
     val is_empty : t -> bool
@@ -425,6 +505,7 @@ module Make(R : Resource_intf) = struct
 
     val enqueue :  t -> 'a Job.t -> unit
   end = struct
+
     type job =
         T : 'a Job.t -> job
 
@@ -437,6 +518,18 @@ module Make(R : Resource_intf) = struct
       ; trigger_queue_manager   : unit Mvar.Read_write.t
       ; mutable close_started   : bool
       ; close_finished          : unit Ivar.t
+      }
+
+    let status t =
+      let max_time_on_queue = Queue.peek t.waiting_jobs |> Option.map ~f:(fun (T job) ->
+        Time.diff (Time.now ()) (Job.created_at job)
+      )
+      in
+      { Status.Resource_list.
+        key          = R.Args.key t.args
+      ; resources    = List.map t.resources ~f:Resource.status
+      ; queue_length = Queue.length t.waiting_jobs
+      ; max_time_on_queue
       }
 
     let find_available_resource t ~f =
@@ -565,15 +658,22 @@ module Make(R : Resource_intf) = struct
   end
 
   type t =
-    { config                  : Config.t
-    ; global_resource_limiter : Global_resource_limiter.t
-    ; cache                   : Resource_list.t R.Args.Table.t
-    ; mutable close_started   : bool
-    ; close_finished          : unit Ivar.t
+    { config                    : Config.t
+    ; global_resource_limiter   : Global_resource_limiter.t
+    ; cache                     : Resource_list.t R.Key.Table.t
+    ; mutable num_jobs_in_cache : int
+    ; mutable close_started     : bool
+    ; close_finished            : unit Ivar.t
     } [@@deriving fields]
 
+  let status t =
+    let resource_lists = List.map (Hashtbl.data t.cache) ~f:Resource_list.status in
+    { Status. resource_lists; num_jobs_in_cache = t.num_jobs_in_cache }
+  ;;
+
   let get_resource_list t args =
-    Hashtbl.find_or_add t.cache args ~default:(fun () ->
+    let key = R.Args.key args in
+    Hashtbl.find_or_add t.cache key ~default:(fun () ->
       Resource_list.create t.config t.global_resource_limiter args)
   ;;
 
@@ -600,21 +700,26 @@ module Make(R : Resource_intf) = struct
   ;;
 
   let with_any' ?open_timeout ?(give_up=Deferred.never()) t args_list ~f =
-    if t.close_started then
-      return `Cache_is_closed
-    else (
-      match find_any_available_resource t args_list ~f with
-      | Some (args, res) ->
-        let%map res = res in
-        `Ok (args, res)
-      | None ->
-        match create_any_resource ?open_timeout t args_list ~f with
-        | Some res -> res
+    t.num_jobs_in_cache <- t.num_jobs_in_cache + 1;
+    let result =
+      if t.close_started then
+        return `Cache_is_closed
+      else (
+        match find_any_available_resource t args_list ~f with
+        | Some (args, res) ->
+          let%map res = res in
+          `Ok (args, res)
         | None ->
-          if Deferred.is_determined give_up then
-            return `Gave_up_waiting_for_resource
-          else (
-            enqueue_all ?open_timeout ~give_up t args_list ~f))
+          match create_any_resource ?open_timeout t args_list ~f with
+          | Some res -> res
+          | None ->
+            if Deferred.is_determined give_up then
+              return `Gave_up_waiting_for_resource
+            else (
+              enqueue_all ?open_timeout ~give_up t args_list ~f))
+    in
+    upon result (fun _ -> t.num_jobs_in_cache <- t.num_jobs_in_cache - 1);
+    result
   ;;
 
   let with_any ?open_timeout ?give_up t args ~f =
@@ -643,11 +748,35 @@ module Make(R : Resource_intf) = struct
     | `Gave_up_waiting_for_resource -> `Gave_up_waiting_for_resource
   ;;
 
+  let with_any_loop ?open_timeout ?give_up t args_list ~f =
+    let rec loop ~failed = function
+      | [] ->
+        return (`Error_opening_all_resources (List.rev failed))
+      | args_list ->
+        with_any' ?open_timeout ?give_up t args_list ~f
+        >>= function
+        | `Ok _
+        | `Gave_up_waiting_for_resource
+        | `Cache_is_closed as res -> return res
+        | `Error_opening_resource (failed_args, e) ->
+          let remaining =
+            List.filter args_list
+              ~f:(fun args ->
+                not (R.Key.equal (R.Args.key args) (R.Args.key failed_args)))
+          in
+          loop
+            ~failed:((failed_args, e) :: failed)
+            remaining
+    in
+    loop ~failed:[] args_list
+  ;;
+
   let init ~config =
     let t =
       { config
       ; global_resource_limiter = Global_resource_limiter.create config
-      ; cache = R.Args.Table.create ()
+      ; cache = R.Key.Table.create ()
+      ; num_jobs_in_cache = 0
       ; close_started = false
       ; close_finished = Ivar.create ()
       }

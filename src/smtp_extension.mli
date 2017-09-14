@@ -2,10 +2,10 @@ open! Core
 
 type t =
   | Start_tls
-  | Auth_login
+  | Auth of string list
   | Mime_8bit_transport
   | Other of string
-[@@deriving compare, sexp]
+[@@deriving compare, sexp, enumerate]
 
 include Equal.S with type t := t
 
