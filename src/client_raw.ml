@@ -491,7 +491,7 @@ let maybe_start_tls t ~log ~component =
   >>=? fun () ->
   return (check_tls_security t)
 
-let do_auth t ~log ~component (module Auth : Auth.Client.S) =
+let do_auth t ~log ~component (module Auth : Auth.Client) =
   let sent_auth_command = ref false in
   let auth_result = ref None in
   let consume_challenge_or_result resp =
@@ -553,6 +553,7 @@ let do_auth t ~log ~component (module Auth : Auth.Client.S) =
       ~log:(Log.with_flow_and_component log
               ~flows:t.flows
               ~component:(component @ ["authenticate"]))
+      ~remote:(remote_address t)
       ~send_response_and_expect_challenge)
   >>=? finish
 

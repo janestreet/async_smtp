@@ -47,6 +47,39 @@ module Stable = struct
       ; mutable envelope_info        : Envelope.Info.V1.t
       } [@@deriving sexp, bin_io]
   end
+
+  module V2 = struct
+    type t =
+      { spool_dir                    : string
+      ; id                           : Id.V1.t
+      ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
+      ; parent_id                    : Envelope.Id.V1.t
+      ; spool_date                   : Time.V1.t
+      ; next_hop_choices             : Address.V1.t list
+      ; mutable retry_intervals      : Retry_interval.V2.t list
+      ; mutable remaining_recipients : Email_address.V1.t list
+      ; mutable failed_recipients    : Email_address.V1.t list
+      ; mutable relay_attempts       : (Time.V1.t * Error.V1.t) list
+      ; mutable status               : Status.V1.t
+      ; mutable envelope_info        : Envelope.Info.V2.t
+      } [@@deriving sexp, bin_io]
+
+    let of_v1 (v1 : V1.t) =
+      { spool_dir            = v1.spool_dir
+      ; id                   = v1.id
+      ; flows                = v1.flows
+      ; parent_id            = v1.parent_id
+      ; spool_date           = v1.spool_date
+      ; next_hop_choices     = v1.next_hop_choices
+      ; retry_intervals      = v1.retry_intervals
+      ; remaining_recipients = v1.remaining_recipients
+      ; failed_recipients    = v1.failed_recipients
+      ; relay_attempts       = v1.relay_attempts
+      ; status               = v1.status
+      ; envelope_info        = Envelope.Info.V2.of_v1 v1.envelope_info
+      }
+    ;;
+  end
 end
 
 open Core
@@ -93,7 +126,7 @@ module Queue = struct
     | Frozen
     | Removed
     | Quarantine
-  [@@deriving sexp_of, enumerate, compare]
+  [@@deriving sexp, enumerate, compare]
 
   let to_dirname = function
     | Active     -> "active"
@@ -125,11 +158,9 @@ module Data = struct
   type t = Email.t
 
   let load path =
-    let open Deferred.Or_error.Let_syntax in
-    let%bind contents =
-      Deferred.Or_error.try_with (fun () -> Reader.file_contents path)
-    in
-    return (Email.of_string contents)
+    Deferred.Or_error.try_with (fun () ->
+      let%bind contents = Reader.file_contents path in
+      return (Email.of_string contents))
   ;;
 
   let save ?temp_file t path =
@@ -139,7 +170,7 @@ end
 
 (* A value of type t should only be modified via [On_disk_spool].  This guarantees
    that all changes are properly flushed to disk. *)
-type t = Stable.V1.t =
+type t = Stable.V2.t =
   { spool_dir                    : string
   ; id                           : Id.t
   (* with default so that sexps without a flowid still parse. *)
@@ -178,8 +209,22 @@ let throttle = Throttle.create ~continue_on_error:true ~max_concurrent_jobs:400
 
 module On_disk = struct
   module Metadata = struct
-    include Stable.V1
-    include Sexpable.To_stringable (Stable.V1)
+    module T = struct
+      include Stable.V2
+      let t_of_sexp sexp =
+        try t_of_sexp sexp
+        with error_from_v2 ->
+        try (Stable.V1.t_of_sexp sexp |> Stable.V2.of_v1)
+        with error_from_v1 -> begin
+            raise_s
+              [%message "[On_disk.Metadata.t_of_sexp]"
+                          (error_from_v2 : exn)
+                          (error_from_v1 : exn)
+              ]
+          end
+    end
+    include T
+    include Sexpable.To_stringable(T)
   end
 
   module Data = Data
@@ -375,7 +420,7 @@ let send_to_hops t ~log ~client_cache get_envelope =
                          ~tags:["hops", hops_tag]
                          "attempting delivery"));
   Client_cache.Tcp.with_'
-    ~give_up:(Clock.after (sec 60.))
+    ~give_up:(Clock.after (Time.Span.of_min 2.))
     ~cache:client_cache t.next_hop_choices
     ?route:(Envelope.Info.route t.envelope_info)
     ~f:(fun ~flows client ->
@@ -530,3 +575,7 @@ end
 
 include Comparable.Make_plain(T)
 include Hashable.Make_plain(T)
+
+module On_disk_monitor = struct
+  include Multispool.Monitor.Make(On_disk)
+end

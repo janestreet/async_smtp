@@ -185,6 +185,7 @@ module Message = struct
               | `Email of Email.t
               | `Envelope of Envelope.t
               ]
+    -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Envelope.Id.t
     -> ?sender:Sender.t
@@ -199,7 +200,7 @@ module Message = struct
   ;;
 
   let with_info ~f ~flows ~component ~here ?local_address ?remote_address
-        ?email ?rfc822_id ?local_id ?sender ?recipients ?spool_id
+        ?email ?message_size ?rfc822_id ?local_id ?sender ?recipients ?spool_id
         ?dest ?command ?reply ?session_marker ?(tags=[]) =
     let tags = match reply with
       | Some reply -> (Tag.reply, Smtp_reply.to_string reply) :: tags
@@ -253,6 +254,22 @@ module Message = struct
       | Some fingerprint ->
         (Tag.email_fingerprint, Sexp.to_string (Mail_fingerprint.sexp_of_t fingerprint)) :: tags
       | None -> tags
+    in
+    let message_size =
+      match message_size with
+      | Some _ -> message_size
+      | None ->
+        match email with
+        | Some (`Envelope envelope) ->
+          Some (Envelope.email envelope |> Email.raw_content |> Bigstring_shared.length)
+        | Some (`Email email) -> Some (Email.raw_content email |> Bigstring_shared.length)
+        | Some (`Fingerprint _) -> None
+        | None -> None
+    in
+    let tags = match message_size with
+      | None -> tags
+      | Some message_size ->
+        (Tag.message_size, Int.to_string message_size) :: tags
     in
     let local_id = match local_id with
       | Some _ -> local_id

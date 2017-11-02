@@ -48,23 +48,56 @@ module Status = struct
 end
 
 module Count = struct
-  let spec () = Command.Spec.empty
+  let spec () =
+    Command.Spec.(
+      step (fun m v -> m ~which:v)
+      +> choose_one ~if_nothing_chosen:(`Default_to `All) [
+        flag "-frozen-only" no_arg ~doc:" Only count frozen messages"
+        |> map ~f:(fun b -> Option.some_if b `Only_frozen);
+        flag "-active-only" no_arg ~doc:" Only count active messages"
+        |> map ~f:(fun b -> Option.some_if b `Only_active)
+      ])
 
-  let dispatch client =
+  let is_frozen = function
+    | `Frozen -> true
+    | `Send_now
+    | `Send_at _
+    | `Sending
+    | `Removed
+    | `Delivered
+    | `Quarantined _ -> false
+
+  let is_active = function
+    | `Send_now
+    | `Send_at _
+    | `Sending -> true
+    | `Frozen
+    | `Removed
+    | `Delivered
+    | `Quarantined _ -> false
+
+  let dispatch ~which client =
     Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client ()
+    >>| List.filter ~f:(fun message_info ->
+      let status = Smtp_spool.Spooled_message_info.status message_info in
+      match which with
+      | `All -> true
+      | `Only_frozen -> is_frozen status
+      | `Only_active -> is_active status)
     >>| List.length
     >>| printf "%d\n"
 
   let command =
     Command.config_or_rpc ~summary:"print total number of messages in the spool"
       (spec ())
-      (function
-        | `Config config ->
-          Smtp_spool.count_from_disk config
-          >>| Or_error.ok_exn
-          >>| printf "%d\n"
-        | `Rpc client ->
-          dispatch client
+      (fun ~which config_or_rpc ->
+         match config_or_rpc with
+         | `Config config ->
+           Smtp_spool.count_from_disk config
+           >>| Or_error.ok_exn
+           >>| printf "%d\n"
+         | `Rpc client ->
+           dispatch ~which client
       )
 end
 

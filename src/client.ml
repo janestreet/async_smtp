@@ -237,6 +237,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                 ~here:[%here]
                                 ~flows
                                 ~component
+                                ~sender:(`Sender (Envelope.sender envelope))
                                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                                 ?dest:(remote_address t)
                                 ~tags:[ "remote-id",remote_id ]

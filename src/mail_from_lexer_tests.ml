@@ -6,30 +6,30 @@ let%test_module _ =
 
     let%test_unit _ =
       [%test_result: Mail_from_lexer_types.email_with_suffix]
-        (test_lexing "todd@lubin.us")
+        (test_lexing "foo@bar.com")
         ~expect: { prefix = None
-                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; sender = `Email { local_part = "foo"; domain = Some "bar.com" }
                  ; suffix = "" }
 
     let%test_unit _ =
       [%test_result: Mail_from_lexer_types.email_with_suffix]
-        (test_lexing "todd@lubin.us suffix")
+        (test_lexing "foo@bar.com suffix")
         ~expect: { prefix = None
-                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; sender = `Email { local_part = "foo"; domain = Some "bar.com" }
                  ; suffix = " suffix" }
 
     let%test_unit _ =
       [%test_result: Mail_from_lexer_types.email_with_suffix]
-        (test_lexing "<todd@lubin.us> suffix")
+        (test_lexing "<foo@bar.com> suffix")
         ~expect: { prefix = Some ""
-                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+                 ; sender = `Email { local_part = "foo"; domain = Some "bar.com" }
                  ; suffix = " suffix" }
 
     let%test_unit _ =
       [%test_result: Mail_from_lexer_types.email_with_suffix]
-        (test_lexing "Todd Lubin <todd@lubin.us> suffix")
-        ~expect: { prefix = Some "Todd Lubin "
-                 ; sender = `Email { local_part = "todd"; domain = Some "lubin.us" }
+        (test_lexing "Foo Bar <foo@bar.com> suffix")
+        ~expect: { prefix = Some "Foo Bar "
+                 ; sender = `Email { local_part = "foo"; domain = Some "bar.com" }
                  ; suffix = " suffix" }
 
     let%test_unit _ =

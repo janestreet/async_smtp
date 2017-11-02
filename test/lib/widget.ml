@@ -38,7 +38,7 @@ module Queue = struct
     | Queue1
     | Queue2
     | Queue3
-  [@@deriving sexp, enumerate]
+  [@@deriving sexp, enumerate, compare]
 
   let to_dirname = function
     | Queue1 -> "queue1"

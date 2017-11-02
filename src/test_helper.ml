@@ -189,7 +189,7 @@ module Safe_plugin(Info : sig
     let extensions session =
       List.map (P.extensions session) ~f:(function
         | Server.Plugin.Extension.Auth
-            (module P : Server.Plugin.Auth.S with type session = t) ->
+            (module P : Server.Plugin.Auth with type session = t) ->
           Server.Plugin.Extension.Auth
             (module struct
               type session = t
@@ -197,7 +197,7 @@ module Safe_plugin(Info : sig
               let negotiate ~log:_ session ~send_challenge_and_expect_response =
                 with_stdout_log (fun ~log ->
                   P.negotiate ~log session ~send_challenge_and_expect_response)
-            end : Server.Plugin.Auth.S with type session = t)
+            end : Server.Plugin.Auth with type session = t)
         | Server.Plugin.Extension.Start_tls
             (module P : Server.Plugin.Start_tls with type session = t) ->
           Server.Plugin.Extension.Start_tls

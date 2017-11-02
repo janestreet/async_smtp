@@ -31,9 +31,9 @@ module Stable = struct
   module Spooled_message_info = struct
     module V1 = struct
       type t =
-        { message : Message.V1.t
+        { message : Message.V2.t
         ; file_size : Byte_units.V1.t option
-        ; envelope : Envelope.V1.t option
+        ; envelope : Envelope.V2.t option
         } [@@deriving bin_io]
     end
   end
@@ -54,8 +54,10 @@ module Stable = struct
         | `Unfrozen
         | `Recovered of [`From_quarantined | `From_removed]
         | `Quarantined of [`Reason of Quarantine_reason.V1.t]
-        ] * Message_id.V1.t * Envelope.Info.V1.t [@@deriving bin_io]
-      type t = Time.V1.t * [ `Spool_event of spool_event | `Ping ] [@@deriving bin_io]
+        ] * Message_id.V1.t * Envelope.Info.V2.t [@@deriving bin_io, sexp]
+
+      type t = Time.V1.t * [ `Spool_event of spool_event | `Ping ]
+      [@@deriving bin_io, sexp]
     end
   end
 end
@@ -196,7 +198,7 @@ let create ~config ~log : t Deferred.Or_error.t =
   Message_spool.create spool_dir
   >>|? fun spool ->
   let event_stream =
-    Bus.create [%here] Arity1 ~allow_subscription_after_first_write:true
+    Bus.create [%here] Arity1 ~on_subscription_after_first_write:Allow
       ~on_callback_raise:Error.raise
   in
   Clock.every (sec 30.)
@@ -280,7 +282,10 @@ let rec enqueue ?at t spooled_msg =
             failwithf !"Message has status Sending after returning from \
                         Message.send: %{Message_id}"
               (Message.id spooled_msg) ()
-          | `Frozen | `Removed | `Quarantined _ -> ()
+          | `Frozen ->
+            frozen_event t ~here:[%here] spooled_msg
+          | `Removed | `Quarantined _ ->
+            ()
     end)
 ;;
 
@@ -477,7 +482,7 @@ let recover t (info : Recover_info.t) =
     >>= function
     | Error e ->
       let e = Error.tag e ~tag:"Failed to recover message" in
-      Log.error t.log
+      Log.info t.log
         (lazy (Log.Message.of_error
                  ~here:[%here]
                  ~flows:Log.Flows.none
@@ -516,9 +521,9 @@ let send ?retry_intervals t send_info =
 
 module Spooled_message_info = struct
   type t = Stable.Spooled_message_info.V1.t =
-    { message : Message.t
+    { message   : Message.t
     ; file_size : Byte_units.t option
-    ; envelope : Envelope.t option
+    ; envelope  : Envelope.t option
     } [@@deriving fields, sexp_of]
 
   let sp f t = f t.message

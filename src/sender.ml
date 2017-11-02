@@ -89,15 +89,15 @@ let%test_module _ =
         String.equal str (to_string_with_arguments mail_from)
       | Error _ -> should_fail
 
-    let%test _ = check ~should_fail:false [] "todd@lubin.us"
+    let%test _ = check ~should_fail:false [] "foo@bar.com"
     let%test _ = check ~should_fail:false [] "<>"
     let%test _ = check ~should_fail:true [] "<> <>"
     let%test _ = check ~should_fail:false [Auth []] "<> AUTH=<>"
-    let%test _ = check ~should_fail:false [Auth []] "todd lubin <todd@lubin.us> AUTH=<>"
-    let%test _ = check ~should_fail:false [Auth []] "<todd@lubin.us> AUTH=foobar"
-    let%test _ = check ~should_fail:false [] "<todd@lubin.us>"
-    let%test _ = check ~should_fail:true [] "<todd@lubin.us> AUTH=foobar"
-    let%test _ = check ~should_fail:true [Auth []] "<todd@lubin.us> FOOBAR=foobar"
+    let%test _ = check ~should_fail:false [Auth []] "foo bar <foo@bar.com> AUTH=<>"
+    let%test _ = check ~should_fail:false [Auth []] "<foo@bar.com> AUTH=foobar"
+    let%test _ = check ~should_fail:false [] "<foo@bar.com>"
+    let%test _ = check ~should_fail:true [] "<foo@bar.com> AUTH=foobar"
+    let%test _ = check ~should_fail:true [Auth []] "<foo@bar.com> FOOBAR=foobar"
   end)
 
 module Stable = struct

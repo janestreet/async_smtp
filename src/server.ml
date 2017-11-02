@@ -110,7 +110,7 @@ module Make(Cb : Plugin.S) = struct
   let extensions (type session) ~tls_options (plugins:session Plugin.Extension.t list) =
     let auth_extensions =
       List.filter_map plugins ~f:(function
-        | Plugin.Extension.Auth (module Auth : Plugin.Auth.S with type session=session) ->
+        | Plugin.Extension.Auth (module Auth : Plugin.Auth with type session=session) ->
           Some Auth.mechanism
         | _ -> None)
       |> function
@@ -197,6 +197,15 @@ module Make(Cb : Plugin.S) = struct
                                 ~component
                                 "DISCONNECTED"));
           return ()
+        | `Ok "" ->
+          (*_ .Net System.Net.Mail.SmtpClient sends an unexpected empty line.
+            It seems okay to silently skip these. *)
+          Log.debug log (lazy (Log.Message.create
+                                 ~here:[%here]
+                                 ~flows
+                                 ~component
+                                 "Broken client sent empty line"));
+          loop ()
         | `Ok input ->
           match Option.try_with (fun () -> Smtp_command.of_string input) with
           | None ->
@@ -417,14 +426,14 @@ module Make(Cb : Plugin.S) = struct
       match Cb.Session.extensions session
             |> List.find_map ~f:(function
               | Plugin.Extension.Auth
-                  ((module Auth : Plugin.Auth.S with type session=Cb.Session.t) as auth) ->
+                  ((module Auth : Plugin.Auth with type session=Cb.Session.t) as auth) ->
                 Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
               | _ -> None)
       with
       | None ->
         command_not_implemented ~here:[%here] ~flows ~component
           (Smtp_command.Auth (meth, None))
-      | Some (module Auth : Plugin.Auth.S with type session=Cb.Session.t) ->
+      | Some (module Auth : Plugin.Auth with type session=Cb.Session.t) ->
         let initial_resp = ref initial_resp in
         let auth_finished = ref false in
         let challenge_lock = ref false in
@@ -472,11 +481,11 @@ module Make(Cb : Plugin.S) = struct
           >>= fun () ->
           top ~session
         | Ok (Error err) ->
-          Log.info log (lazy (Log.Message.of_error
-                                ~here:[%here]
-                                ~flows
-                                ~component:(component @ ["plugin"; "Auth.authenticate"])
-                                err));
+          Log.error log (lazy (Log.Message.of_error
+                                 ~here:[%here]
+                                 ~flows
+                                 ~component:(component @ ["plugin"; "Auth.authenticate"])
+                                 err));
           Deferred.unit
         | Ok (Ok (`Deny reply)) ->
           write_reply ~here:[%here] ~flows ~component reply
@@ -793,11 +802,26 @@ module Make(Cb : Plugin.S) = struct
                 top ~session
               | Ok id ->
                 List.iter envelopes_with_next_hops ~f:(fun envelope_with_next_hops ->
+                  let sender =
+                    `Sender (Envelope.With_next_hop.sender envelope_with_next_hops)
+                  in
+                  let recipients =
+                    Envelope.With_next_hop.recipients envelope_with_next_hops
+                    |> List.map ~f:(fun email -> `Email email)
+                  in
+                  let message_size =
+                    Envelope.With_next_hop.email envelope_with_next_hops
+                    |> Email.raw_content
+                    |> Bigstring_shared.length
+                  in
                   Log.info log (lazy (Log.Message.create
                                         ~here:[%here]
                                         ~flows
                                         ~component
                                         ~spool_id:id
+                                        ~sender
+                                        ~recipients
+                                        ~message_size
                                         ~tags:(List.map (Envelope.With_next_hop.next_hop_choices envelope_with_next_hops)
                                                  ~f:(fun c -> "next-hop",Address.to_string c))
                                         "SPOOLED")));

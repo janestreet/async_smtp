@@ -27,7 +27,7 @@ let plugin ~login ~plain =
                  end : Smtp_server.Plugin.Start_tls with type session = t)))
           ; Option.some_if plain
               (Smtp_server.Plugin.Extension.Auth
-                 (module Smtp_server.Plugin.Auth.Plain(struct
+                 (module Smtp_auth.Plain.Server(struct
                       type nonrec t = t
                       let authenticate
                             ~log:_
@@ -43,7 +43,7 @@ let plugin ~login ~plain =
                     end)))
           ; Option.some_if login
               (Smtp_server.Plugin.Extension.Auth
-                 (module Smtp_server.Plugin.Auth.Login(struct
+                 (module Smtp_auth.Login.Server(struct
                       type nonrec t = t
                       let authenticate
                             ~log:_
@@ -68,17 +68,17 @@ let plugin ~login ~plain =
     end
   end : Smtp_server.Plugin.S)
 
-let anon = Smtp_credentials.anon
+let anon = Smtp_client.Credentials.anon
 
 let valid =
-  Smtp_credentials.login ~username:valid_username ~password:valid_password ()
+  Smtp_client.Credentials.login ~username:valid_username ~password:valid_password ()
 
 let valid_with_delegation =
-  Smtp_credentials.login ~on_behalf_of:"bob"
+  Smtp_client.Credentials.login ~on_behalf_of:"bob"
     ~username:valid_username ~password:valid_password ()
 
 let invalid =
-  Smtp_credentials.login ~username:valid_username ~password:("X" ^ valid_password) ()
+  Smtp_client.Credentials.login ~username:valid_username ~password:("X" ^ valid_password) ()
 
 let%expect_test "cowardly refuse to authenticate because of insecure transport" =
   Smtp_expect_test_helper.smtp

@@ -27,7 +27,7 @@ let envelope_received t envelope =
 
 let create () =
   let event_stream =
-    Bus.create [%here] Arity1 ~allow_subscription_after_first_write:true
+    Bus.create [%here] Arity1 ~on_subscription_after_first_write:Allow
       ~on_callback_raise:Error.raise
   in
   { event_stream }

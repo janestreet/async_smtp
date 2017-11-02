@@ -12,12 +12,12 @@ module type Start_tls = sig
     -> session Deferred.t
 end
 
-module Auth = Auth.Server
+module type Auth = Auth.Server
 
 module Extension = struct
   type 'session t =
     | Start_tls of (module Start_tls with type session='session)
-    | Auth of (module Auth.S with type session='session)
+    | Auth of (module Auth with type session='session)
 end
 
 module type Session = sig

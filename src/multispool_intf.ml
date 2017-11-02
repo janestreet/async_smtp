@@ -78,7 +78,7 @@ module Spoolable = struct
     (** [Queue.t] is an enumerable type that represents the available queues and the
         mapping to directory names on-disk. *)
     module Queue : sig
-      type t [@@deriving sexp_of, enumerate]
+      type t [@@deriving sexp, enumerate, compare]
 
       val to_dirname : t -> string
     end
@@ -96,8 +96,6 @@ module type S = sig
   type t [@@deriving sexp_of]
   type spool = t
 
-  (** Set to a [Spoolable] module when including this module and when applying
-      [Multispool.Make] *)
   module Spoolable : Spoolable.S
 
   val dir : t -> string
@@ -105,11 +103,14 @@ module type S = sig
   (** Open a [Multispool.t].  This function will fail by default if the spool directory
       does not exist, does not look like a spool, or does not contain the set of
       directories named after the strings returned by [Spoolable.Queue.to_dir].  Pass
-      [~create_if_missing:true] to create the necessary directories.
+      [~create_if_missing:()] to create the necessary directories.
 
       Note that, even if [~create_if_missing:()] is specified, this function will still
       fail if the supplied directory is non-empty and not already a spool. *)
-  val load : ?create_if_missing:unit -> string -> t Deferred.Or_error.t
+  val load
+    :  ?create_if_missing:unit
+    -> string
+    -> t Deferred.Or_error.t
 
   (** Open a [Multispool.t] with no spool directory validation. *)
   val load_unsafe : string -> t
@@ -287,6 +288,104 @@ module type S = sig
         :  Queue_reader.t
         -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ]
             * Queue_reader.t) Deferred.Or_error.t
+    end
+  end
+end
+
+(** [Multispool.Monitor] provides consistency checks for a spool. *)
+module Monitor = struct
+  module type S = sig
+    type t
+
+    module Spoolable : Spoolable.S
+
+    module File_with_mtime : sig
+      type t =
+        { filename : string
+        ; mtime    : Time.t
+        } [@@deriving sexp_of]
+    end
+
+    module Dir : sig
+      type t =
+        | Registry
+        | Tmp
+        | Checkout
+        | Data
+        | Queue of Spoolable.Queue.t
+
+      val name_on_disk : t -> string
+    end
+
+    module Problem : sig
+      type t =
+        | Too_old    of File_with_mtime.t * Dir.t
+        | Orphaned   of File_with_mtime.t * Dir.t
+        | Duplicated of File_with_mtime.t * Dir.t list
+      [@@deriving sexp_of, compare]
+
+      include Comparable.S_plain with type t := t
+    end
+
+    module Event : sig
+      type t =
+        | Start of Time.t * Problem.t
+        | End   of Time.t * Problem.t
+      [@@deriving sexp_of, compare]
+
+      include Comparable.S_plain with type t := t
+    end
+
+    module Limits : sig
+      type t =
+        { max_checked_out_age : Time.Span.t        (* default: 10 minutes *)
+        ; max_tmp_file_age    : Time.Span.t        (* default: 10 minutes *)
+        ; max_queue_ages      : (Spoolable.Queue.t * Time.Span.t) list
+        } [@@deriving sexp]
+
+      val create
+        :  ?max_checked_out_age:Time.Span.t
+        -> ?max_tmp_file_age:Time.Span.t
+        -> ?max_queue_ages:(Spoolable.Queue.t * Time.Span.t) list
+        -> unit
+        -> t
+    end
+
+    module Spec : sig
+      type t =
+        { spool_dir : string
+        ; limits    : Limits.t
+        } [@@deriving sexp]
+
+      val create
+        :  spool_dir:string
+        -> limits:Limits.t
+        -> t
+
+      val param : t Command.Param.t
+    end
+
+    (** Does not create a spool. *)
+    val create : Spec.t -> t Deferred.Or_error.t
+
+    val run_once : t -> Problem.t list Deferred.Or_error.t
+
+    module Daemon : sig
+      type monitor = t
+      type t =
+        { check_every        : Time.Span.t         (* default: 15 seconds *)
+        ; alert_after_cycles : int                 (* default: 2 cycles   *)
+        }
+
+      val create
+        :  ?check_every:Time.Span.t
+        -> ?alert_after_cycles:int
+        -> unit
+        -> t
+
+      val param : t Command.Param.t
+
+      val start : t -> monitor:monitor -> f:(Event.t -> unit Deferred.t) -> unit
     end
   end
 end

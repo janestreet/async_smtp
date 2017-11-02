@@ -5,6 +5,11 @@ open! Core
 module Make (S : Multispool_intf.Spoolable.S)
   : Multispool_intf.S with module Spoolable := S
 
+module Monitor : sig
+  module Make (S : Multispool_intf.Spoolable.S)
+    : Multispool_intf.Monitor.S with module Spoolable := S
+end
+
 module For_testing : sig
   (** A rudimentary [Name_generator] for use in tests that guarantees that the
       Lexicographic order corresponds to the time ordering *)

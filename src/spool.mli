@@ -223,7 +223,7 @@ module Stable : sig
   end
   module Event : sig
     module V1 : sig
-      type t = Event.t [@@deriving bin_io]
+      type t = Event.t [@@deriving bin_io, sexp]
     end
   end
 end

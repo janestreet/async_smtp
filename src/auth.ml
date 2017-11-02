@@ -15,9 +15,11 @@ module type Server = sig
 end
 
 module type Client = sig
+  val require_tls : bool
   val mechanism : string
   val negotiate
     :  log:Mail_log.t
+    -> remote:Address.t option
     -> send_response_and_expect_challenge:
          ([`Start_auth | `Response of string]
           -> [ `Challenge of string | `Auth_completed] Deferred.t)
@@ -63,9 +65,11 @@ module Plain = struct
       val username : string
       val password : string
     end) : Client = struct
+    let require_tls = true
+
     let mechanism = mechanism
 
-    let negotiate ~log:_ ~send_response_and_expect_challenge =
+    let negotiate ~log:_ ~remote:_ ~send_response_and_expect_challenge =
       let response =
         sprintf "%s\000%s\000%s"
           (Option.value ~default:"" Cred.on_behalf_of )
@@ -110,9 +114,11 @@ module Login = struct
       val username : string
       val password : string
     end) : Client = struct
+    let require_tls = true
+
     let mechanism = mechanism
 
-    let negotiate ~log:_ ~send_response_and_expect_challenge =
+    let negotiate ~log:_ ~remote:_ ~send_response_and_expect_challenge =
       send_response_and_expect_challenge `Start_auth
       >>= function
       | `Auth_completed ->
@@ -131,16 +137,4 @@ module Login = struct
                                 (mechanism : string)
                                 (challenge : string)]
   end
-end
-
-module Client = struct
-  module type S = Client
-  module Login = Login.Client
-  module Plain = Plain.Client
-end
-
-module Server = struct
-  module type S = Server
-  module Login = Login.Server
-  module Plain = Plain.Server
 end

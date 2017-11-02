@@ -4,6 +4,7 @@ module Smtp_client = struct
   module Config = Client_config
   module Raw    = Client_raw
   module Simple = Simplemail
+  module Credentials = Credentials
 end
 module Address                     = Address
 module Email_address               = Email_message.Email_address
@@ -12,8 +13,8 @@ module Email_headers               = Email_message.Email_headers
 module Multispool                  = Multispool
 module Retry_interval              = Retry_interval
 module Simplemail                  = Simplemail
+module Smtp_auth                   = Auth
 module Smtp_command                = Smtp_command
-module Smtp_credentials            = Credentials
 module Smtp_envelope               = Envelope
 module Smtp_envelope_selector      = Envelope_selector
 module Smtp_envelope_with_next_hop = Envelope.With_next_hop
@@ -27,6 +28,8 @@ module Smtp_sender_argument        = Sender_argument
 module Smtp_sender                 = Sender
 module Smtp_session                = Session
 module Smtp_spool                  = Spool
+module Smtp_spool_monitor          = Message.On_disk_monitor
+module Smtp_spool_queue            = Message.Queue
 module Smtp_expect_test_helper     = Test_helper
 
 module Private = struct

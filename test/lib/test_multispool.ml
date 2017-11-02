@@ -3,17 +3,9 @@ open Async
 open Async_smtp
 open Expect_test_helpers
 
-module Test_name_generator = struct
-  type t = string
-  let next (prefix : t) ~attempt =
-    let attempt_str = sprintf "%06d" attempt in
-    prefix ^ attempt_str
-  ;;
-end
-
 module Widgetspool = Multispool.Make(struct
     include Widget
-    module Name_generator = Test_name_generator
+    module Name_generator = Common.Test_name_generator
   end)
 
 let chdir_or_error dir =
@@ -36,15 +28,22 @@ let sexp_filter_tmp_dir ~tmp_dir sexp =
   loop sexp
 ;;
 
-let print_s ~tmp_dir sexp =
-  print_s (sexp_filter_tmp_dir sexp ~tmp_dir)
+let print_s ?tmp_dir sexp =
+  match tmp_dir with
+  | None         -> print_s sexp
+  | Some tmp_dir -> print_s (sexp_filter_tmp_dir sexp ~tmp_dir)
 ;;
 
-let chdir_create_and_open_spool tmp_dir spoolname =
+let spool_name = "spool"
+
+let spool_dir ~tmp_dir =
+  tmp_dir ^/ spool_name
+;;
+
+let chdir_create_and_open_spool ~tmp_dir =
   let open Deferred.Or_error.Let_syntax in
   let%bind () = chdir_or_error tmp_dir in
-  let spool_dir = tmp_dir ^/ spoolname in
-  Widgetspool.create spool_dir
+  Widgetspool.create (spool_dir ~tmp_dir)
 ;;
 
 let%expect_test "Spool Creation Fails" =
@@ -54,7 +53,7 @@ let%expect_test "Spool Creation Fails" =
     >>= fun () ->
     Writer.save (tmp_dir ^/ spoolname ^/ "some_file") ~contents:""
     >>= fun () ->
-    chdir_create_and_open_spool tmp_dir spoolname
+    chdir_create_and_open_spool ~tmp_dir
     >>= fun result ->
     print_s ~tmp_dir [%sexp (result : Widgetspool.t Or_error.t)];
     [%expect {|
@@ -71,7 +70,7 @@ let%expect_test "File Behavior" =
   let open Deferred.Or_error.Let_syntax in
   with_temp_dir (fun tmp_dir ->
 
-    let%bind spool = chdir_create_and_open_spool tmp_dir "spool" in
+    let%bind spool = chdir_create_and_open_spool ~tmp_dir in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     let%bind () = [%expect {|
         spool
@@ -288,4 +287,243 @@ let%expect_test "File Behavior" =
 
     return ()
   ) |> Deferred.Or_error.ok_exn
+;;
+
+module Widgetspool_monitor = Multispool.Monitor.Make(struct
+    include Widget
+    module Name_generator = Common.Test_name_generator
+  end)
+
+let create_spool_and_monitor
+      ?(max_checked_out_age = Time.Span.of_day 1.)
+      ?(max_tmp_file_age    = Time.Span.of_day 1.)
+      ?(max_queue_ages      = []                 )
+      ~tmp_dir () =
+  let open Deferred.Or_error.Let_syntax in
+  let%bind spool = chdir_create_and_open_spool ~tmp_dir in
+  let limits =
+    Widgetspool_monitor.Limits.create ()
+      ~max_checked_out_age
+      ~max_tmp_file_age
+      ~max_queue_ages
+  in
+  let spec =
+    Widgetspool_monitor.Spec.create ~limits
+      ~spool_dir:(spool_dir ~tmp_dir)
+  in
+  let%bind monitor = Widgetspool_monitor.create spec in
+  return (spool, monitor)
+;;
+
+let with_spool_and_monitor
+      ?max_checked_out_age
+      ?max_tmp_file_age
+      ?max_queue_ages
+      f =
+  let open Deferred.Or_error.Let_syntax in
+  with_temp_dir (fun tmp_dir ->
+    let%bind spool, monitor =
+      create_spool_and_monitor
+        ?max_checked_out_age
+        ?max_tmp_file_age
+        ?max_queue_ages
+        ~tmp_dir ()
+    in
+    f spool monitor)
+;;
+
+let run_once_and_print_problems monitor =
+  let open Deferred.Or_error.Let_syntax in
+  let open Widgetspool_monitor in
+  let%bind problems = run_once monitor in
+  print_s [%message "" ~_:(problems : Problem.t list)];
+  Deferred.Or_error.ok_unit
+;;
+
+let run_on_spool_file ?monitor ~cmd dir name =
+  let open Deferred.Or_error.Let_syntax in
+  let filename = spool_name ^/ Widgetspool_monitor.Dir.name_on_disk dir ^/ name in
+  let%bind () = system_or_error (sprintf "%s %s" cmd filename) in
+  match monitor with
+  | None         -> Deferred.Or_error.ok_unit
+  | Some monitor -> run_once_and_print_problems monitor
+;;
+
+let touch = run_on_spool_file ~cmd:"touch"
+let rm    = run_on_spool_file ~cmd:"rm"
+
+let%expect_test "Monitor: Empty" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = run_once_and_print_problems monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Queue entry, no issues" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Registry                    "foo"          in
+    let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Checkout entry, no issues" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Registry "foo"          in
+    let%bind () = touch Checkout "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Queue entry with temporary file, no issues" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Registry                    "foo"          in
+    let%bind () = touch (Queue Widget.Queue.Queue1) "foo"          in
+    let%bind () = touch Tmp                         "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: No entries for registered file" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Registry "foo" ~monitor in
+    let%bind () =
+      [%expect {|
+        ((
+          Orphaned
+          ((filename foo) (mtime ([^)]+)))  (regexp)
+          Registry))
+      |}] |> Deferred.ok
+    in
+    let%bind () = rm Registry "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Duplicate entries for registered file" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Registry                    "foo"          in
+    let%bind () = touch (Queue Widget.Queue.Queue1) "foo"          in
+    let%bind () = touch (Queue Widget.Queue.Queue2) "foo" ~monitor in
+    let%bind () = [%expect {|
+        ((
+          Duplicated
+          ((filename foo) (mtime ([^)]+)))  (regexp)
+          ((Queue Queue1)
+           (Queue Queue2))))
+      |}] |> Deferred.ok
+    in
+    let%bind () = rm (Queue Widget.Queue.Queue2) "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Temporary file not registered" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Tmp "foo" ~monitor in
+    let%bind () = [%expect {|
+        ((Orphaned ((filename foo) (mtime ([^)]+))) Tmp))  (regexp)
+      |}] |> Deferred.ok
+    in
+    let%bind () = rm Tmp "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Checkout entry not registered" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Checkout "foo" ~monitor in
+    let%bind () = [%expect {|
+        ((
+          Orphaned
+          ((filename foo) (mtime ([^)]+)))  (regexp)
+          Checkout))
+      |}] |> Deferred.ok
+    in
+    let%bind () = rm Checkout "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Data file not registered" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch Data "foo" ~monitor in
+    let%bind () = [%expect {|
+        ((Orphaned ((filename foo) (mtime ([^)]+))) Data))  (regexp)
+      |}] |> Deferred.ok
+    in
+    let%bind () = rm Data "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Queue entry not registered" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor (fun _ monitor ->
+    let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
+    let%bind () = [%expect {|
+        ((
+          Orphaned
+          ((filename foo) (mtime ([^)]+)))  (regexp)
+          (Queue Queue1)))
+      |}] |> Deferred.ok
+    in
+    let%bind () = rm (Queue Widget.Queue.Queue1) "foo" ~monitor in
+    [%expect {| () |}] |> Deferred.ok
+  ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Checked out entry too old" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor
+    ~max_checked_out_age:(sec 0.)
+    (fun _ monitor ->
+       let%bind () = touch Registry "foo"          in
+       let%bind () = touch Checkout "foo" ~monitor in
+       [%expect {|
+         ((
+           Too_old
+           ((filename foo) (mtime ([^)]+)))  (regexp)
+           Checkout))
+       |}] |> Deferred.ok
+    ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Temporary file too old" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor
+    ~max_tmp_file_age:(sec 0.)
+    (fun _ monitor ->
+       let%bind () = touch Registry                    "foo"          in
+       let%bind () = touch (Queue Widget.Queue.Queue1) "foo"          in
+       let%bind () = touch Tmp                         "foo" ~monitor in
+       [%expect {|
+         ((Too_old ((filename foo) (mtime ([^)]+))) Tmp))  (regexp)
+       |}] |> Deferred.ok
+    ) |> Deferred.Or_error.ok_exn
+;;
+
+let%expect_test "Monitor: Queue entry too old" =
+  let open Deferred.Or_error.Let_syntax in
+  with_spool_and_monitor
+    ~max_queue_ages:[(Widget.Queue.Queue1, (sec 0.))]
+    (fun _ monitor ->
+       let%bind () = touch Registry                    "foo"          in
+       let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
+       [%expect {|
+         ((
+           Too_old
+           ((filename foo) (mtime ([^)]+)))  (regexp)
+           (Queue Queue1)))
+       |}] |> Deferred.ok
+    ) |> Deferred.Or_error.ok_exn
 ;;

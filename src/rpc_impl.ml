@@ -5,7 +5,7 @@ module Monitor = struct
   let errors () =
     let seqnum = ref 0 in
     let error_stream =
-      Bus.create [%here] Arity1 ~allow_subscription_after_first_write:true
+      Bus.create [%here] Arity1 ~on_subscription_after_first_write:Allow
         ~on_callback_raise:Error.raise
     in
     (* Hearbeats *)

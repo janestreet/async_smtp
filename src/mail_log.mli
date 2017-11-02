@@ -134,6 +134,7 @@ module Message : sig
               | `Email of Email.t
               | `Envelope of Envelope.t
               ]
+    -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Envelope.Id.t
     -> ?sender:[ `Sender of Sender.t | `String of string ]

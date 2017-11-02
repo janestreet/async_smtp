@@ -8,11 +8,10 @@ module Email_selector : sig
   end
 end = struct
   module Base = struct
+    include Email_selector.Base
     include (Email_selector.Stable.Base.V1 : sig
                type t = [ | Email_selector.Base.t] [@@deriving sexp]
              end with type t:=Email_selector.Base.t)
-    include Email_selector.Base
-    let __t_of_sexp__ = t_of_sexp
   end
 end
 

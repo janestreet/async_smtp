@@ -27,7 +27,9 @@ module Queue : sig
     | Frozen
     | Removed
     | Quarantine
-  [@@deriving sexp_of, enumerate, compare]
+  [@@deriving sexp, enumerate, compare]
+
+  val to_dirname : t -> string
 end
 
 module On_disk_spool : sig
@@ -100,6 +102,14 @@ val mark_for_send_now
 
 val remove : t -> log:Mail_log.t -> unit Or_error.t Deferred.t
 
+module On_disk : sig
+  include Multispool_intf.Spoolable.S with module Queue = Queue
+end
+
+module On_disk_monitor : sig
+  include Multispool_intf.Monitor.S with module Spoolable := On_disk
+end
+
 module Stable : sig
   module Id : sig
     module V1 : sig
@@ -107,7 +117,9 @@ module Stable : sig
       include Stringable.S with type t:=t
     end
   end
-  module V1 : sig
+  module V1 : sig type t [@@deriving sexp, bin_io] end
+  module V2 : sig
     type nonrec t = t [@@deriving sexp, bin_io]
+    val of_v1 : V1.t -> t
   end
 end

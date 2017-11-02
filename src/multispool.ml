@@ -4,25 +4,27 @@ open Common
 
 (* Various shared utility functions *)
 module Utils = struct
-  let replace_unix_error error replacement ~f =
-    match%bind Monitor.try_with ~rest:`Raise f with
-    | Error e ->
-      begin match Monitor.extract_exn e with
-      | Unix.Unix_error (err, _, _) when err = error ->
-        Deferred.Or_error.return replacement
-      | e -> Deferred.Or_error.of_exn e
+  let replace_unix_error ~error ~replacement = function
+    | Error e -> begin
+        let exn = Monitor.extract_exn (Error.to_exn e) in
+        match exn with
+        | Unix.Unix_error (err, _, _) when err = error ->
+          Ok replacement
+        | e -> Or_error.of_exn e
       end
-    | Ok retval -> Deferred.Or_error.return (`Ok retval)
-  ;;
-
-  let try_to_rename ~src ~dst =
-    replace_unix_error Unix.ENOENT `Not_found ~f:(fun () -> Unix.rename ~src ~dst)
+    | Ok retval -> Ok (`Ok retval)
   ;;
 
   let open_creat_excl_wronly ?perm path =
-    replace_unix_error Unix.EEXIST `Exists ~f:(fun () ->
-      Unix.openfile path ?perm ~mode:[`Creat; `Excl; `Wronly]
-    )
+    Deferred.Or_error.try_with (fun () ->
+      Unix.openfile path ?perm ~mode:[`Creat; `Excl; `Wronly])
+    >>| replace_unix_error ~error:Unix.EEXIST ~replacement:`Exists
+  ;;
+
+  let touch path =
+    Deferred.Or_error.try_with (fun () ->
+      let tod = Unix.gettimeofday () in
+      Unix.utimes path ~access:tod ~modif:tod)
   ;;
 
   let unlink path =
@@ -30,7 +32,8 @@ module Utils = struct
   ;;
 
   let stat_or_notfound path =
-    replace_unix_error Unix.ENOENT `Not_found ~f:(fun () -> Unix.stat path)
+    Deferred.Or_error.try_with (fun () -> Unix.stat path)
+    >>| replace_unix_error ~error:Unix.ENOENT ~replacement:`Not_found
   ;;
 
   let ls dir =
@@ -56,23 +59,32 @@ module Utils = struct
   ;;
 end
 
-module Make_raw (S : Multispool_intf.Spoolable.S) = struct
-  type t = string [@@deriving sexp_of]
+(* Spool loading and creation functionality shared by [Make] and [Monitor.Make]
+   functors *)
+module Shared = struct
+  type spool = string [@@deriving sexp]
 
-  type spool = t [@@deriving sexp_of]
+  let registry = ".registry"
+  let tmp      = ".tmp"
+  let checkout = ".checkout"
+  let data     = ".data"
 
-  let dir t = t
-
-  let reg_dir_of  dir = dir ^/ ".registry"
-  let co_dir_of   dir = dir ^/ ".checkout"
-  let tmp_dir_of  dir = dir ^/ ".tmp"
-  let data_dir_of dir = dir ^/ ".data"
+  let reg_dir_of  dir = dir ^/ registry
+  let co_dir_of   dir = dir ^/ checkout
+  let tmp_dir_of  dir = dir ^/ tmp
+  let data_dir_of dir = dir ^/ data
 
   let dir_looks_like_a_spool dir =
     let%bind reg_dir_exists  = Utils.is_dir (reg_dir_of dir)  in
     let%bind co_dir_exists   = Utils.is_dir (co_dir_of dir)   in
     let%bind tmp_dir_exists  = Utils.is_dir (tmp_dir_of dir)  in
     return (reg_dir_exists && co_dir_exists && tmp_dir_exists)
+  ;;
+
+  let visit_queues ?create_if_missing dir queue_dirnames =
+    Deferred.Or_error.List.iter queue_dirnames ~f:(fun queue_dirname ->
+      let queue_dir = dir ^/ queue_dirname in
+      is_accessible_directory ?create_if_missing queue_dir)
   ;;
 
   let visit_spool_directories ?create_if_missing dir =
@@ -97,15 +109,7 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
     Deferred.Or_error.ok_unit
   ;;
 
-  let visit_queues ?create_if_missing dir =
-    Deferred.Or_error.List.iter
-      S.Queue.all
-      ~f:(fun queue ->
-        let queue_dir = dir ^/ (S.Queue.to_dirname queue) in
-        is_accessible_directory ?create_if_missing queue_dir)
-  ;;
-
-  let load ?create_if_missing dir =
+  let load_spool ?create_if_missing ~queue_dirnames dir =
     is_accessible_directory ?create_if_missing dir
     >>=? fun () ->
     dir_looks_like_a_spool dir
@@ -118,9 +122,24 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
       visit_spool_directories ?create_if_missing dir
     end
     >>=? fun () ->
-    visit_queues ?create_if_missing dir
+    visit_queues ?create_if_missing dir queue_dirnames
     >>=? fun () ->
     Deferred.Or_error.return dir
+  ;;
+end
+
+module Make_base (S : Multispool_intf.Spoolable.S) = struct
+  include Shared
+
+  type t = spool [@@deriving sexp]
+
+  let dir t = t
+
+  let load =
+    let queue_dirnames =
+      List.map S.Queue.all ~f:(fun queue -> S.Queue.to_dirname queue)
+    in
+    load_spool ~queue_dirnames
   ;;
 
   let load_unsafe dir = dir
@@ -128,12 +147,10 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
   let create = load ~create_if_missing:()
 
   let load_metadata path =
-    let open Deferred.Or_error.Let_syntax in
     S.Throttle.enqueue (fun () ->
-      let%bind contents = Deferred.Or_error.try_with (fun () ->
-        Reader.file_contents path)
-      in
-      return (S.Metadata.of_string contents))
+      Deferred.Or_error.try_with (fun () ->
+        let%bind contents = Reader.file_contents path in
+        return (S.Metadata.of_string contents)))
   ;;
 
   let save_metadata ?temp_file ~contents path =
@@ -169,6 +186,45 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
     ;;
   end
 
+  module With_touch = struct
+    (* [With_touch] encapsulates filesystem operations and supports [Monitor]'s
+       [alert_after_cycles] parameter.  The mtimes on .registry/ files and any files
+       involved in a rename are updated, creating a distinct (potential) [Problem.t] for
+       each phase of an entry's life.  This way, similar phases of an entry's life won't
+       create identical [Problem.t]s (which could lead to spurious alerts). *)
+
+    let unlink ~dir ~filename t =
+      let path = dir ^/ filename in
+      let reg_path = reg_dir_of t ^/ filename in
+      let data_path = data_dir_of t ^/ filename in
+      S.Throttle.enqueue (fun () ->
+        Utils.touch reg_path
+        >>=? fun () ->
+        Utils.unlink data_path
+        >>=? fun () ->
+        Utils.unlink path
+        >>=? fun () ->
+        Utils.unlink reg_path)
+    ;;
+
+    let rename ~src_dir ~dst_dir ~filename t =
+      let src = src_dir ^/ filename in
+      let dst = dst_dir ^/ filename in
+      let reg_path = reg_dir_of t ^/ filename in
+      S.Throttle.enqueue (fun () ->
+        Utils.touch reg_path
+        >>=? fun () ->
+        Utils.touch src
+        >>=? fun () ->
+        Deferred.Or_error.try_with (fun () -> Unix.rename ~src ~dst)
+      )
+    ;;
+
+    let rename' ~src_dir ~dst_dir ~filename t =
+      rename ~src_dir ~dst_dir ~filename t
+      >>| Utils.replace_unix_error ~error:Unix.ENOENT ~replacement:`Not_found
+    ;;
+  end
   (* An entry in a particular queue *)
   module Entry = struct
     type t =
@@ -211,12 +267,10 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
       ;;
 
       let remove t =
-        let open Deferred.Or_error.Let_syntax in
-        let path = t.spool ^/ S.Queue.to_dirname t.queue ^/ t.name in
-        S.Throttle.enqueue (fun () ->
-          let%bind () = Utils.unlink path in
-          let%bind () = Utils.unlink (data_dir_of t.spool ^/ t.name) in
-          Utils.unlink (reg_dir_of t.spool ^/ t.name))
+        With_touch.unlink
+          t.spool
+          ~dir:(t.spool ^/ S.Queue.to_dirname t.queue)
+          ~filename:t.name
       ;;
     end
   end
@@ -288,7 +342,8 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
       { spool    : spool
       ; name     : string
       ; contents : S.Metadata.t }
-    [@@deriving fields]
+
+    let contents t = t.contents
 
     let update t ~f = { t with contents = f t.contents }
 
@@ -302,18 +357,14 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
       let temp_file = tmp_dir_of t.spool ^/ t.name in
       let contents = S.Metadata.to_string t.contents in
       let%bind () = save_metadata ~temp_file ~contents path in
-      let queue_dir = t.spool ^/ S.Queue.to_dirname queue in
-      let dst = queue_dir ^/ t.name in
-      S.Throttle.enqueue (fun () ->
-        Deferred.Or_error.try_with (fun () -> Unix.rename ~src:path ~dst))
+      With_touch.rename t.spool
+        ~src_dir:(co_dir_of t.spool)
+        ~dst_dir:(t.spool ^/ S.Queue.to_dirname queue)
+        ~filename:t.name
     ;;
 
     let remove t =
-      let open Deferred.Or_error.Let_syntax in
-      S.Throttle.enqueue (fun () ->
-        let%bind () = Utils.unlink (co_dir_of t.spool ^/ t.name) in
-        let%bind () = Utils.unlink (data_dir_of t.spool ^/ t.name) in
-        Utils.unlink (reg_dir_of t.spool ^/ t.name))
+      With_touch.unlink t.spool ~dir:(co_dir_of t.spool) ~filename:t.name
     ;;
 
     let create spool contents ~name = { spool; name; contents }
@@ -321,12 +372,16 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
 
   let checkout' (entry : Entry.t) =
     let open Deferred.Or_error.Let_syntax in
-    let src = entry.spool ^/ S.Queue.to_dirname entry.queue ^/ entry.name in
-    let dst = co_dir_of entry.spool ^/ entry.name in
-    match%bind S.Throttle.enqueue (fun () -> Utils.try_to_rename ~src ~dst) with
+    match%bind
+      With_touch.rename' entry.spool
+        ~src_dir:(entry.spool ^/ S.Queue.to_dirname entry.queue)
+        ~dst_dir:(co_dir_of entry.spool)
+        ~filename:entry.name
+    with
     | `Not_found as x -> return x
     | `Ok () ->
-      let%bind contents = load_metadata dst in
+      let path = co_dir_of entry.spool ^/ entry.name in
+      let%bind contents = load_metadata path in
       return (`Ok (Checked_out_entry.create entry.spool ~name:entry.name contents))
   ;;
 
@@ -595,13 +650,349 @@ module Make_raw (S : Multispool_intf.Spoolable.S) = struct
 end
 
 module Make (S : Multispool_intf.Spoolable.S) = struct
-  include Make_raw(S)
+  include Make_base(S)
 
   module Queue_reader = struct
     include Queue_reader_raw
     let create spool queue =
       Queue_reader_raw.create_internal spool queue ~test_mode:false
     ;;
+  end
+end
+
+module Monitor = struct
+  module Make (S : Multispool_intf.Spoolable.S) = struct
+    include Shared
+
+    module File_with_mtime = struct
+      module T = struct
+        type t =
+          { filename : string
+          ; mtime    : Time.t
+          } [@@deriving sexp_of, compare]
+      end
+
+      include T
+      include Comparable.Make_plain(T)
+    end
+
+    module Dir = struct
+      module T = struct
+        type t =
+          | Registry
+          | Tmp
+          | Checkout
+          | Data
+          | Queue of S.Queue.t
+        [@@deriving sexp_of, enumerate, compare]
+      end
+
+      include T
+      include Comparable.Make_plain(T)
+
+      let name_on_disk = function
+        | Registry -> registry
+        | Tmp      -> tmp
+        | Checkout -> checkout
+        | Data     -> data
+        | Queue q  -> S.Queue.to_dirname q
+      ;;
+    end
+
+    module Problem = struct
+      module T = struct
+        type t =
+          | Too_old    of File_with_mtime.t * Dir.t
+          | Orphaned   of File_with_mtime.t * Dir.t
+          | Duplicated of File_with_mtime.t * Dir.t list
+        [@@deriving sexp_of, compare]
+      end
+
+      include T
+      include Comparable.Make_plain(T)
+    end
+
+    module Event = struct
+      module T = struct
+        type t =
+          | Start of Time.t * Problem.t
+          | End   of Time.t * Problem.t
+        [@@deriving sexp_of, compare]
+      end
+
+      include T
+      include Comparable.Make_plain(T)
+    end
+
+    module Limits = struct
+      type t =
+        { max_checked_out_age : Time.Span.t
+        ; max_tmp_file_age    : Time.Span.t
+        ; max_queue_ages      : (S.Queue.t * Time.Span.t) list
+        } [@@deriving sexp]
+
+      module Defaults = struct
+        let max_checked_out_age = Time.Span.of_min 10.
+        let max_tmp_file_age    = Time.Span.of_min 10.
+      end
+
+      let create
+            ?(max_checked_out_age = Defaults.max_checked_out_age)
+            ?(max_tmp_file_age    = Defaults.max_tmp_file_age)
+            ?(max_queue_ages      = [])
+            ()
+        =
+        { max_checked_out_age
+        ; max_tmp_file_age
+        ; max_queue_ages
+        }
+      ;;
+
+      let param =
+        let open Command.Let_syntax in
+        [%map_open
+          let max_checked_out_age =
+            flag_optional_with_default_doc "-max-checked-out-age"
+              time_span Time.Span.sexp_of_t
+              ~default:Defaults.max_checked_out_age
+              ~doc:"SPAN alert once idle checkout reaches age SPAN"
+          and max_tmp_file_age =
+            flag_optional_with_default_doc "-max-tmp-file-age"
+              time_span Time.Span.sexp_of_t
+              ~default:Defaults.max_tmp_file_age
+              ~doc:"SPAN alert once temporary file reaches age SPAN"
+          and max_queue_ages =
+            all (List.map S.Queue.all ~f:(fun queue ->
+              let dirname = S.Queue.to_dirname queue in
+              let name = sprintf "-max-%s-age" dirname in
+              flag name (optional time_span)
+                ~doc:(sprintf "SPAN alert if file in queue `%s' reaches age SPAN \
+                               (default: No limit)" dirname)
+              |> map ~f:(fun span -> (queue, span))))
+          in
+          let max_queue_ages = List.filter_map max_queue_ages ~f:(function
+            | _,     None      -> None
+            | queue, Some span -> Some (queue, span))
+          in
+          create
+            ~max_checked_out_age
+            ~max_tmp_file_age
+            ~max_queue_ages
+            ()
+        ]
+      ;;
+    end
+
+    module Spec = struct
+      type t =
+        { spool_dir : string
+        ; limits    : Limits.t
+        } [@@deriving fields, sexp]
+
+      let create = Fields.create
+
+      let param =
+        let open Command.Let_syntax in
+        [%map_open
+          let spool_dir = anon ("SPOOL_DIR" %: string)
+          and limits = Limits.param
+          in
+          create ~spool_dir ~limits
+        ]
+      ;;
+    end
+
+    type t =
+      { spool                    : spool
+      ; limits                   : Limits.t
+      ; mutable private_problems : int Problem.Map.t
+      ; mutable public_problems  : Problem.Set.t
+      }
+
+    let create { Spec. spool_dir; limits } =
+      let open Deferred.Or_error.Let_syntax in
+      let queue_dirnames =
+        List.map S.Queue.all ~f:(fun queue -> S.Queue.to_dirname queue)
+      in
+      let%bind spool = load_spool ~queue_dirnames spool_dir in
+      return { spool
+             ; limits
+             ; private_problems = Problem.Map.empty
+             ; public_problems  = Problem.Set.empty
+             }
+    ;;
+
+    module Spool_files = struct
+      type t = File_with_mtime.t String.Map.t Dir.Map.t
+
+      let collect spool : t Deferred.Or_error.t =
+        let open Deferred.Or_error.Let_syntax in
+        let%bind dir_alist = Deferred.Or_error.List.map Dir.all ~f:(fun dir ->
+          let path = spool ^/ Dir.name_on_disk dir in
+          let%bind files = Utils.ls path in
+          let%bind filename_alist =
+            Deferred.Or_error.List.filter_map files ~f:(fun filename ->
+              match%map Utils.stat_or_notfound (path ^/ filename) with
+              | `Not_found -> None
+              | `Ok stats  ->
+                let mtime = Unix.Stats.mtime stats in
+                let fwm = { File_with_mtime. filename; mtime } in
+                Some (filename, fwm))
+          in
+          let filename_map = String.Map.of_alist_exn filename_alist in
+          return (dir, filename_map))
+        in
+        return (Dir.Map.of_alist_exn dir_alist)
+
+      let filename_map t dir =
+        Map.find_exn t dir
+      ;;
+    end
+
+    let fsck t ~now =
+      let open Deferred.Or_error.Let_syntax in
+      let%bind spool_files = Spool_files.collect t.spool in
+      let filter_fold_over_dir dir ~f init =
+        let filename_map = Spool_files.filename_map spool_files dir in
+        Map.fold filename_map ~init ~f:(fun ~key:_ ~data:fwm accum ->
+          match f fwm with
+          | None   -> accum
+          | Some a -> a :: accum)
+      in
+      let find_file_too_old ~age dir =
+        filter_fold_over_dir dir
+          ~f:(fun fwm ->
+            Option.some_if (Time.diff now fwm.mtime > age)
+              (Problem.Too_old (fwm, dir)))
+      in
+      let find_queue_file_too_old queue =
+        match
+          List.Assoc.find t.limits.max_queue_ages queue
+            ~equal:[%compare.equal: S.Queue.t]
+        with
+        | None     -> Fn.id
+        | Some age -> find_file_too_old (Dir.Queue queue) ~age
+      in
+      let find_file_without_registry_file dir =
+        let registry_map = Spool_files.filename_map spool_files Registry in
+        filter_fold_over_dir dir
+          ~f:(fun fwm ->
+            Option.some_if (not (Map.mem registry_map fwm.filename))
+              (Problem.Orphaned (fwm, dir)))
+      in
+      let find_orphaned_registry_file_and_duplicates =
+        let dupe_dirs =
+          Dir.Checkout :: List.map S.Queue.all ~f:(fun q -> Dir.Queue q)
+        in
+        filter_fold_over_dir Dir.Registry
+          ~f:(fun fwm ->
+            let dupes = List.filter_map dupe_dirs ~f:(fun dir ->
+              let filename_map = Spool_files.filename_map spool_files dir in
+              Option.some_if (Map.mem filename_map fwm.filename) dir)
+            in
+            match List.length dupes with
+            | 0 -> Some (Problem.Orphaned (fwm, Registry))
+            | 1 -> None
+            | _ -> Some (Problem.Duplicated (fwm, dupes)))
+      in
+      []
+      |> find_file_too_old               Dir.Checkout ~age:t.limits.max_checked_out_age
+      |> find_file_too_old               Dir.Tmp      ~age:t.limits.max_tmp_file_age
+      |> find_file_without_registry_file Dir.Checkout
+      |> find_file_without_registry_file Dir.Tmp
+      |> find_file_without_registry_file Dir.Data
+      |> fun init ->
+      List.fold S.Queue.all ~init ~f:(fun problems queue ->
+        problems
+        |> find_queue_file_too_old queue
+        |> find_file_without_registry_file (Dir.Queue queue))
+      |> find_orphaned_registry_file_and_duplicates
+      |> return
+    ;;
+
+    let fsck_and_update_private_problems t ~now =
+      let open Deferred.Or_error.Let_syntax in
+      let%bind problems = fsck t ~now in
+      let old_private_problems = t.private_problems in
+      let private_problems =
+        List.fold problems ~init:Problem.Map.empty
+          ~f:(fun private_problems p ->
+            let old_count = Map.find old_private_problems p |> Option.value ~default:0 in
+            Map.add private_problems ~key:p ~data:(old_count + 1))
+      in
+      t.private_problems <- private_problems;
+      Deferred.Or_error.ok_unit
+    ;;
+
+    let fsck_and_eventify t ~alert_after_cycles =
+      let open Deferred.Or_error.Let_syntax in
+      let now = Time.now () in
+      let%bind () = fsck_and_update_private_problems t ~now in
+      let old_problems = t.public_problems in
+      let new_problems =
+        Map.fold t.private_problems ~init:Problem.Set.empty
+          ~f:(fun ~key:problem ~data:count new_problems ->
+            if count > alert_after_cycles
+            then Set.add new_problems problem
+            else new_problems)
+      in
+      let starts = Set.to_list (Set.diff new_problems old_problems) in
+      let ends   = Set.to_list (Set.diff old_problems new_problems) in
+      let start_events = List.map starts ~f:(fun p -> Event.Start (now, p)) in
+      let end_events   = List.map ends   ~f:(fun p -> Event.End   (now, p)) in
+      t.public_problems <- new_problems;
+      return (end_events @ start_events)
+    ;;
+
+    let run_once t =
+      fsck t ~now:(Time.now ())
+    ;;
+
+    module Daemon = struct
+      type monitor = t
+      type t =
+        { check_every        : Time.Span.t
+        ; alert_after_cycles : int
+        }
+
+      module Defaults = struct
+        let check_every        = Time.Span.of_sec 15.
+        let alert_after_cycles = 2
+      end
+
+      let create
+            ?(check_every        = Defaults.check_every)
+            ?(alert_after_cycles = Defaults.alert_after_cycles)
+            () =
+        { check_every; alert_after_cycles }
+      ;;
+
+      let param =
+        let open Command.Let_syntax in
+        [%map_open
+          let check_every =
+            flag_optional_with_default_doc "-check-every" time_span Time.Span.sexp_of_t
+              ~default:Defaults.check_every
+              ~doc:"SPAN run fsck at intervals of SPAN"
+          and alert_after_cycles =
+            flag_optional_with_default_doc "-alert-after-cycles" int Int.sexp_of_t
+              ~default:Defaults.alert_after_cycles
+              ~doc:"INT alert after problem is seen INT times"
+          in
+          create ~check_every ~alert_after_cycles ()
+        ]
+      ;;
+
+      let start { check_every; alert_after_cycles } ~monitor ~f =
+        Clock.every' check_every (fun () ->
+          let%bind events =
+            fsck_and_eventify monitor ~alert_after_cycles
+            |> Deferred.Or_error.ok_exn
+          in
+          Deferred.List.iter events ~f:(fun e -> f e)
+        )
+      ;;
+    end
   end
 end
 
@@ -618,7 +1009,7 @@ module For_testing = struct
   end
 
   module Make (S : Multispool_intf.Spoolable.S) = struct
-    include Make_raw(S)
+    include Make_base(S)
 
     module Queue_reader = struct
       include Queue_reader_raw

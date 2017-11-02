@@ -117,7 +117,12 @@ let code t = Code.to_int t.code
 
 let create code fmt =
   ksprintf (fun raw_message ->
-    { code; raw_message = String.split_lines raw_message }) fmt
+    let raw_message =
+      if String.is_empty raw_message
+      then [""]
+      else String.split_lines raw_message
+    in
+    { code; raw_message }) fmt
 ;;
 
 let service_ready_220 greeting =
@@ -203,7 +208,10 @@ let from_to_parameters_bad_555 msg =
 let to_string t =
   let code = code t in
   let rec to_string_lines acc = function
-    | [] -> assert(false)
+    | [] ->
+      (* This code should never be reached as [raw_message] is guaranteed
+         to be non empty, by [create] and [parse]. *)
+      assert false
     | [s] -> ((sprintf "%d %s" code s) :: acc) |> List.rev
     | s::ss ->
       to_string_lines ((sprintf "%d-%s" code s) :: acc) ss
@@ -229,14 +237,14 @@ let parse ?partial str =
       `Done (of_code_message code (List.rev rev_msg))
     | '-' ->
       `Partial (prefix, code, rev_msg)
-    | _ -> assert(false)
+    | _ -> failwith "Not a valid SMTP Reply separator char, expected ' ' or  '-'"
   in
   match partial with
   | Some (prefix, code, rev_msg) ->
     if String.is_prefix ~prefix str then
       finish ~prefix ~code ~rev_msg
     else
-      assert(false)
+      failwith "Unexpected prefix on SMTP Reply"
   | None ->
     let rec loop i =
       let d = String.get str i in
@@ -251,7 +259,7 @@ let parse ?partial str =
 
 let of_string str =
   let rec loop ?partial = function
-    | [] -> assert(false)
+    | [] -> failwith "\"\" is not a valid SMTP Reply"
     | s::ss ->
       match parse ?partial s with
       | `Partial partial ->
@@ -260,7 +268,7 @@ let of_string str =
         if List.is_empty ss then
           res
         else
-          assert(false)
+          failwith "More than one SMTP reply"
   in
   String.split_lines str |> loop
 ;;
@@ -305,6 +313,9 @@ let%test_module _ =
     let%test_unit _ = check (bad_sequence_of_commands_503 (Smtp_command.Hello "Test"))
     let%test_unit _ = check exceeded_storage_allocation_552
     let%test_unit _ = check (transaction_failed_554 "test")
+    let%test_unit _ = check (start_authentication_input_334 "")
+    let%test_unit _ = check (start_authentication_input_334 "abc")
+    let%test_unit _ = check (start_authentication_input_334 "abc\ndef")
 
     let check_multiline a b = [%test_eq:t] b (of_string a)
 

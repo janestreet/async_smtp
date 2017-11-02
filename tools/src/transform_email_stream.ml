@@ -28,28 +28,40 @@ end
 ;;
 
 module Bodies = struct
+  module Rewrite = struct
+    type t =
+      { if_contains : Re2.Regex.t
+      ; rewrite_to  : string
+      } [@@deriving sexp]
+  end
+
   type t =
-    { mask_if_contains : string sexp_option
+    { rewrites : Rewrite.t sexp_list
     ; hash : [ `whole | `parts ] sexp_option
     } [@@deriving sexp]
 
-  let default = { mask_if_contains = None; hash = None; }
+  let default = { rewrites = []; hash = None; }
 
   let mask_body t =
-    match t.mask_if_contains with
-    | None -> ident
-    | Some s ->
-      let re = Re2.Regex.escape s |> Re2.Regex.create_exn in
+    match t.rewrites with
+    | [] -> ident
+    | _ ->
       Envelope.modify_email ~f:(fun email ->
-        if not (Re2.Regex.matches re (Email.to_string email)) then email
-        else begin
+        let rewrite = List.find t.rewrites ~f:(fun (rewrite : Rewrite.t) ->
+          Re2.Regex.matches rewrite.if_contains (Email.to_string email))
+        in
+        match rewrite with
+        | None -> email
+        | Some (rewrite : Rewrite.t) ->
           let headers = Email.headers email in
-          let email = Email.Simple.Expert.content ~whitespace:`Raw ~extra_headers:[] ~encoding:`Quoted_printable "" in
+          let email =
+            Email.Simple.Expert.content ~whitespace:`Raw
+              ~extra_headers:[] ~encoding:`Quoted_printable rewrite.rewrite_to
+          in
           Email.set_headers
             email
             (List.fold ~init:headers (Email.headers email |> Email_headers.to_list ~whitespace:`Raw)
-               ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Raw headers ~name ~value))
-        end)
+               ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Raw headers ~name ~value)))
 
   let hash_fun data =
     data

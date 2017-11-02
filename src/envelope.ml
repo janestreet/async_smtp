@@ -18,17 +18,49 @@ module Stable = struct
         ; sender_args         : Sender_argument.V1.t sexp_list
         ; recipients          : Email_address.V1.t list
         ; rejected_recipients : Email_address.V1.t list
+        ; id                  : Id.V1.t
+        } [@@deriving bin_io, sexp]
+    end
+
+    module V2 = struct
+      type t =
+        { sender              : Sender.V1.t
+        ; sender_args         : Sender_argument.V1.t sexp_list
+        ; recipients          : Email_address.V1.t list
+        ; rejected_recipients : Email_address.V1.t list
         ; route               : string option
         ; id                  : Id.V1.t
         } [@@deriving bin_io, sexp]
+
+      let of_v1 (v1 : V1.t) =
+        { sender              = v1.sender
+        ; sender_args         = v1.sender_args
+        ; recipients          = v1.recipients
+        ; rejected_recipients = v1.rejected_recipients
+        ; id                  = v1.id
+        ; route               = None
+        }
+      ;;
     end
   end
 
   module V1 = struct
     type t =
-      { info : Info.V1.t
+      { info  : Info.V1.t
       ; email : Email.V1.t
       } [@@deriving bin_io, sexp]
+  end
+
+  module V2 = struct
+    type t =
+      { info  : Info.V2.t
+      ; email : Email.V1.t
+      } [@@deriving bin_io, sexp]
+
+    let of_v1 (v1 : V1.t) =
+      { info = Info.V2.of_v1 v1.info
+      ; email = v1.email
+      }
   end
 end
 
@@ -67,7 +99,7 @@ end
 
 module Info = struct
   module T = struct
-    type t = Stable.Info.V1.t =
+    type t = Stable.Info.V2.t =
       { sender              : Sender.t
       ; sender_args         : Sender_argument.t sexp_list
       ; recipients          : Email_address.t list
@@ -158,7 +190,7 @@ module Infoable = struct
 end
 
 module T = struct
-  type t = Stable.V1.t =
+  type t = Stable.V2.t =
     { info : Info.t
     ; email : Email.t
     } [@@deriving sexp_of, fields, compare, hash]

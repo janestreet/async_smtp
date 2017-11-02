@@ -157,8 +157,16 @@ module Stable : sig
   end
 
   module Info : sig
-    module V1 : sig type t = Info.t [@@deriving bin_io, sexp] end
+    module V1 : sig type t [@@deriving bin_io, sexp] end
+    module V2 : sig
+      type t = Info.t [@@deriving bin_io, sexp]
+      val of_v1 : V1.t -> t
+    end
   end
 
-  module V1 : sig type nonrec t = t [@@deriving bin_io, sexp] end
+  module V1 : sig type t [@@deriving bin_io, sexp] end
+  module V2 : sig
+    type nonrec t = t [@@deriving bin_io, sexp]
+    val of_v1 : V1.t -> t
+  end
 end

@@ -14,10 +14,11 @@ module Status : sig
 end
 
 module Count : sig
-  val spec : unit -> ('a, 'a) Command.Spec.t
+  val spec : unit -> (which:[`Only_frozen | `Only_active | `All] -> 'a, 'a) Command.Spec.t
 
   val dispatch
-    :  Rpc.Connection.t
+    :  which:[`Only_frozen | `Only_active | `All]
+    -> Rpc.Connection.t
     -> unit Deferred.t
 end
 
