@@ -232,6 +232,8 @@ module On_disk = struct
   module Queue = Queue
 
   module Name_generator = struct
+    module Unique_name = Id
+
     type t = Envelope.t
     let next original_msg ~attempt:_ = Id.create ~original_msg
   end

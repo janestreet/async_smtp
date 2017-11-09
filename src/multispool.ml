@@ -283,8 +283,6 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
   ;;
 
   module Unique_name = struct
-    type t = string
-
     let reserve t opaque =
       let open Deferred.Or_error.Let_syntax in
       let rec try_name ~attempt =
@@ -292,7 +290,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
           Deferred.Or_error.try_with
             (fun () -> Deferred.return (S.Name_generator.next opaque ~attempt))
         in
-        let path = reg_dir_of t ^/ name in
+        let path = reg_dir_of t ^/ S.Name_generator.Unique_name.to_string name in
         match%bind Utils.open_creat_excl_wronly path with
         | `Exists -> try_name ~attempt:(attempt + 1)
         | `Ok fd ->
@@ -309,6 +307,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     | `Use generated  -> Deferred.Or_error.return generated
     end
     >>=? fun name ->
+    let name = S.Name_generator.Unique_name.to_string name in
     let entry = Entry.create t queue ~name in
     let meta = S.Metadata.to_string metadata in
     let temp_path = tmp_dir_of t ^/ name in
@@ -998,6 +997,8 @@ end
 
 module For_testing = struct
   module Lexicographic_time_order_name_generator = struct
+    module Unique_name = String
+
     type t = int
 
     (* Ensure lexicographic ordering is the same as time ordering. *)

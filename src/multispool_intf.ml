@@ -43,8 +43,14 @@ module Name_generator = struct
   (** Generates filenames for enqueued [Spoolable]s.  [t] is a user-supplied input to name
       generation via [name]. *)
   module type S = sig
+    module Unique_name : sig
+      type t
+
+      val to_string : t -> string
+    end
+
     type t
-    val next : t -> attempt:int -> string
+    val next : t -> attempt:int -> Unique_name.t
   end
 end
 
@@ -178,12 +184,10 @@ module type S = sig
   val list : t -> Spoolable.Queue.t -> Entry.t list Deferred.Or_error.t
 
   module Unique_name : sig
-    type t = private string
-
     val reserve
       :  spool
       -> Spoolable.Name_generator.t
-      -> t Deferred.Or_error.t
+      -> Spoolable.Name_generator.Unique_name.t Deferred.Or_error.t
   end
 
   (** Add a [Spoolable] to a queue.  An [Entry.t] is returned, but it may make sense to
@@ -193,7 +197,9 @@ module type S = sig
     -> Spoolable.Queue.t
     -> Spoolable.Metadata.t
     -> Spoolable.Data.t
-    -> [ `Reserve of Spoolable.Name_generator.t | `Use of Unique_name.t ]
+    -> [ `Reserve of Spoolable.Name_generator.t
+       | `Use of Spoolable.Name_generator.Unique_name.t
+       ]
     -> Entry.t Deferred.Or_error.t
 
   (** Do something with the contents of an entry within [f].  Use [with_entry] if you
