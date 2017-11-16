@@ -30,7 +30,7 @@ let email ~png_file : Email.Simple.Content.t =
 
 let command =
   let open Command.Let_syntax in
-  Command.async_or_error' ~summary:"send an email with an inline picture (png)"
+  Command.async_or_error ~summary:"send an email with an inline picture (png)"
     [%map_open
       let png_file =
         flag "png" (required file) ~doc:"FILE png file"

@@ -18,7 +18,7 @@ let main () =
 ;;
 
 let parse =
-  Command.async
+  Command.async_spec
     ~summary:("Parse BSMTP from stdin and output as sexp")
     Command.Spec.empty
     main

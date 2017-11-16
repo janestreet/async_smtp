@@ -12,7 +12,7 @@ module Fsck = struct
   module Immediate = struct
     let command =
       let open Command.Let_syntax in
-      Command.async_or_error' ~summary:"Run a consistency check on a Widget spool."
+      Command.async_or_error ~summary:"Run a consistency check on a Widget spool."
         [%map_open
           let spec = Widget_monitor.Spec.param
           in
@@ -31,7 +31,7 @@ module Fsck = struct
   module Monitor = struct
     let command =
       let open Command.Let_syntax in
-      Command.async_or_error' ~summary:"Run a monitor that prints events to stdout."
+      Command.async_or_error ~summary:"Run a monitor that prints events to stdout."
         [%map_open
           let spec = Widget_monitor.Spec.param
           and daemon = Widget_monitor.Daemon.param
@@ -63,7 +63,7 @@ module Create = struct
     end)
   let command =
     let open Command.Let_syntax in
-    Command.async_or_error' ~summary:"Create an empty spool."
+    Command.async_or_error ~summary:"Create an empty spool."
       [%map_open
         let spool_dir = anon ("SPOOL_DIR" %: string)
         in

@@ -274,7 +274,7 @@ let key_type = Command.Arg_type.create (fun s ->
   | _ -> failwith "not a recognized key type. Supported rsa:BITS, dsa:BITS, ecdsa:CURVE")
 
 let command =
-  Command.async
+  Command.async_spec
     ~summary:("Stress-test an smtp server by repeatedly sending and receiving a message read from stdin")
     Command.Spec.(
       empty

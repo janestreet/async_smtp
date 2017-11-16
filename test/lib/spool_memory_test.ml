@@ -32,7 +32,7 @@ let main ~tmp_dir ~iterations ~msg_size =
 
 let command =
   let open Command.Let_syntax in
-  Command.async' ~summary:""
+  Command.async ~summary:""
     [%map_open
       let iterations =
         flag "-iterations" (optional_with_default 100 int)

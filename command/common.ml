@@ -52,7 +52,7 @@ end = struct
   ;;
 
   let rpc ~summary ?readme the_spec main =
-    Command.async ~summary ?readme
+    Command.async_spec ~summary ?readme
       Command.Spec.(
         the_spec
         ++ step (fun m ~rpc_server ~config:_ () ->
@@ -64,7 +64,7 @@ end = struct
 
   ;;
   let config_or_rpc ~summary ?readme the_spec main =
-    Command.async ~summary ?readme
+    Command.async_spec ~summary ?readme
       Command.Spec.(
         the_spec
         ++ step (fun m ~rpc_server ~config () ->

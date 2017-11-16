@@ -32,7 +32,7 @@ let main ~iterations ~duration ~cache_slots =
 
 let command =
   let open Command.Let_syntax in
-  Command.async' ~summary:""
+  Command.async ~summary:""
     [%map_open
       let iterations =
         flag "-num-jobs" (optional_with_default 10000 int)

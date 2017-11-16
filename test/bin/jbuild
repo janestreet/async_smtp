@@ -4,6 +4,7 @@
     cache_speed_test
     test_spool
     ))
+  (flags (:standard -safe-string))
   (libraries
    (test_async_smtp
     core))

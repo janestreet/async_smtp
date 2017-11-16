@@ -1,6 +1,7 @@
 (library
  ((name async_smtp)
   (public_name async_smtp)
+  (flags (:standard -safe-string))
   (libraries
    (async
     async_inotify

@@ -445,7 +445,7 @@ module Make(Cb : Plugin.S) = struct
           else match !initial_resp with
             | Some resp ->
               initial_resp := None;
-              Deferred.Or_error.return (Base64.decode_exn resp)
+              Or_error.try_with (fun () -> Base64.decode_exn resp) |> return
             | None ->
               challenge_lock := true;
               write_reply ~here:[%here] ~flows ~component
@@ -456,11 +456,11 @@ module Make(Cb : Plugin.S) = struct
               >>| function
               | `Eof -> Error (Error.of_string "Client disconnected during authentication flow")
               | `Ok resp ->
-                let resp = Base64.decode_exn resp in
+                let result = Or_error.try_with (fun () -> Base64.decode_exn resp) in
                 (* Deliberately only release the lock on success.
                    This ensures that calls after failure will continue to fail. *)
-                challenge_lock := false;
-                Ok resp
+                challenge_lock := Result.is_error result;
+                result
         in
         Deferred.Or_error.try_with (fun () ->
           Auth.negotiate
@@ -476,17 +476,18 @@ module Make(Cb : Plugin.S) = struct
                                  ~flows
                                  ~component:(component @ ["plugin"; "Auth.authenticate"])
                                  err));
+          service_unavailable ~here:[%here] ~flows ~component ()
+        | Ok (Error err) ->
+          Log.error ~dont_send_to_monitor:() log
+            (lazy (Log.Message.of_error
+                     ~here:[%here]
+                     ~flows
+                     ~component:(component @ ["plugin"; "Auth.authenticate"])
+                     err));
           write_reply ~here:[%here] ~flows ~component
             Smtp_reply.authentication_credentials_invalid_535
           >>= fun () ->
           top ~session
-        | Ok (Error err) ->
-          Log.error log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows
-                                 ~component:(component @ ["plugin"; "Auth.authenticate"])
-                                 err));
-          Deferred.unit
         | Ok (Ok (`Deny reply)) ->
           write_reply ~here:[%here] ~flows ~component reply
           >>= fun () ->

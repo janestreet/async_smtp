@@ -79,5 +79,5 @@ module Hex = struct
       Bytes.set result (2*i) hex.[c lsr 4];
       Bytes.set result (2*i+1) hex.[c land 0xF]
     done;
-    result
+    Bytes.unsafe_to_string ~no_mutation_while_string_reachable:result
 end

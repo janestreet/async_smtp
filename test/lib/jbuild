@@ -1,5 +1,6 @@
 (library
  ((name test_async_smtp)
+  (flags (:standard -safe-string))
   (libraries
    (core
     async
