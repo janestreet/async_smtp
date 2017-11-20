@@ -20,9 +20,8 @@ end = struct
   include Command
 
   let rpc_client_command0 ~host_and_port ~f =
-    let host = Host_and_port.host host_and_port in
-    let port = Host_and_port.port host_and_port in
-    Rpc.Connection.with_client ~host ~port (fun conn -> f conn)
+    Rpc.Connection.with_client (Tcp.Where_to_connect.of_host_and_port host_and_port)
+      (fun conn -> f conn)
     >>| function
     | Ok a      -> a
     | Error exn -> raise exn

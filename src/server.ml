@@ -1014,7 +1014,7 @@ module Make(Cb : Plugin.S) = struct
     Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:(function
       | `Port port ->
         let make_local_address port = `Inet (Host_and_port.create ~host:"0.0.0.0" ~port) in
-        let make_tcp_where_to_listen = Tcp.on_port in
+        let make_tcp_where_to_listen = Tcp.Where_to_listen.of_port in
         let make_remote_address (`Inet (inet_in, port_in)) =
           `Inet (Host_and_port.create ~host:(Unix.Inet_addr.to_string inet_in) ~port:port_in)
         in
@@ -1023,7 +1023,7 @@ module Make(Cb : Plugin.S) = struct
           ~make_remote_address ~to_server
       | `File file ->
         let make_local_address socket = `Unix socket in
-        let make_tcp_where_to_listen = Tcp.on_file in
+        let make_tcp_where_to_listen = Tcp.Where_to_listen.of_file in
         let make_remote_address (`Unix socket_in) = `Unix socket_in in
         let to_server s = Unix s in
         start_servers file ~make_local_address ~make_tcp_where_to_listen

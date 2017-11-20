@@ -15,8 +15,7 @@ module Host_and_port = struct
       let port = Int.of_string port in
       Host_and_port.create ~host ~port
 
-  let inet_address addr =
-    Tcp.to_host_and_port (host addr) (port addr)
+  let inet_address addr = Tcp.Where_to_connect.of_host_and_port addr
 end
 
 module Address =struct

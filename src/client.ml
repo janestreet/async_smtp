@@ -305,14 +305,10 @@ module Tcp = struct
     in
     match dest with
     | `Inet hp ->
-      let address =
-        Tcp.to_host_and_port
-          (Host_and_port.host hp)
-          (Host_and_port.port hp)
-      in
+      let address = Tcp.Where_to_connect.of_host_and_port hp in
       with_connection address f
     | `Unix file ->
-      with_connection (Tcp.to_file file) f
+      with_connection (Tcp.Where_to_connect.of_file file) f
 end
 
 (* BSMTP writing *)

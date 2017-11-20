@@ -28,7 +28,7 @@ let start (config, spool, server_events) ~log ~plugin_rpcs =
   let initial_connection_state =
     (fun _socket_addr _connection -> (config, spool, server_events))
   in
-  let where_to_listen = Tcp.on_port (Server_config.rpc_port config) in
+  let where_to_listen = Tcp.Where_to_listen.of_port (Server_config.rpc_port config) in
   let implementations =
     implementations ()
     @ List.map plugin_rpcs ~f:(Rpc.Implementation.lift ~f:ignore)
