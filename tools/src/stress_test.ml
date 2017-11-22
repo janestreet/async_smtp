@@ -222,6 +222,7 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies
   >>= fun (server_config,client_config) ->
   let module Server =
     Smtp_server.Make(struct
+      open Smtp_monad.Let_syntax
       include (Smtp_server.Plugin.Simple : Smtp_server.Plugin.S
                with module Session := Smtp_server.Plugin.Simple.Session
                 and module Envelope := Smtp_server.Plugin.Simple.Envelope)

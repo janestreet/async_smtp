@@ -7,11 +7,8 @@ module type Server = sig
   val negotiate
     :  log:Mail_log.t
     -> session
-    -> send_challenge_and_expect_response:
-         (string -> string Deferred.Or_error.t)
-    -> [ `Allow of session
-       | `Deny of Smtp_reply.t
-       ] Deferred.Or_error.t
+    -> send_challenge_and_expect_response:(string -> string Smtp_monad.t)
+    -> session Smtp_monad.t
 end
 
 module type Client = sig
@@ -37,16 +34,18 @@ module Plain = struct
         -> t
         -> username:string
         -> password:string
-        -> [`Allow of t | `Deny of Smtp_reply.t] Deferred.Or_error.t
+        -> t Smtp_monad.t
     end) : Server with type session=Session.t = struct
+    open Smtp_monad.Let_syntax
+
     type session = Session.t
     let mechanism = mechanism
 
     let negotiate ~log session ~send_challenge_and_expect_response =
       send_challenge_and_expect_response
         "Require ${ON_BEHALF}\\NULL${USERNAME}\\NULL${PASSWORD}"
-      >>|? String.split ~on:'\000'
-      >>=? function
+      >>| String.split ~on:'\000'
+      >>= function
       | [ on_behalf_of; username; password ] ->
         let on_behalf_of = match on_behalf_of with
           | "" -> None
@@ -54,10 +53,10 @@ module Plain = struct
         in
         Session.authenticate ~log session ?on_behalf_of ~username ~password
       | _ ->
-        Deferred.Or_error.return
-          (`Deny (Smtp_reply.unable_to_accommodate_455
-                    "AUTH PLAIN request: malformed plain auth string. \
-                     Expected ${ON_BEHALF}\\NULL${USERNAME}\\NULL${PASSWORD}"))
+        Smtp_monad.reject ~here:[%here]
+          (Smtp_reply.unable_to_accommodate_455
+             "AUTH PLAIN request: malformed plain auth string. \
+              Expected ${ON_BEHALF}\\NULL${USERNAME}\\NULL${PASSWORD}")
   end
 
   module Client(Cred : sig
@@ -97,7 +96,7 @@ module Login = struct
         -> t
         -> username:string
         -> password:string
-        -> [`Allow of t | `Deny of Smtp_reply.t] Deferred.Or_error.t
+        -> t Smtp_monad.t
     end) : Server with type session=Session.t = struct
     type session = Session.t
     let mechanism = mechanism

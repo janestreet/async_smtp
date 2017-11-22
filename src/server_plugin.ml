@@ -9,7 +9,7 @@ module type Start_tls = sig
   val upgrade_to_tls
     :  log:Mail_log.t
     -> session
-    -> session Deferred.t
+    -> session Smtp_monad.t
 end
 
 module type Auth = Auth.Server
@@ -26,35 +26,31 @@ module type Session = sig
   (** [connect] is called when a client first connects, before any messages are
       accepted.
 
-      [`Accept t] accepts the connection, creating a session.
+      [Ok session] accepts the connection, creating a session.
 
-      [`Disconnect maybe_reply] terminates the connection, sending the given reply. *)
+      [Error err] terminates the connection, sending the reject
+      (or [service_unavailable]).
+  *)
   val connect
     :  log:Mail_log.t
     -> local:Address.t
     -> remote:Address.t
-    -> [ `Accept of t
-       | `Disconnect of Smtp_reply.t option
-       ] Deferred.t
+    -> t Smtp_monad.t
 
   (** [greeting] to send to clients after the connection has been accepted. *)
   val greeting : t -> string
 
   (** [helo] is called in response to initial handshakes (i.e. HELO or EHLO).
 
-      [`Continue session] allows the SMTP session to continue.
+      [Ok session] allows the SMTP session to continue.
 
-      [`Deny reply] sends the given reply but leaves the session open.
-
-      [`Disconnect maybe_reply] sends the given reply and closes the session. *)
+      [Error err] terminates the connection, sending the reject
+      (or [service_unavailable]). *)
   val helo
     :  log:Mail_log.t
     -> t
     -> string
-    -> [ `Continue of t
-       | `Deny of Smtp_reply.t
-       | `Disconnect of Smtp_reply.t option
-       ] Deferred.t
+    -> t Smtp_monad.t
 
   (** [extensions] that are supported including the associated implementations.
       It is assumed that this will only change after [connect], [helo] and
@@ -63,7 +59,7 @@ module type Session = sig
 
   (** [disconnect] is called when an SMTP connection is closed. It allows the plugin to
       cleanup any resources associated with this session *)
-  val disconnect : log:Log.t -> t -> unit Deferred.t
+  val disconnect : log:Log.t -> t -> unit Smtp_monad.t
 end
 
 module type Envelope = sig
@@ -74,33 +70,29 @@ module type Envelope = sig
 
   (** [mail_from] is called in the event of a "MAIL FROM" SMTP command.
 
-      [`Continue] creates an envelope that is updated by [rcpt_to] and finally processed
+      [Ok t] creates an envelope that is updated by [rcpt_to] and finally processed
       by [data].
 
-      [`Reject reply] sends the given reply. *)
+      [Error err] sends the reject (or [service_unavailable]) *)
   val mail_from
     :  log:Mail_log.t
     -> session
     -> Sender.t
     -> Sender_argument.t list
-    -> [ `Continue of t
-       | `Reject of Smtp_reply.t
-       ] Deferred.t
+    -> t Smtp_monad.t
 
   (** [rcpt_to] is called in the event of a "RCPT TO" SMTP command.
 
-      [`Continue t] augments the envelope in the pipeline and passes it on to the next
+      [Ok t] augments the envelope in the pipeline and passes it on to the next
       phase.
 
-      [`Reject reply] sends the given reply. *)
+      [Error err] sends the reject (or [service_unavailable]). *)
   val rcpt_to
     :  log:Mail_log.t
     -> session
     -> t
     -> Email_address.t
-    -> [ `Continue of t
-       | `Reject of Smtp_reply.t
-       ] Deferred.t
+    -> t Smtp_monad.t
 
   (** [accept_data] is called when the [DATA] command is received to decide
       whether or not to accept the message data. *)
@@ -108,24 +100,22 @@ module type Envelope = sig
     : log:Mail_log.t
     -> session
     -> t
-    -> [ `Continue of t
-       | `Reject of Smtp_reply.t
-       ] Deferred.t
+    -> t Smtp_monad.t
 
   (** [process] is called when the message body has been received
       (after the DATA command and [accept_data]).
 
-      [`Consume ok_msg] drops the message and returns a successful response to the
+      [Ok (`Consume ok_msg] drops the message and returns a successful response to the
       client. It should be used if this plugin has processed the message and does not
       intend to relay the message.
 
-      [`Reject reply] drops the message and returns an error reply to the client. It
+      [Error err] drops the message and returns an error reply to the client. It
       should be used when the plugin does not wish to process this message.
 
-      [`Send envelopes_to_relay] spools the given envelopes for further sending and gives
+      [Ok (`Send envelopes_to_relay)] spools the given envelopes for further sending and gives
       a successful response, once these messages have been safely spooled.
 
-      [`Quarantine (envelopes_to_quarantine, reply, reason)] saves the given messages to a
+      [Ok (`Quarantine (envelopes_to_quarantine, reply, reason))] saves the given messages to a
       directory for manual inspection and passes through the given reply to the client.
       [reason] is used only internally to tell us what check failed. *)
   val process
@@ -134,10 +124,9 @@ module type Envelope = sig
     -> t
     -> Email.t
     -> [ `Consume of string
-       | `Reject of Smtp_reply.t
        | `Send of Envelope.With_next_hop.t list
        | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * Quarantine_reason.t
-       ] Deferred.t
+       ] Smtp_monad.t
 
 end
 
@@ -166,7 +155,7 @@ module Simple : sig
     (* be polymorphic in [t] when possible *)
     val greeting : 't -> string
     val extensions : 't -> 't Extension.t list
-    val disconnect : log:Log.t -> 't -> unit Deferred.t
+    val disconnect : log:Log.t -> 't -> unit Smtp_monad.t
   end
 
   module Envelope : sig
@@ -186,40 +175,35 @@ module Simple : sig
       -> 'session
       -> Sender.t
       -> Sender_argument.t list
-      -> [ `Continue of t
-         | `Reject of Smtp_reply.t
-         ] Deferred.t
+      -> t Smtp_monad.t
     val rcpt_to
       :  log:Mail_log.t
       -> 'session
       -> t
       -> Email_address.t
-      -> [ `Continue of t
-         | `Reject of Smtp_reply.t
-         ] Deferred.t
+      -> t Smtp_monad.t
     val accept_data
       : log:Mail_log.t
       -> 'session
       -> t
-      -> [ `Continue of t
-         | `Reject of Smtp_reply.t
-         ] Deferred.t
+      -> t Smtp_monad.t
     val process
       : log:Mail_log.t
       -> 'session
       -> t
       -> Email.t
       -> [ `Consume of string
-         | `Reject of Smtp_reply.t
          | `Send of Envelope.With_next_hop.t list
          | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * Quarantine_reason.t
-         ] Deferred.t
+         ] Smtp_monad.t
   end
 
   include S
     with module Session := Session
      and module Envelope := Envelope
 end = struct
+  open Smtp_monad.Let_syntax
+
   module Session = struct
     type t =
       { local         : Address.t
@@ -238,7 +222,7 @@ end = struct
       }
 
     let connect ~log:_ ~local ~remote =
-      return (`Accept { empty with local; remote })
+      return { empty with local; remote }
 
     let greeting _ =
       sprintf "%s ocaml/mailcore 0.2 %s"
@@ -248,7 +232,7 @@ end = struct
     let extensions _ = []
 
     let helo ~log:_ session helo =
-      return (`Continue { session with helo = Some helo })
+      return { session with helo = Some helo }
 
     let disconnect ~log:_ _ =
       return ()
@@ -270,16 +254,17 @@ end = struct
       Envelope.create' ~info ~email
 
     let mail_from ~log:_ _session sender sender_args =
-      return (`Continue { id = Envelope.Id.create (); sender; sender_args; recipients = [] })
+      return { id = Envelope.Id.create (); sender; sender_args; recipients = [] }
 
     let rcpt_to ~log:_ _session t recipient =
-      return (`Continue { t with recipients = t.recipients @ [recipient] })
+      return { t with recipients = t.recipients @ [recipient] }
 
     let accept_data ~log:_ _session t =
       if List.is_empty t.recipients then
-        return (`Reject (Smtp_reply.bad_sequence_of_commands_503 Smtp_command.Data))
+        Smtp_monad.reject ~here:[%here]
+          (Smtp_reply.bad_sequence_of_commands_503 Smtp_command.Data)
       else
-        return (`Continue t)
+        return t
 
     let process ~log:_ _session t email =
       let envelope = smtp_envelope t email in

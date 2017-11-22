@@ -107,6 +107,44 @@ module Make(Cb : Plugin.S) = struct
     Staged.stage write_reply
   ;;
 
+  let on_plugin_error_no_reply
+        ~log ?(tags=[]) ?reply
+        ~here ~flows ~component ~plugin err =
+    let level, error = match err with
+      | `Reject err -> `Info,  Reject_or_error.error err
+      | `Exn    exn -> `Error, Error.of_exn          exn
+    in
+    let tags = ("plugin", plugin) :: tags in
+    Log.message log ~level
+      (lazy (Mail_log.Message.of_error error ~here ~flows ~component ~tags ?reply))
+  ;;
+
+  let on_plugin_error
+        ~log ?tags ~write_reply
+        ?(default_reject=Smtp_reply.service_unavailable_421)
+        ~here ~flows ~component ~plugin err =
+    let reject = match err with
+      | `Reject err ->
+        Option.value (Reject_or_error.reject err) ~default:default_reject
+      | `Exn _ ->
+        default_reject
+    in
+    on_plugin_error_no_reply
+      ~log ?tags ~reply:reject
+      ~here ~flows ~component ~plugin err;
+    write_reply ~here ~flows ~component reject
+  ;;
+
+  let protect_plugin ~log ~here ~flows ~component ~plugin f =
+    let component = component @ ["PLUGIN"; plugin] in
+    Monitor.try_with
+      (fun () -> f ~log:(Log.with_flow_and_component log ~flows ~component))
+    >>| function
+    | Ok    (Ok res)    -> Ok    res
+    | Ok    (Error err) -> Error (`Reject (Reject_or_error.tag ~here ~tag:plugin err))
+    | Error exn         -> Error (`Exn exn)
+  ;;
+
   let extensions (type session) ~tls_options (plugins:session Plugin.Extension.t list) =
     let auth_extensions =
       List.filter_map plugins ~f:(function
@@ -165,9 +203,6 @@ module Make(Cb : Plugin.S) = struct
     in
     let service_ready ~here ~flows ~component msg =
       write_reply ~here ~flows ~component (Smtp_reply.service_ready_220 msg)
-    in
-    let service_unavailable ~here ~flows ~component () =
-      write_reply ~here ~flows ~component Smtp_reply.service_unavailable_421
     in
     let start_mail_input ~here ~flows ~component () =
       write_reply ~here ~flows ~component Smtp_reply.start_mail_input_354
@@ -278,16 +313,12 @@ module Make(Cb : Plugin.S) = struct
           top ~session )
     and top_helo ~flows ~extended ~session helo =
       let component = ["smtp-server"; "session"; "helo"] in
-      Deferred.Or_error.try_with (fun () ->
-        Cb.Session.helo
-          ~log:(Log.with_flow_and_component log
-                  ~flows:session_flows
-                  ~component:(component @ ["plugin"; "Session.helo"]))
-          session
-          helo
-      )
+      let plugin = "Session.helo" in
+      let tags = ["extended", Bool.to_string extended; "helo", helo] in
+      protect_plugin ~here:[%here] ~log ~component ~flows ~plugin (fun ~log ->
+        Cb.Session.helo ~log session helo)
       >>= function
-      | Ok (`Continue session) ->
+      | Ok session ->
         let extensions = extensions session in
         let greeting, extra =
           if extended then
@@ -301,46 +332,13 @@ module Make(Cb : Plugin.S) = struct
                               ~here:[%here]
                               ~flows
                               ~component
-                              ~tags:["extended", Bool.to_string extended; "helo", helo]
+                              ~tags
                               "session_helo:accepted"));
         top ~session
-      | Ok (`Deny reply) ->
-        Log.info log (lazy (Log.Message.create
-                              ~here:[%here]
-                              ~flows
-                              ~component
-                              ~reply
-                              ~tags:["extended", Bool.to_string extended; "helo", helo]
-                              "session_helo:deny"));
-        write_reply ~here:[%here] ~flows ~component reply
-        >>= fun () ->
-        top ~session
-      | Ok (`Disconnect None) ->
-        Log.info log (lazy (Log.Message.create
-                              ~here:[%here]
-                              ~flows
-                              ~component
-                              ~tags:["extended", Bool.to_string extended; "helo", helo]
-                              "session_helo:disconnect"));
-        return ()
-      | Ok (`Disconnect (Some reply)) ->
-        Log.info log (lazy (Log.Message.create
-                              ~here:[%here]
-                              ~flows
-                              ~component
-                              ~reply
-                              ~tags:["extended", Bool.to_string extended; "helo", helo]
-                              "session_helo:disconnect"));
-        write_reply ~here:[%here] ~flows ~component reply
       | Error err ->
-        Log.error log
-          (lazy (Log.Message.of_error
-                   ~here:[%here]
-                   ~flows
-                   ~component:(component @ ["plugin"; "Session.helo"])
-                   ~tags:["extended", Bool.to_string extended; "helo", helo]
-                   (Error.tag err ~tag:"session_helo")));
-        service_unavailable ~here:[%here] ~flows ~component ()
+        on_plugin_error
+          ~log ~tags ~write_reply
+          ~here:[%here] ~flows ~component ~plugin err
     and top_start_tls ~flows ~session tls_options (module Tls_cb : Plugin.Start_tls with type session=Cb.Session.t) =
       let component = ["smtp-server"; "session"; "starttls"] in
       service_ready ~here:[%here] ~flows ~component "Begin TLS transition"
@@ -401,26 +399,28 @@ module Make(Cb : Plugin.S) = struct
           >>= fun () ->
           Reader.close new_reader
         in
+        let plugin = "Tls.upgrade_to_tls" in
         Monitor.protect (fun () ->
-          Tls_cb.upgrade_to_tls
-            ~log:(Log.with_flow_and_component log
-                    ~flows
-                    ~component:(component @ ["plugin"; "Tls.upgrade_to_tls"]))
-            session
-          >>= fun session ->
-          session_loop
-            ~log
-            ~tls_options:(Some tls_options)
-            ~max_message_size
-            ~malformed_emails
-            ~server_events
-            ~send_envelope
-            ~quarantine
-            ~session_flows
-            ~reader:new_reader
-            ~raw_writer:new_writer
-            session)
-          ~finally:teardown
+          protect_plugin ~here:[%here] ~log ~flows ~component ~plugin
+            (fun ~log -> Tls_cb.upgrade_to_tls ~log session)
+          >>= function
+          | Ok session ->
+            session_loop
+              ~log
+              ~tls_options:(Some tls_options)
+              ~max_message_size
+              ~malformed_emails
+              ~server_events
+              ~send_envelope
+              ~quarantine
+              ~session_flows
+              ~reader:new_reader
+              ~raw_writer:new_writer
+              session
+          | Error err ->
+            on_plugin_error_no_reply ~log ~here:[%here] ~flows ~component ~plugin err;
+            Deferred.unit
+        ) ~finally:teardown
     and top_auth ~flows ~session ~meth ~initial_resp =
       let component = ["smtp-server"; "session"; "auth"] in
       match Cb.Session.extensions session
@@ -445,7 +445,7 @@ module Make(Cb : Plugin.S) = struct
           else match !initial_resp with
             | Some resp ->
               initial_resp := None;
-              Or_error.try_with (fun () -> Base64.decode_exn resp) |> return
+              Smtp_monad.try_with ~here:[%here] (fun () -> return (Base64.decode_exn resp))
             | None ->
               challenge_lock := true;
               write_reply ~here:[%here] ~flows ~component
@@ -453,46 +453,30 @@ module Make(Cb : Plugin.S) = struct
                    (Base64.encode msg))
               >>= fun () ->
               Reader.read_line reader
-              >>| function
-              | `Eof -> Error (Error.of_string "Client disconnected during authentication flow")
+              >>= function
+              | `Eof ->
+                Smtp_monad.error_string ~here:[%here] "Client disconnected during authentication flow"
               | `Ok resp ->
-                let result = Or_error.try_with (fun () -> Base64.decode_exn resp) in
+                Smtp_monad.try_with ~here:[%here] (fun () -> return (Base64.decode_exn resp))
+                >>| fun result ->
                 (* Deliberately only release the lock on success.
                    This ensures that calls after failure will continue to fail. *)
                 challenge_lock := Result.is_error result;
                 result
         in
-        Deferred.Or_error.try_with (fun () ->
-          Auth.negotiate
-            ~log:(Log.with_flow_and_component log
-                    ~flows
-                    ~component:(component @ ["plugin"; "Auth.authenticate"]))
-            session ~send_challenge_and_expect_response)
+        let plugin = "Auth.negotiate" in
+        protect_plugin ~log ~here:[%here] ~flows ~component ~plugin (fun ~log ->
+          Auth.negotiate ~log session ~send_challenge_and_expect_response)
         >>| (fun res -> auth_finished := true; res)
         >>= function
         | Error err ->
-          Log.error log (lazy (Log.Message.of_error
-                                 ~here:[%here]
-                                 ~flows
-                                 ~component:(component @ ["plugin"; "Auth.authenticate"])
-                                 err));
-          service_unavailable ~here:[%here] ~flows ~component ()
-        | Ok (Error err) ->
-          Log.error ~dont_send_to_monitor:() log
-            (lazy (Log.Message.of_error
-                     ~here:[%here]
-                     ~flows
-                     ~component:(component @ ["plugin"; "Auth.authenticate"])
-                     err));
-          write_reply ~here:[%here] ~flows ~component
-            Smtp_reply.authentication_credentials_invalid_535
+          on_plugin_error
+            ~log ~write_reply
+            ~default_reject:Smtp_reply.authentication_credentials_invalid_535
+            ~here:[%here] ~flows ~component ~plugin err
           >>= fun () ->
           top ~session
-        | Ok (Ok (`Deny reply)) ->
-          write_reply ~here:[%here] ~flows ~component reply
-          >>= fun () ->
-          top ~session
-        | Ok (Ok (`Allow session)) ->
+        | Ok session ->
           write_reply ~here:[%here] ~flows ~component
             Smtp_reply.authentication_successful_235
           >>= fun () ->
@@ -513,35 +497,18 @@ module Make(Cb : Plugin.S) = struct
         >>= fun () ->
         top ~session
       | Ok (sender,sender_args) ->
-        Deferred.Or_error.try_with (fun () ->
-          Cb.Envelope.mail_from session sender sender_args
-            ~log:(Log.with_flow_and_component log
-                    ~flows
-                    ~component:(component @ ["plugin"; "Envelope.mail_from"])))
+        let plugin = "Envelope.mail_from" in
+        protect_plugin ~log ~here:[%here] ~flows ~component ~plugin
+          (fun ~log -> Cb.Envelope.mail_from ~log session sender sender_args)
         >>= function
-        | Ok (`Reject reject) ->
-          Log.info log (lazy (Log.Message.create
-                                ~here:[%here]
-                                ~flows
-                                ~component
-                                ~sender:(`String sender_str)
-                                ~reply:reject
-                                "mail_from:REJECTED"));
-          write_reply ~here:[%here] ~flows ~component reject
-          >>= fun () ->
-          top ~session
         | Error err ->
-          Log.error log
-            (lazy (Log.Message.of_error
-                     ~here:[%here]
-                     ~flows
-                     ~component:(component @ ["plugin"; "Envelope.mail_from"])
-                     ~sender:(`String sender_str)
-                     (Error.tag err ~tag:"mail_from")));
-          service_unavailable ~here:[%here] ~flows ~component ()
+          let tags = [Mail_log_tags.sender, sender_str] in
+          on_plugin_error
+            ~log ~tags ~write_reply
+            ~here:[%here] ~flows ~component ~plugin err
           >>= fun () ->
           top ~session
-        | Ok (`Continue data) ->
+        | Ok data ->
           Log.info log (lazy (Log.Message.create
                                 ~here:[%here]
                                 ~flows
@@ -591,35 +558,18 @@ module Make(Cb : Plugin.S) = struct
         >>= fun () ->
         envelope ~session ~flows data
       | Ok recipient ->
-        Deferred.Or_error.try_with (fun () ->
-          Cb.Envelope.rcpt_to session data recipient
-            ~log:(Log.with_flow_and_component log
-                    ~flows
-                    ~component:(component @ ["plugin"; "Envelope.rcpt_to"])))
+        let plugin = "Envelope.rcpt_to" in
+        protect_plugin ~log ~here:[%here] ~flows ~component ~plugin
+          (fun ~log -> Cb.Envelope.rcpt_to ~log session data recipient)
         >>= function
-        | Ok (`Reject reject) ->
-          Log.info log (lazy (Log.Message.create
-                                ~here:[%here]
-                                ~flows
-                                ~component
-                                ~recipients:[`Email recipient]
-                                ~reply:reject
-                                "rcpt_to:REJECTED"));
-          write_reply ~here:[%here] ~flows ~component reject
-          >>= fun () ->
-          envelope ~session ~flows data
         | Error err ->
-          Log.error log
-            (lazy (Log.Message.of_error
-                     ~here:[%here]
-                     ~flows
-                     ~component:(component @ ["plugin"; "Envelope.rcpt_to"])
-                     ~recipients:[`Email recipient]
-                     (Error.tag err ~tag:"rcpt_to")));
-          service_unavailable ~here:[%here] ~flows ~component ()
+          let tags = [Mail_log_tags.recipient, recipient_str] in
+          on_plugin_error
+            ~log ~tags ~write_reply
+            ~here:[%here] ~flows ~component ~plugin err
           >>= fun () ->
           envelope ~session ~flows data
-        | Ok (`Continue data) ->
+        | Ok data ->
           Log.info log (lazy (Log.Message.create
                                 ~here:[%here]
                                 ~flows
@@ -632,33 +582,17 @@ module Make(Cb : Plugin.S) = struct
           envelope ~session ~flows data
     and envelope_data ~session ~flows data =
       let component = ["smtp-server"; "session"; "envelope"; "data"] in
-      Deferred.Or_error.try_with (fun () ->
-        Cb.Envelope.accept_data session data
-          ~log:(Log.with_flow_and_component log
-                  ~flows
-                  ~component:(component @ ["plugin"; "Envelope.accept_data"])))
+      let plugin = "Envelope.accept_data" in
+      protect_plugin ~here:[%here] ~log ~flows ~component ~plugin
+        (fun ~log -> Cb.Envelope.accept_data ~log session data)
       >>= function
-      | Ok (`Reject reject) ->
-        Log.info log (lazy (Log.Message.create
-                              ~here:[%here]
-                              ~flows
-                              ~component:(component @ ["plugin"; "Envelope.accept_data"])
-                              ~reply:reject
-                              "Envelope.accept_data:REJECTED"));
-        write_reply ~here:[%here] ~flows ~component reject
-        >>= fun () ->
-        envelope ~session ~flows data
       | Error err ->
-        Log.error log
-          (lazy (Log.Message.of_error
-                   ~here:[%here]
-                   ~flows
-                   ~component:(component @ ["plugin"; "Envelope.accept_data"])
-                   (Error.tag err ~tag:"process_envelope")));
-        service_unavailable ~here:[%here] ~flows ~component ()
+        on_plugin_error
+          ~log ~write_reply
+          ~here:[%here] ~flows ~component ~plugin err
         >>= fun () ->
         envelope ~session ~flows data
-      | Ok (`Continue data) ->
+      | Ok data ->
         start_mail_input ~here:[%here] ~flows ~component ()
         >>= fun () ->
         read_data ~max_size:max_message_size reader
@@ -711,30 +645,14 @@ module Make(Cb : Plugin.S) = struct
                                   ~session_marker:`Data
                                   "DATA"));
             let component = ["smtp-server"; "session"; "envelope"; "routing"] in
-            Deferred.Or_error.try_with (fun () ->
-              Cb.Envelope.process session data email
-                ~log:(Log.with_flow_and_component log
-                        ~flows
-                        ~component:(component @ ["plugin"; "Envelope.data"])))
+            let plugin = "Envelope.process" in
+            protect_plugin ~here:[%here] ~log ~flows ~component ~plugin
+              (fun ~log -> Cb.Envelope.process ~log session data email)
             >>= function
-            | Ok (`Reject reject) ->
-              Log.info log (lazy (Log.Message.create
-                                    ~here:[%here]
-                                    ~flows
-                                    ~component
-                                    ~reply:reject
-                                    "process_envelope:REJECTED"));
-              write_reply ~here:[%here] ~flows ~component reject
-              >>= fun () ->
-              top ~session
             | Error err ->
-              Log.error log
-                (lazy (Log.Message.of_error
-                         ~here:[%here]
-                         ~flows
-                         ~component:(component @ ["plugin"; "Envelope.data"])
-                         (Error.tag err ~tag:"process_envelope")));
-              service_unavailable ~here:[%here] ~flows ~component ()
+              on_plugin_error
+                ~log ~write_reply
+                ~here:[%here] ~flows ~component ~plugin err
               >>= fun () ->
               top ~session
             | Ok (`Consume ok) ->
@@ -849,8 +767,9 @@ module Make(Cb : Plugin.S) = struct
         ~local_address
         ~remote_address
         () =
-    let write_reply' = write_reply_impl ~log ?raw_writer ?write_reply () |> Staged.unstage in
+    let write_reply' = Staged.unstage (write_reply_impl ~log ?raw_writer ?write_reply ()) in
     let component = [ "smtp-server"; "session"; "init" ] in
+    let plugin = "Session.connect" in
     let flows = session_flows in
     Log.info log (lazy (Log.Message.create
                           ~here:[%here]
@@ -860,38 +779,15 @@ module Make(Cb : Plugin.S) = struct
                           ~remote_address
                           ~session_marker:`Connected
                           "CONNECTED"));
-    Deferred.Or_error.try_with (fun () ->
-      Cb.Session.connect
-        ~log:(Log.with_flow_and_component log
-                ~flows
-                ~component:(component @ ["plugin"; "Session.connect"]))
-        ~local:local_address
-        ~remote:remote_address)
+    protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
+      Cb.Session.connect ~log ~local:local_address ~remote:remote_address)
     >>= function
-    | Ok (`Disconnect None) ->
-      Log.info log (lazy (Log.Message.create
-                            ~here:[%here]
-                            ~flows
-                            ~component
-                            "Session.connect:disconnect"));
-      return ()
-    | Ok (`Disconnect (Some reply)) ->
-      Log.info log (lazy (Log.Message.create
-                            ~here:[%here]
-                            ~flows
-                            ~component
-                            ~reply
-                            "Session.connect:disconnect"));
-      write_reply' ~here:[%here] ~flows ~component reply
     | Error err ->
-      Log.info log (lazy (Log.Message.of_error
-                            ~here:[%here]
-                            ~flows
-                            ~component
-                            (Error.tag err ~tag:"Session.connect")));
-      write_reply' ~here:[%here] ~flows ~component
-        Smtp_reply.service_unavailable_421
-    | Ok (`Accept session) ->
+      on_plugin_error
+        ~log ~write_reply:write_reply'
+        ~here:[%here] ~flows ~component ~plugin err
+    | Ok session ->
+      let plugin = "Emulated_for_test.Tls.upgrade_to_tls" in
       begin if emulate_tls_for_test then (
         match
           List.find_map (Cb.Session.extensions session) ~f:(function
@@ -899,27 +795,19 @@ module Make(Cb : Plugin.S) = struct
             | _ -> None)
         with
         | None ->
-          Deferred.Or_error.errorf
+          return (Error (`Exn (Failure (
             "Session initiated with claim of pre-established TLS \
-             but Plugin does not provide TLS callback"
+             but Plugin does not provide TLS callback"))))
         | Some (module Tls : Plugin.Start_tls with type session = Cb.Session.t) ->
-          Deferred.Or_error.try_with (fun () ->
-            Tls.upgrade_to_tls
-              ~log:(Log.with_flow_and_component log
-                      ~flows
-                      ~component:(component @ ["plugin"; "Tls.upgrade_to_tls"]))
-              session))
-        else Deferred.Or_error.return session
+          protect_plugin ~here:[%here] ~log ~flows ~component ~plugin
+            (fun ~log -> Tls.upgrade_to_tls ~log session))
+        else return (Ok session)
       end
       >>= function
       | Error err ->
-        Log.info log (lazy (Log.Message.of_error
-                              ~here:[%here]
-                              ~flows
-                              ~component
-                              (Error.tag err ~tag:"Session.connect")));
-        write_reply' ~here:[%here] ~flows ~component
-          Smtp_reply.service_unavailable_421
+        on_plugin_error
+          ~log ~write_reply:write_reply'
+          ~here:[%here] ~flows ~component ~plugin err
       | Ok session ->
         let greeting = Cb.Session.greeting session in
         Log.info log (lazy (Log.Message.create
@@ -946,7 +834,13 @@ module Make(Cb : Plugin.S) = struct
             ~session_flows
             session)
           ~finally:(fun () ->
-            Cb.Session.disconnect ~log session)
+            let plugin = "Session.disconnect" in
+            protect_plugin ~here:[%here] ~log ~flows ~component ~plugin
+              (fun ~log -> Cb.Session.disconnect ~log session)
+            >>| function
+            | Ok () -> ()
+            | Error err ->
+              on_plugin_error_no_reply ~log ~here:[%here] ~flows ~component ~plugin err)
   ;;
 
   type server = Inet of Tcp.Server.inet | Unix of Tcp.Server.unix
@@ -1110,8 +1004,8 @@ let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
           let process ~log:_ _session t email =
             let envelope = smtp_envelope t email in
             Pipe.write out (Ok envelope)
-            >>| fun () ->
-            `Consume "bsmtp"
+            >>= fun () ->
+            Smtp_monad.return (`Consume "bsmtp")
         end
         let rpcs = Plugin.Simple.rpcs
       end)

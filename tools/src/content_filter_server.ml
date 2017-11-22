@@ -33,6 +33,7 @@ module Id = struct
 end
 
 module Server = Smtp_server.Make(struct
+    open Smtp_monad.Let_syntax
     module Session = Smtp_server.Plugin.Simple.Session
     module Envelope = struct
       include Smtp_server.Plugin.Simple.Envelope

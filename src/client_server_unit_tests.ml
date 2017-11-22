@@ -39,6 +39,7 @@ let%test_module _ =
       let envelope = envelope message in
       let module Server =
         Server.Make(struct
+          open Smtp_monad.Let_syntax
           module Session = struct
             include Server.Plugin.Simple.Session
             let extensions _ =

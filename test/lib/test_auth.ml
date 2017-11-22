@@ -8,6 +8,7 @@ let valid_password = "password"
 
 let plugin ~login ~plain =
   (module struct
+    open Smtp_monad.Let_syntax
     let rpcs () = []
 
     module Session = struct
@@ -35,11 +36,11 @@ let plugin ~login ~plain =
                             t
                             ~username
                             ~password =
-                        let open Deferred.Or_error.Let_syntax in
                         if check username password then
-                          return (`Allow { t with authenticated = Some username })
+                          return { t with authenticated = Some username }
                         else
-                          return (`Deny Smtp_reply.authentication_credentials_invalid_535)
+                          Smtp_monad.reject ~here:[%here]
+                            Smtp_reply.authentication_credentials_invalid_535
                     end)))
           ; Option.some_if login
               (Smtp_server.Plugin.Extension.Auth
@@ -50,11 +51,11 @@ let plugin ~login ~plain =
                             t
                             ~username
                             ~password =
-                        let open Deferred.Or_error.Let_syntax in
                         if check username password then
-                          return (`Allow { t with authenticated = Some username })
+                          return { t with authenticated = Some username }
                         else
-                          return (`Deny Smtp_reply.authentication_credentials_invalid_535)
+                          Smtp_monad.reject ~here:[%here]
+                            Smtp_reply.authentication_credentials_invalid_535
                     end)))
           ]
     end
@@ -63,7 +64,7 @@ let plugin ~login ~plain =
       include Smtp_server.Plugin.Simple.Envelope
       let mail_from ~log session sender args =
         match session.Session.authenticated with
-        | None -> return (`Reject Smtp_reply.authentication_required_530)
+        | None -> Smtp_monad.reject ~here:[%here] Smtp_reply.authentication_required_530
         | Some _ -> mail_from ~log session sender args
     end
   end : Smtp_server.Plugin.S)

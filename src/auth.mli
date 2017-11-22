@@ -21,11 +21,8 @@ module type Server = sig
   val negotiate
     :  log:Mail_log.t
     -> session
-    -> send_challenge_and_expect_response:
-         (string -> string Deferred.Or_error.t)
-    -> [ `Allow of session
-       | `Deny of Smtp_reply.t
-       ] Deferred.Or_error.t
+    -> send_challenge_and_expect_response:(string -> string Smtp_monad.t)
+    -> session Smtp_monad.t
 end
 
 
@@ -66,9 +63,7 @@ module Login : sig
         -> t
         -> username:string
         -> password:string
-        -> [ `Allow of t
-           | `Deny of Smtp_reply.t
-           ] Deferred.Or_error.t
+        -> t Smtp_monad.t
     end) : Server with type session=Session.t
 
   module Client(C : sig
@@ -86,9 +81,7 @@ module Plain : sig
         -> t
         -> username:string
         -> password:string
-        -> [ `Allow of t
-           | `Deny of Smtp_reply.t
-           ] Deferred.Or_error.t
+        -> t Smtp_monad.t
     end) : Server with type session=Session.t
   module Client(C : sig
       val on_behalf_of : string option

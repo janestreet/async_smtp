@@ -21,6 +21,7 @@ module Smtp_envelope_with_next_hop = Envelope.With_next_hop
 module Smtp_events                 = Smtp_events
 module Smtp_mail_log               = Mail_log
 module Smtp_mail_log_tags          = Mail_log_tags
+module Smtp_monad                  = Smtp_monad
 module Smtp_quarantine_reason      = Quarantine_reason
 module Smtp_reply                  = Smtp_reply
 module Smtp_rpc_intf               = Rpc_intf
