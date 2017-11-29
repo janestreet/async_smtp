@@ -1,5 +1,6 @@
 open Core
 open Async
+open Async_smtp_types
 
 module Event = struct
   module Envelope_received = struct
@@ -17,8 +18,8 @@ end
 type t = { event_stream : (Event.t -> unit) Bus.Read_write.t }
 
 let envelope_received t envelope =
-  let sender = Envelope.string_sender envelope in
-  let recipients = Envelope.string_recipients envelope in
+  let sender = Smtp_envelope.string_sender envelope in
+  let recipients = Smtp_envelope.string_recipients envelope in
   let event =
     Time.now (), `Envelope_received { Event.Envelope_received. sender; recipients }
   in

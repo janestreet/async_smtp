@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 module Mail_fingerprint : sig
   type t =
@@ -128,19 +128,19 @@ module Message : sig
     =  flows:Flows.t
     -> component:Component.t
     -> here:Source_code_position.t
-    -> ?local_address:Address.t
-    -> ?remote_address:Address.t
+    -> ?local_address:Smtp_socket_address.t
+    -> ?remote_address:Smtp_socket_address.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
-              | `Envelope of Envelope.t
+              | `Envelope of Smtp_envelope.t
               ]
     -> ?message_size:int
     -> ?rfc822_id:string
-    -> ?local_id:Envelope.Id.t
-    -> ?sender:[ `Sender of Sender.t | `String of string ]
+    -> ?local_id:Smtp_envelope.Id.t
+    -> ?sender:[ `Sender of Smtp_envelope.Sender.t | `String of string ]
     -> ?recipients:[ `Email of Email_address.t | `String of string ] list
     -> ?spool_id:string
-    -> ?dest:Address.t
+    -> ?dest:Smtp_socket_address.t
     -> ?command:Smtp_command.t
     -> ?reply:Smtp_reply.t
     -> ?session_marker:Session_marker.t
@@ -182,13 +182,13 @@ module Message : sig
   (* tag 'rfc822-id' *)
   val rfc822_id : t -> string option
   (* tag 'local-id' *)
-  val local_id : t -> Envelope.Id.t option
+  val local_id : t -> Smtp_envelope.Id.t option
   (* tag 'spool-id' *)
   val spool_id : t -> string option
   (* tag 'dest' *)
-  val dest : t -> Address.t option
+  val dest : t -> Smtp_socket_address.t option
   (* tag 'sender'. [`String _] if the value doesn't parse *)
-  val sender : t -> [ `Sender of Sender.t | `String of string ] option
+  val sender : t -> [ `Sender of Smtp_envelope.Sender.t | `String of string ] option
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
      nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
   *)
@@ -196,9 +196,9 @@ module Message : sig
   (* tag 'email-fingerprint' *)
   val email : t -> Mail_fingerprint.t option
   (* tag 'local-address' *)
-  val local_address : t -> Address.t option
+  val local_address : t -> Smtp_socket_address.t option
   (* tag 'remote-address' *)
-  val remote_address : t -> Address.t option
+  val remote_address : t -> Smtp_socket_address.t option
   (* tag 'command' *)
   val command : t -> Smtp_command.t option
   (* tag 'reply' *)

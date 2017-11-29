@@ -25,7 +25,7 @@
 
     On failure, the [last_relay_attempt_date] is immediately updated in the on disk spool
     file (again using tmp to make the change as atomic as possible). If the message has any
-    remaining retry intervals in [envelope_with_next_hop.retry_intervals] then async_smtp
+    remaining retry intervals in [envelope_routed.retry_intervals] then async_smtp
     schedules a retry for after the interval has elapsed (rewriting the spooled message
     with the interval popped off the list of remaining retry intervals only after the
     interval has elapsed). If there are no remaining retry intervals then the message is
@@ -47,7 +47,7 @@
 *)
 open! Core
 open! Async
-open Email_message
+open Async_smtp_types
 
 module Message_id = Message.Id
 
@@ -63,14 +63,14 @@ val create
   -> t Deferred.Or_error.t
 
 (** Immediately write the message to disk and queue it for sending. The
-    [Envelope.With_next_hop.t list] represents the different "sections" of one
+    [Envelope_routed.t list] represents the different "sections" of one
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
   -> flows:Mail_log.Flows.t
-  -> original_msg:Envelope.t
-  -> Envelope.With_next_hop.t list
-  -> Envelope.Id.t Deferred.Or_error.t
+  -> original_msg:Smtp_envelope.t
+  -> Smtp_envelope.Routed.t list
+  -> Smtp_envelope.Id.t Deferred.Or_error.t
 
 (* Move the message into a special quarantine directory where it can be manually
    inspected and optionally manually injected back into the spool *)
@@ -78,8 +78,8 @@ val quarantine
   :  t
   -> reason: Quarantine_reason.t
   -> flows:Mail_log.Flows.t
-  -> original_msg:Envelope.t
-  -> Envelope.With_next_hop.t list
+  -> original_msg:Smtp_envelope.t
+  -> Smtp_envelope.Routed.t list
   -> unit Deferred.Or_error.t
 
 (** [kill_and_flush ~timeout t] makes sure no new delivery sessions are being
@@ -105,7 +105,7 @@ module Send_info : sig
 end
 
 val send
-  :  ?retry_intervals : Retry_interval.t list
+  :  ?retry_intervals : Smtp_envelope.Retry_interval.t list
   -> t
   -> Send_info.t
   -> unit Deferred.Or_error.t
@@ -138,8 +138,8 @@ module Spooled_message_info : sig
   val id                 : t -> Message_id.t
   val spool_date         : t -> Time.t
   val last_relay_attempt : t -> (Time.t * Error.t) option
-  val parent_id          : t -> Envelope.Id.t
-  val envelope_info      : t -> Envelope.Info.t
+  val parent_id          : t -> Smtp_envelope.Id.t
+  val envelope_info      : t -> Smtp_envelope.Info.t
   val status
     : t
     -> [ `Send_now
@@ -157,7 +157,7 @@ module Spooled_message_info : sig
      the rpc call, and we don't want the result to contain sensitive
      information.  *)
   val file_size          : t -> Byte_units.t option
-  val envelope           : t -> Envelope.t option
+  val envelope           : t -> Smtp_envelope.t option
 end
 
 module Status : sig
@@ -191,7 +191,7 @@ module Event : sig
     | `Unfrozen
     | `Recovered of [`From_quarantined | `From_removed]
     | `Quarantined of [`Reason of Quarantine_reason.t]
-    ] * Message_id.t * Envelope.Info.t [@@deriving sexp_of]
+    ] * Message_id.t * Smtp_envelope.Info.t [@@deriving sexp_of]
 
   type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of]
 

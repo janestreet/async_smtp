@@ -1,7 +1,6 @@
 open Core
 open Async
-open Email_message
-
+open Async_smtp_types
 
 module Envelope_status = Client.Envelope_status
 
@@ -16,7 +15,7 @@ module Expert = struct
   include Email.Simple.Expert
 
   let send' ?(log=Lazy.force client_log) ?credentials ?(server=default_server) ~sender ?sender_args ~recipients email =
-    let message = Envelope.create ~sender ?sender_args ~recipients ~rejected_recipients:[] ~email () in
+    let message = Smtp_envelope.create ~sender ?sender_args ~recipients ~rejected_recipients:[] ~email () in
     Client.Tcp.with_ ?credentials server ~log ~f:(fun client ->
       Client.send_envelope client ~log message)
 

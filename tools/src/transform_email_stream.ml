@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 open Async_smtp
 
 (* We use this tool for testing Async_smtp.Server, but we use the server itself
@@ -9,7 +9,7 @@ open Async_smtp
    output without any sorting or filtering has no effect. *)
 
 module Envelope = Smtp_envelope
-module Sender_address = Smtp_sender
+module Sender_address = Envelope.Sender
 
 module Crypto = Crypto.Cryptokit
 module Hash = Crypto.Hash

@@ -138,7 +138,7 @@ let create_inbound_envelope t message =
   let inbound_envelope = Inbound_envelope.create id in
   let sender = Message.sender message |> Option.map ~f:(function
     | `String str -> str
-    | `Sender sender -> Smtp_sender.to_string sender)
+    | `Sender sender -> Smtp_envelope.Sender.to_string sender)
   in
   inbound_envelope.Inbound_envelope.mail_from <- sender;
   t.inbound_envelopes <- inbound_envelope :: t.inbound_envelopes

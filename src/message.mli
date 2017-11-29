@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Email_message
+open Async_smtp_types
 
 module Id : sig
   type t [@@deriving sexp_of]
@@ -57,13 +57,13 @@ include Hashable.S_plain with type t := t
 
 val spool_date         : t -> Time.t
 val last_relay_attempt : t -> (Time.t * Error.t) option
-val parent_id          : t -> Envelope.Id.t
+val parent_id          : t -> Smtp_envelope.Id.t
 val id                 : t -> Id.t
 val flows              : t -> Mail_log.Flows.t
 val time_on_spool      : t -> Time.Span.t
 val status             : t -> Status.t
-val next_hop_choices   : t -> Address.t list
-val envelope_info      : t -> Envelope.Info.t
+val next_hop_choices   : t -> Smtp_socket_address.t list
+val envelope_info      : t -> Smtp_envelope.Info.t
 
 val size_of_file       : t -> Byte_units.t Or_error.t Deferred.t
 
@@ -72,13 +72,13 @@ val create
   :  On_disk_spool.t
   -> log:Mail_log.t
   -> initial_status:Status.t (* should usually be [`Send_now]*)
-  -> Envelope.With_next_hop.t
+  -> Smtp_envelope.Routed.t
   -> flows:Mail_log.Flows.t
-  -> original_msg : Envelope.t
+  -> original_msg : Smtp_envelope.t
   -> t Or_error.t Deferred.t
 
 val load : On_disk_spool.Entry.t -> t Or_error.t Deferred.t
-val load_with_envelope : On_disk_spool.Entry.t -> (t * Envelope.t) Or_error.t Deferred.t
+val load_with_envelope : On_disk_spool.Entry.t -> (t * Smtp_envelope.t) Or_error.t Deferred.t
 
 (* It is an error to call [send] on a message that is currently being sent or
    for which the call previously returned [`Done]. *)
@@ -95,7 +95,7 @@ val freeze
 (* Change a message's status to [`Send_now].
    [retry_intervals] are added in front of the existing ones. *)
 val mark_for_send_now
-  :  retry_intervals : Retry_interval.t list
+  :  retry_intervals : Smtp_envelope.Retry_interval.t list
   -> t
   -> log:Mail_log.t
   -> unit Or_error.t Deferred.t

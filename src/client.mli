@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Email_message
+open Async_smtp_types
 
 (** SMTP client API. Includes TLS support: http://tools.ietf.org/html/rfc3207
 
@@ -25,8 +25,11 @@ module Peer_info : sig
   type t
 
   val greeting : t -> string option
-  val hello    : t -> [ `Simple of string | `Extended of string * Smtp_extension.t list ] option
-
+  val hello
+    :  t
+    -> [ `Simple of string
+       | `Extended of string * Smtp_extension.t list
+       ] option
   val supports_extension : t -> Smtp_extension.t -> bool
 end
 
@@ -60,7 +63,7 @@ val send_envelope
   -> log:Mail_log.t
   -> ?flows:Mail_log.Flows.t
   -> ?component:Mail_log.Component.t
-  -> Envelope.t
+  -> Smtp_envelope.t
   -> Envelope_status.t Deferred.Or_error.t
 
 (** Standard SMTP over tcp *)
@@ -71,7 +74,7 @@ module Tcp : sig
        -> log:Mail_log.t
        -> ?flows:Mail_log.Flows.t
        -> ?component:Mail_log.Component.t
-       -> Address.t
+       -> Smtp_socket_address.t
        -> f:(t -> 'a Deferred.Or_error.t)
        -> 'a Deferred.Or_error.t
       ) Tcp.with_connect_options
@@ -85,7 +88,7 @@ module For_test : sig
     -> ?flows:Mail_log.Flows.t
     -> ?component:Mail_log.Component.t
     -> ?emulate_tls:bool
-    -> dest:Address.t
+    -> dest:Smtp_socket_address.t
     -> Reader.t
     -> Writer.t
     -> f:(t -> 'a Deferred.Or_error.t)
@@ -100,6 +103,6 @@ module Bsmtp : sig
     -> ?flows:Mail_log.Flows.t
     -> ?component:Mail_log.Component.t
     -> Writer.t
-    -> Envelope.t Pipe.Reader.t
+    -> Smtp_envelope.t Pipe.Reader.t
     -> unit Deferred.Or_error.t
 end

@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 let%test_module _ =
   (module struct
@@ -10,7 +10,7 @@ let%test_module _ =
       |> Mail_log.adjust_log_levels ~minimum_level:`Error
 
 
-    let sender = Sender.of_string "<>" |> Or_error.ok_exn
+    let sender = Smtp_envelope.Sender.of_string "<>" |> Or_error.ok_exn
     let recipients = [Email_address.of_string_exn "mailcore-unit-test-recipient@example.com"]
 
     let email message =
@@ -22,7 +22,7 @@ let%test_module _ =
            ("Async_smtp unit test:\n  " ^ message))
 
     let envelope message =
-      Envelope.create ~sender ~recipients ~email:(email message) ()
+      Smtp_envelope.create ~sender ~recipients ~email:(email message) ()
 
     let test_client_and_server
           ~tmp_dir ~server_config ~client_config message ~expect_tls =
@@ -83,10 +83,10 @@ let%test_module _ =
           ; begin
             Ivar.read finished
             >>| fun envelope' ->
-            if Envelope.compare envelope envelope' <> 0
+            if Smtp_envelope.compare envelope envelope' <> 0
             then failwithf !"Envelope mangled in transit: \
-                             \ngot: %{sexp:Envelope.t}\
-                             \nexpected: %{sexp:Envelope.t}"
+                             \ngot: %{sexp:Smtp_envelope.t}\
+                             \nexpected: %{sexp:Smtp_envelope.t}"
                    envelope' envelope ()
           end ]
       end

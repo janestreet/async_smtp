@@ -1,5 +1,6 @@
 open Core
 open Async
+open Async_smtp_types
 
 (* Use this module to track any smtp events that are interesting for monitoring *)
 type t
@@ -19,7 +20,7 @@ module Event : sig
   [@@deriving sexp, bin_io]
 end
 
-val envelope_received : t -> Envelope.t -> unit
+val envelope_received : t -> Smtp_envelope.t -> unit
 
 val create : unit -> t
 

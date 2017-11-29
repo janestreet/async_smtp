@@ -13,15 +13,15 @@ let main ~tmp_dir ~iterations ~msg_size =
       (Email.Simple.Content.text (String.init msg_size ~f:(fun _ -> '0')))
   in
   let envelope = Smtp_envelope.create ~sender:`Null ~recipients:[] ~email () in
-  let envelope_with_next_hop =
-    Smtp_envelope_with_next_hop.create ~envelope ~next_hop_choices:[] ~retry_intervals:[]
+  let envelope_routed =
+    Smtp_envelope.Routed.create ~envelope ~next_hop_choices:[] ~retry_intervals:[]
   in
   let spool () =
     Spooled_message.create
       spool_dir
       ~log
       ~initial_status:`Frozen
-      envelope_with_next_hop
+      envelope_routed
       ~flows:Smtp_mail_log.Flows.none
       ~original_msg:envelope
     >>| ok_exn

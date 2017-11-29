@@ -1,18 +1,15 @@
 module Stable0 = struct
   open! Core.Core_stable
 
-  open Email_message.Email_message_stable
-
   module V1_no_sexp = struct
     type t =
       [ `Null
-      | `Email of Email_address.V1.t
+      | `Email of Email_address.Stable.V1.t
       ] [@@deriving bin_io]
   end
 end
 
 open! Core
-open Email_message
 
 open Or_error.Monad_infix
 

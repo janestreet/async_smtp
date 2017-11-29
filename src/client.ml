@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 module Config = Client_config
 
@@ -118,7 +118,9 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                           ~session_marker:`Sending
                           "sending"));
     send_receive t ~log ~flows ~component:(component @ ["sender"]) ~here:[%here]
-      (Smtp_command.Sender (Sender.to_string_with_arguments (Envelope.sender envelope, Envelope.sender_args envelope)))
+      (Smtp_command.Sender
+         (Smtp_envelope.Sender.to_string_with_arguments
+            (Smtp_envelope.sender envelope, Smtp_envelope.sender_args envelope)))
     >>=? begin function
     | `Bsmtp -> return (Ok (Ok ()))
     | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
@@ -133,7 +135,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
     >>=?? fun () ->
     begin
       Deferred.Or_error.List.map ~how:`Sequential
-        (Envelope.recipients envelope)
+        (Smtp_envelope.recipients envelope)
         ~f:(fun recipient ->
           send_receive t ~log ~flows ~component:(component @ ["recipient"]) ~here:[%here]
             (Smtp_command.Recipient (recipient |> Email_address.to_string))
@@ -189,7 +191,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
             Or_error.errorf !"Timeout %{Time.Span} waiting for data to flush" timeout
           | `Result () -> Ok ()
         in
-        Envelope.email envelope
+        Smtp_envelope.email envelope
         |> Email.to_string
         |> String.split ~on:'\n'
         |> Deferred.Or_error.List.iter ~how:`Sequential ~f:(fun line ->
@@ -237,7 +239,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                 ~here:[%here]
                                 ~flows
                                 ~component
-                                ~sender:(`Sender (Envelope.sender envelope))
+                                ~sender:(`Sender (Smtp_envelope.sender envelope))
                                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                                 ?dest:(remote_address t)
                                 ~tags:[ "remote-id",remote_id ]

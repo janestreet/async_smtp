@@ -1,6 +1,6 @@
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 module type Start_tls = sig
   type session
@@ -33,8 +33,8 @@ module type Session = sig
   *)
   val connect
     :  log:Mail_log.t
-    -> local:Address.t
-    -> remote:Address.t
+    -> local:Smtp_socket_address.t
+    -> remote:Smtp_socket_address.t
     -> t Smtp_monad.t
 
   (** [greeting] to send to clients after the connection has been accepted. *)
@@ -66,7 +66,7 @@ module type Envelope = sig
   type session
   type t
 
-  val smtp_envelope_info : t -> Envelope.Info.t
+  val smtp_envelope_info : t -> Smtp_envelope.Info.t
 
   (** [mail_from] is called in the event of a "MAIL FROM" SMTP command.
 
@@ -77,8 +77,8 @@ module type Envelope = sig
   val mail_from
     :  log:Mail_log.t
     -> session
-    -> Sender.t
-    -> Sender_argument.t list
+    -> Smtp_envelope.Sender.t
+    -> Smtp_envelope.Sender_argument.t list
     -> t Smtp_monad.t
 
   (** [rcpt_to] is called in the event of a "RCPT TO" SMTP command.
@@ -124,8 +124,8 @@ module type Envelope = sig
     -> t
     -> Email.t
     -> [ `Consume of string
-       | `Send of Envelope.With_next_hop.t list
-       | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * Quarantine_reason.t
+       | `Send of Smtp_envelope.Routed.t list
+       | `Quarantine of Smtp_envelope.Routed.t list * Smtp_reply.t * Quarantine_reason.t
        ] Smtp_monad.t
 
 end
@@ -142,8 +142,8 @@ end
 module Simple : sig
   module Session : sig
     type t =
-      { local         : Address.t
-      ; remote        : Address.t
+      { local         : Smtp_socket_address.t
+      ; remote        : Smtp_socket_address.t
       ; helo          : string option
       ; tls           : bool
       ; authenticated : string option
@@ -160,21 +160,21 @@ module Simple : sig
 
   module Envelope : sig
     type t =
-      { id          : Envelope.Id.t
-      ; sender      : Sender.t
-      ; sender_args : Sender_argument.t list
+      { id          : Smtp_envelope.Id.t
+      ; sender      : Smtp_envelope.Sender.t
+      ; sender_args : Smtp_envelope.Sender_argument.t list
       ; recipients  : Email_address.t list
       } [@@deriving fields, sexp_of]
 
-    val smtp_envelope : t -> Email.t -> Envelope.t
+    val smtp_envelope : t -> Email.t -> Smtp_envelope.t
 
     (*_ include Envelope with type session := 'a *)
-    val smtp_envelope_info : t -> Envelope.Info.t
+    val smtp_envelope_info : t -> Smtp_envelope.Info.t
     val mail_from
       :  log:Mail_log.t
       -> 'session
-      -> Sender.t
-      -> Sender_argument.t list
+      -> Smtp_envelope.Sender.t
+      -> Smtp_envelope.Sender_argument.t list
       -> t Smtp_monad.t
     val rcpt_to
       :  log:Mail_log.t
@@ -193,8 +193,8 @@ module Simple : sig
       -> t
       -> Email.t
       -> [ `Consume of string
-         | `Send of Envelope.With_next_hop.t list
-         | `Quarantine of Envelope.With_next_hop.t list * Smtp_reply.t * Quarantine_reason.t
+         | `Send of Smtp_envelope.Routed.t list
+         | `Quarantine of Smtp_envelope.Routed.t list * Smtp_reply.t * Quarantine_reason.t
          ] Smtp_monad.t
   end
 
@@ -206,8 +206,8 @@ end = struct
 
   module Session = struct
     type t =
-      { local         : Address.t
-      ; remote        : Address.t
+      { local         : Smtp_socket_address.t
+      ; remote        : Smtp_socket_address.t
       ; helo          : string option
       ; tls           : bool
       ; authenticated : string option
@@ -240,21 +240,21 @@ end = struct
 
   module Envelope = struct
     type t =
-      { id          : Envelope.Id.t
-      ; sender      : Sender.t
-      ; sender_args : Sender_argument.t list
+      { id          : Smtp_envelope.Id.t
+      ; sender      : Smtp_envelope.Sender.t
+      ; sender_args : Smtp_envelope.Sender_argument.t list
       ; recipients  : Email_address.t list
       } [@@deriving sexp_of, fields]
 
     let smtp_envelope_info { id; sender; sender_args; recipients } =
-      Envelope.Info.create ~id ~sender ~sender_args ~recipients ()
+      Smtp_envelope.Info.create ~id ~sender ~sender_args ~recipients ()
 
     let smtp_envelope t email =
       let info = smtp_envelope_info t in
-      Envelope.create' ~info ~email
+      Smtp_envelope.create' ~info ~email
 
     let mail_from ~log:_ _session sender sender_args =
-      return { id = Envelope.Id.create (); sender; sender_args; recipients = [] }
+      return { id = Smtp_envelope.Id.create (); sender; sender_args; recipients = [] }
 
     let rcpt_to ~log:_ _session t recipient =
       return { t with recipients = t.recipients @ [recipient] }
@@ -270,7 +270,7 @@ end = struct
       let envelope = smtp_envelope t email in
       return
         (`Send
-           [ Envelope.With_next_hop.create
+           [ Smtp_envelope.Routed.create
                ~envelope
                ~next_hop_choices:[]
                ~retry_intervals:[]

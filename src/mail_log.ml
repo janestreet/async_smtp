@@ -9,7 +9,7 @@ end
 
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 module Level = struct
   type t =
@@ -152,12 +152,12 @@ end
 module Message = struct
   module Action = (String : Identifiable.S with type t = string)
   module Sender = struct
-    type t = [ `Sender of Sender.t | `String of string ]
+    type t = [ `Sender of Smtp_envelope.Sender.t | `String of string ]
     let to_string : t -> string = function
       | `String str -> str
-      | `Sender sender -> Sender.to_string sender
+      | `Sender sender -> Smtp_envelope.Sender.to_string sender
     let of_string str : t =
-      match Sender.of_string str with
+      match Smtp_envelope.Sender.of_string str with
       | Ok sender -> `Sender sender
       | Error _ -> `String str
   end
@@ -179,19 +179,19 @@ module Message = struct
     =  flows:Flows.t
     -> component:Component.t
     -> here:Source_code_position.t
-    -> ?local_address:Address.t
-    -> ?remote_address:Address.t
+    -> ?local_address:Smtp_socket_address.t
+    -> ?remote_address:Smtp_socket_address.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
-              | `Envelope of Envelope.t
+              | `Envelope of Smtp_envelope.t
               ]
     -> ?message_size:int
     -> ?rfc822_id:string
-    -> ?local_id:Envelope.Id.t
+    -> ?local_id:Smtp_envelope.Id.t
     -> ?sender:Sender.t
     -> ?recipients:Recipient.t list
     -> ?spool_id:string
-    -> ?dest:Address.t
+    -> ?dest:Smtp_socket_address.t
     -> ?command:Smtp_command.t
     -> ?reply:Smtp_reply.t
     -> ?session_marker:Session_marker.t
@@ -211,7 +211,7 @@ module Message = struct
       | None -> tags
     in
     let tags = match dest with
-      | Some dest -> (Tag.dest, Address.Stable.V1.to_string dest) :: tags
+      | Some dest -> (Tag.dest, Smtp_socket_address.Stable.V1.to_string dest) :: tags
       | None -> tags
     in
     let tags = match spool_id with
@@ -222,7 +222,7 @@ module Message = struct
       | Some recipients -> Some (recipients)
       | None -> match email with
         | Some (`Envelope envelope) ->
-          Some (List.map (Envelope.recipients envelope) ~f:(fun e -> `Email e))
+          Some (List.map (Smtp_envelope.recipients envelope) ~f:(fun e -> `Email e))
         | _ -> None
     in
     let recipients = match recipients with
@@ -237,7 +237,7 @@ module Message = struct
     let sender = match sender with
       | Some _ -> sender
       | None -> match email with
-        | Some (`Envelope envelope) -> Some (`Sender (Envelope.sender envelope))
+        | Some (`Envelope envelope) -> Some (`Sender (Smtp_envelope.sender envelope))
         | _ -> None
     in
     let tags = match sender with
@@ -245,7 +245,7 @@ module Message = struct
       | None -> tags
     in
     let email_fingerprint = match email with
-      | Some (`Envelope envelope) -> Some (Mail_fingerprint.of_email (Envelope.email envelope))
+      | Some (`Envelope envelope) -> Some (Mail_fingerprint.of_email (Smtp_envelope.email envelope))
       | Some (`Email email) -> Some (Mail_fingerprint.of_email email)
       | Some (`Fingerprint fingerprint) -> Some fingerprint
       | None -> None
@@ -261,7 +261,7 @@ module Message = struct
       | None ->
         match email with
         | Some (`Envelope envelope) ->
-          Some (Envelope.email envelope |> Email.raw_content |> Bigstring_shared.length)
+          Some (Smtp_envelope.email envelope |> Email.raw_content |> Bigstring_shared.length)
         | Some (`Email email) -> Some (Email.raw_content email |> Bigstring_shared.length)
         | Some (`Fingerprint _) -> None
         | None -> None
@@ -274,18 +274,18 @@ module Message = struct
     let local_id = match local_id with
       | Some _ -> local_id
       | None -> match email with
-        | Some (`Envelope envelope) -> Some (Envelope.id envelope)
+        | Some (`Envelope envelope) -> Some (Smtp_envelope.id envelope)
         | _ -> None
     in
     let tags = match local_id with
-      | Some local_id -> (Tag.local_id, Envelope.Id.to_string local_id) :: tags
+      | Some local_id -> (Tag.local_id, Smtp_envelope.Id.to_string local_id) :: tags
       | None -> tags
     in
     let rfc822_id = match rfc822_id with
       | Some _ -> rfc822_id
       | None -> match email with
         | Some (`Envelope envelope) ->
-          Email_headers.last (Envelope.email envelope |> Email.headers) "Message-Id"
+          Email_headers.last (Smtp_envelope.email envelope |> Email.headers) "Message-Id"
         | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
         | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
           Email_headers.last (Email_headers.of_list ~whitespace:`Raw headers) "Message-Id"
@@ -296,11 +296,11 @@ module Message = struct
       | None -> tags
     in
     let tags = match remote_address with
-      | Some remote_address -> (Tag.remote_address, Address.Stable.V1.to_string remote_address) :: tags
+      | Some remote_address -> (Tag.remote_address, Smtp_socket_address.Stable.V1.to_string remote_address) :: tags
       | None -> tags
     in
     let tags = match local_address with
-      | Some local_address -> (Tag.local_address, Address.Stable.V1.to_string local_address) :: tags
+      | Some local_address -> (Tag.local_address, Smtp_socket_address.Stable.V1.to_string local_address) :: tags
       | None -> tags
     in
     let tags = match session_marker with
@@ -417,11 +417,11 @@ module Message = struct
 
   let rfc822_id = find_tag ~tag:Tag.rfc822_id
 
-  let local_id = find_tag' ~tag:Tag.local_id ~f:Envelope.Id.of_string
+  let local_id = find_tag' ~tag:Tag.local_id ~f:Smtp_envelope.Id.of_string
 
   let spool_id = find_tag ~tag:Tag.spool_id
 
-  let dest = find_tag' ~tag:Tag.dest ~f:Address.Stable.V1.of_string
+  let dest = find_tag' ~tag:Tag.dest ~f:Smtp_socket_address.Stable.V1.of_string
 
   let of_string str ~of_sexp =
     Sexp.of_string_conv_exn str of_sexp
@@ -444,9 +444,9 @@ module Message = struct
 
   let email = find_tag' ~tag:Tag.email_fingerprint ~f:(of_string ~of_sexp:Mail_fingerprint.t_of_sexp)
 
-  let local_address = find_tag' ~tag:Tag.local_address ~f:Address.Stable.V1.of_string
+  let local_address = find_tag' ~tag:Tag.local_address ~f:Smtp_socket_address.Stable.V1.of_string
 
-  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Address.Stable.V1.of_string
+  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Smtp_socket_address.Stable.V1.of_string
 
   let command = find_tag' ~tag:Tag.command ~f:Smtp_command.of_string
 

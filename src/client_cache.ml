@@ -1,12 +1,15 @@
 open Core
 open Async
+open Async_smtp_types
 
 module Address : sig
-  type t = Address.t [@@deriving sexp, bin_io]
-  include module type of Address with type t:=t
+  type t = Smtp_socket_address.t [@@deriving sexp, bin_io]
+  include module type of Smtp_socket_address with type t:=t
 end = struct
-  include Address
-  include (Address.Stable.V1 : sig type t [@@deriving sexp, bin_io] end with type t:=t)
+  include Smtp_socket_address
+  include (Smtp_socket_address.Stable.V1 : sig
+             type t [@@deriving sexp, bin_io]
+           end with type t:=t)
 end
 
 module Log = Mail_log

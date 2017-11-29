@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Email_message
+open Async_smtp_types
 
 module Envelope_status = Client.Envelope_status
 
@@ -9,9 +9,9 @@ module Expert : sig
   val send'
     :  ?log:Mail_log.t
     -> ?credentials:Credentials.t
-    -> ?server:Address.t
-    -> sender:Sender.t
-    -> ?sender_args:Sender_argument.t list
+    -> ?server:Smtp_socket_address.t
+    -> sender:Smtp_envelope.Sender.t
+    -> ?sender_args:Smtp_envelope.Sender_argument.t list
     -> recipients:Email_address.t list
     -> Email.t
     -> Envelope_status.t Deferred.Or_error.t
@@ -19,9 +19,9 @@ module Expert : sig
   val send
     :  ?log:Mail_log.t
     -> ?credentials:Credentials.t
-    -> ?server:Address.t
-    -> sender:Sender.t
-    -> ?sender_args:Sender_argument.t list
+    -> ?server:Smtp_socket_address.t
+    -> sender:Smtp_envelope.Sender.t
+    -> ?sender_args:Smtp_envelope.Sender_argument.t list
     -> recipients:Email_address.t list
     -> Email.t
     -> unit Deferred.Or_error.t
@@ -36,7 +36,7 @@ val send'
   -> ?credentials:Credentials.t
   -> ?server:Host_and_port.t
   -> ?from:Email_address.t (* defaults to <user@host> *)
-  -> ?sender_args:Sender_argument.t list
+  -> ?sender_args:Smtp_envelope.Sender_argument.t list
   -> to_:Email_address.t list
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
@@ -56,7 +56,7 @@ val send
   -> ?credentials:Credentials.t
   -> ?server:Host_and_port.t
   -> ?from:Email_address.t (* defaults to <user@host> *)
-  -> ?sender_args:Sender_argument.t list
+  -> ?sender_args:Smtp_envelope.Sender_argument.t list
   -> to_:Email_address.t list
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list

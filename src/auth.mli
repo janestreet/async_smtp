@@ -1,5 +1,6 @@
 open! Core
 open! Async
+open! Async_smtp_types
 
 module type Server = sig
   type session
@@ -48,7 +49,7 @@ module type Client = sig
       it is an error to call it after the exchange has been completed. *)
   val negotiate
     :  log:Mail_log.t
-    -> remote:Address.t option
+    -> remote:Smtp_socket_address.t option
     -> send_response_and_expect_challenge:
          ([`Start_auth | `Response of string]
           -> [ `Challenge of string | `Auth_completed] Deferred.t)

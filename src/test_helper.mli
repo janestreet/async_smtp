@@ -1,5 +1,6 @@
 open! Core
 open! Async
+open Async_smtp_types
 
 (** This module provides helpers for writing expect tests for testing
     [Async_smtp] and [Async_smtp.Server] plugins.
@@ -51,7 +52,7 @@ val envelope
   -> ?recipients:string list
   -> ?data:string
   -> unit
-  -> Envelope.t
+  -> Smtp_envelope.t
 
 (** Attempt to send the given envelope to a dummy server.
     Expect test output will be the SMTP session transcript with the following
@@ -60,7 +61,7 @@ val envelope
     > 200 Server Response
     Custom plugin output *)
 val smtp :
-  (Envelope.t list
+  (Smtp_envelope.t list
    -> unit Deferred.t)
     client_flags
     server_flags
@@ -107,7 +108,7 @@ val manual_client :
 
     Use [client] to document expected requests, and [server] to send the responses. *)
 val manual_server :
-  (Envelope.t list
+  (Smtp_envelope.t list
    -> (client:(string -> unit Deferred.t) ->
        server:(string -> unit Deferred.t) ->
        unit Deferred.t)

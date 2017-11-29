@@ -1,5 +1,4 @@
 open! Core
-open Email_message
 
 (* These arguments become optional parameters to the "MAIL FROM" smtp command depending on
    certain advertised smtp extensions. *)

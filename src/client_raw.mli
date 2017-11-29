@@ -1,14 +1,19 @@
 open! Core
 open! Async
+open Async_smtp_types
 
 
 module Peer_info : sig
   type t
 
   val greeting : t -> string option
-  val hello    : t -> [`Simple of string | `Extended of string * Smtp_extension.t list] option
+  val hello
+    :  t
+    -> [`Simple of string
+       | `Extended of string * Smtp_extension.t list
+       ] option
   val supports_extension : t -> Smtp_extension.t -> bool
-  val dest : t -> Address.t
+  val dest : t -> Smtp_socket_address.t
 end
 
 type t
@@ -16,7 +21,7 @@ type t
 val create
   :  ?flows:Mail_log.Flows.t
   -> emulate_tls_for_test:bool
-  -> dest:Address.t
+  -> dest:Smtp_socket_address.t
   -> Reader.t
   -> Writer.t
   -> Client_config.t
@@ -101,4 +106,4 @@ val send_receive_string
 (* Low level access *)
 val writer : t -> Writer.t
 val reader : t -> Reader.t option
-val remote_address : t -> Address.t option
+val remote_address : t -> Smtp_socket_address.t option

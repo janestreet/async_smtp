@@ -1,5 +1,6 @@
 open Core
 open Async
+open Async_smtp_types
 
 let (^-) a b = a ^ "-" ^ b
 
@@ -65,7 +66,7 @@ let int            = binable (module Int)
 let unit           = binable (module Unit)
 let bool           = binable (module Bool)
 let span           = binable (module Time.Span.Stable.V2)
-let retry_interval = binable (module Retry_interval.Stable.V2)
+let retry_interval = binable (module Smtp_envelope.Retry_interval.Stable.V2)
 let error          = binable (module Error.Stable.V2)
 
 let smtp_event = binable (module Smtp_events.Event)

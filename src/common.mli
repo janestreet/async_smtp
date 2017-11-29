@@ -18,5 +18,3 @@ val rename
   :  src:string
   -> dst:string
   -> unit Deferred.Or_error.t
-
-val urlbase64_encode_float : ?length:int -> float -> string

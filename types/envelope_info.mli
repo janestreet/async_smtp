@@ -1,0 +1,40 @@
+open! Core
+open Email_message
+
+type t [@@deriving sexp_of]
+
+val create
+  :  ?id:Envelope_id.t
+  -> sender:Sender.t
+  -> ?sender_args:Sender_argument.t list
+  -> recipients:Email_address.t list
+  -> ?rejected_recipients:Email_address.t list
+  -> ?route:string
+  -> unit
+  -> t
+
+val set
+  :  t
+  -> ?sender:Sender.t
+  -> ?sender_args:Sender_argument.t list
+  -> ?recipients:Email_address.t list
+  -> ?rejected_recipients:Email_address.t list
+  -> ?route:string option
+  -> unit
+  -> t
+
+(* Extracts sender and recipients from the headers. *)
+val of_email : Email.t -> t Or_error.t
+
+include Envelope_container_intf.With_info with type t := t and type envelope_info := t
+
+include Comparable.S_plain with type t := t
+include Hashable.S_plain   with type t := t
+
+module Stable : sig
+  module V1 : sig type t [@@deriving bin_io, sexp] end
+  module V2 : sig
+    type nonrec t = t [@@deriving bin_io, sexp]
+    val of_v1 : V1.t -> t
+  end
+end

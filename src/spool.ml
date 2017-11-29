@@ -1,9 +1,10 @@
 module Stable = struct
   open Core.Core_stable
   open Email_message.Email_message_stable
+  open Async_smtp_types.Async_smtp_types_stable
+
   module Message = Message.Stable
   module Quarantine_reason = Quarantine_reason.Stable
-  module Envelope = Envelope.Stable
 
   module Message_id = Message.Id
 
@@ -33,7 +34,7 @@ module Stable = struct
       type t =
         { message : Message.V2.t
         ; file_size : Byte_units.V1.t option
-        ; envelope : Envelope.V2.t option
+        ; envelope : Smtp_envelope.V2.t option
         } [@@deriving bin_io]
     end
   end
@@ -54,7 +55,7 @@ module Stable = struct
         | `Unfrozen
         | `Recovered of [`From_quarantined | `From_removed]
         | `Quarantined of [`Reason of Quarantine_reason.V1.t]
-        ] * Message_id.V1.t * Envelope.Info.V2.t [@@deriving bin_io, sexp]
+        ] * Message_id.V1.t * Smtp_envelope.Info.V2.t [@@deriving bin_io, sexp]
 
       type t = Time.V1.t * [ `Spool_event of spool_event | `Ping ]
       [@@deriving bin_io, sexp]
@@ -64,10 +65,9 @@ end
 
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 module Config = Server_config
-
 
 
 module Message_id    = Message.Id
@@ -86,7 +86,7 @@ module Event = struct
       | `Unfrozen
       | `Recovered of [`From_quarantined | `From_removed]
       | `Quarantined of [`Reason of Quarantine_reason.t]
-      ] * Message_id.t * Envelope.Info.t [@@deriving sexp_of, compare]
+      ] * Message_id.t * Smtp_envelope.Info.t [@@deriving sexp_of, compare]
     type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of, compare]
   end
 
@@ -357,32 +357,32 @@ let create ~config ~log () =
 ;;
 
 let add t ~flows ~original_msg messages =
-  Deferred.Or_error.List.iter messages ~how:`Parallel ~f:(fun envelope_with_next_hop ->
+  Deferred.Or_error.List.iter messages ~how:`Parallel ~f:(fun envelope_routed ->
     Message.create
       t.spool
       ~log:t.log
       ~flows:(Log.Flows.extend flows `Outbound_envelope)
       ~initial_status:`Send_now
-      envelope_with_next_hop
+      envelope_routed
       ~original_msg
     >>|? fun spooled_msg ->
     add_message t spooled_msg;
     enqueue t spooled_msg;
     spooled_event t ~here:[%here] spooled_msg)
   >>|? fun () ->
-  Envelope.id original_msg
+  Smtp_envelope.id original_msg
 ;;
 
 let quarantine t ~reason ~flows ~original_msg messages =
   Deferred.Or_error.List.iter messages
     ~how:`Parallel
-    ~f:(fun envelope_with_next_hop ->
+    ~f:(fun envelope_routed ->
       Message.create
         t.spool
         ~log:t.log
         ~flows:(Log.Flows.extend flows `Outbound_envelope)
         ~initial_status:(`Quarantined reason)
-        envelope_with_next_hop
+        envelope_routed
         ~original_msg
       >>|? fun quarantined_msg ->
       quarantined_event ~here:[%here] t (`Reason reason) quarantined_msg)
@@ -523,7 +523,7 @@ module Spooled_message_info = struct
   type t = Stable.Spooled_message_info.V1.t =
     { message   : Message.t
     ; file_size : Byte_units.t option
-    ; envelope  : Envelope.t option
+    ; envelope  : Smtp_envelope.t option
     } [@@deriving fields, sexp_of]
 
   let sp f t = f t.message
@@ -595,9 +595,9 @@ module Status = struct
       in
       match S.envelope msg with
       | Some envelope ->
-        let recipients = Envelope.string_recipients envelope |> String.concat ~sep:"\n" in
+        let recipients = Smtp_envelope.string_recipients envelope |> String.concat ~sep:"\n" in
         sprintf !"%4s %5s %{Message_id} <%s> %s\n           %s\n"
-          time size (S.id msg) (Envelope.string_sender envelope)
+          time size (S.id msg) (Smtp_envelope.string_sender envelope)
           frozen_text recipients
       | None ->
         sprintf !"%4s %5s %{Message_id} %s (sender and recipients hidden)\n"
@@ -641,14 +641,14 @@ module Status = struct
             match S.envelope a with
             | None -> "(hidden)"
             | Some envelope ->
-              Envelope.string_sender envelope)
+              Smtp_envelope.string_sender envelope)
           in
           let recipients =
             Column.create "recipients" (fun a ->
               match S.envelope a with
               | None -> "(hidden)"
               | Some envelope ->
-                Envelope.string_recipients envelope |> String.concat ~sep:", ")
+                Smtp_envelope.string_recipients envelope |> String.concat ~sep:", ")
           in
           let next_attempt =
             Column.create_attr "next attempt" (fun a ->
@@ -664,7 +664,7 @@ module Status = struct
           let next_hop =
             Column.create "next hop" (fun a ->
               S.next_hop_choices a
-              |> List.map ~f:Address.to_string
+              |> List.map ~f:Smtp_socket_address.to_string
               |> String.concat ~sep:", ")
           in
           let time_on_spool =

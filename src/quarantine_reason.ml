@@ -1,11 +1,11 @@
 module Stable = struct
   open Core.Core_stable
-  module Sender = Sender.Stable
+  open Async_smtp_types.Async_smtp_types_stable
 
   module V1_no_string = struct
     type t =
       { description     : string
-      ; envelope_sender : Sender.V1.t
+      ; envelope_sender : Smtp_envelope.Sender.V1.t
       ; from_headers    : string
       } [@@deriving bin_io, sexp]
   end
@@ -17,10 +17,11 @@ module Stable = struct
 end
 
 open! Core
+open Async_smtp_types
 
 type t = Stable.V1.t =
   { description     : string
-  ; envelope_sender : Sender.t
+  ; envelope_sender : Smtp_envelope.Sender.t
   ; from_headers    : string
   } [@@deriving sexp_of, compare, fields]
 
@@ -28,11 +29,11 @@ let to_string t = Sexp.to_string (sexp_of_t t)
 
 let of_envelope ~description envelope =
   let from_headers =
-    Envelope.find_all_headers envelope "From"
+    Smtp_envelope.find_all_headers envelope "From"
     |> String.concat ~sep:", "
   in
   { description
-  ; envelope_sender = Envelope.sender envelope
+  ; envelope_sender = Smtp_envelope.sender envelope
   ; from_headers
   }
 ;;

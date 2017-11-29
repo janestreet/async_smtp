@@ -1,13 +1,12 @@
 module Stable = struct
   open Core.Core_stable
   open Email_message.Email_message_stable
+  open Async_smtp_types.Async_smtp_types_stable
 
   module Unstable_mail_log = Mail_log
   module Mail_log = Mail_log.Stable
-  module Address = Address.Stable
-  module Retry_interval = Retry_interval.Stable
+  module Retry_interval = Smtp_envelope.Retry_interval
   module Quarantine_reason = Quarantine_reason.Stable
-  module Envelope = Envelope.Stable
 
   module Id = struct
     module V1 = struct
@@ -36,15 +35,15 @@ module Stable = struct
       { spool_dir                    : string
       ; id                           : Id.V1.t
       ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
-      ; parent_id                    : Envelope.Id.V1.t
+      ; parent_id                    : Smtp_envelope.Id.V1.t
       ; spool_date                   : Time.V1.t
-      ; next_hop_choices             : Address.V1.t list
+      ; next_hop_choices             : Smtp_socket_address.V1.t list
       ; mutable retry_intervals      : Retry_interval.V2.t list
       ; mutable remaining_recipients : Email_address.V1.t list
       ; mutable failed_recipients    : Email_address.V1.t list
       ; mutable relay_attempts       : (Time.V1.t * Error.V1.t) list
       ; mutable status               : Status.V1.t
-      ; mutable envelope_info        : Envelope.Info.V1.t
+      ; mutable envelope_info        : Smtp_envelope.Info.V1.t
       } [@@deriving sexp, bin_io]
   end
 
@@ -53,15 +52,15 @@ module Stable = struct
       { spool_dir                    : string
       ; id                           : Id.V1.t
       ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
-      ; parent_id                    : Envelope.Id.V1.t
+      ; parent_id                    : Smtp_envelope.Id.V1.t
       ; spool_date                   : Time.V1.t
-      ; next_hop_choices             : Address.V1.t list
+      ; next_hop_choices             : Smtp_socket_address.V1.t list
       ; mutable retry_intervals      : Retry_interval.V2.t list
       ; mutable remaining_recipients : Email_address.V1.t list
       ; mutable failed_recipients    : Email_address.V1.t list
       ; mutable relay_attempts       : (Time.V1.t * Error.V1.t) list
       ; mutable status               : Status.V1.t
-      ; mutable envelope_info        : Envelope.Info.V2.t
+      ; mutable envelope_info        : Smtp_envelope.Info.V2.t
       } [@@deriving sexp, bin_io]
 
     let of_v1 (v1 : V1.t) =
@@ -76,7 +75,7 @@ module Stable = struct
       ; failed_recipients    = v1.failed_recipients
       ; relay_attempts       = v1.relay_attempts
       ; status               = v1.status
-      ; envelope_info        = Envelope.Info.V2.of_v1 v1.envelope_info
+      ; envelope_info        = Smtp_envelope.Info.V2.of_v1 v1.envelope_info
       }
     ;;
   end
@@ -84,7 +83,7 @@ end
 
 open Core
 open Async
-open Email_message
+open Async_smtp_types
 
 module Log = Mail_log
 
@@ -98,10 +97,11 @@ module Id  = struct
   let counter = ref 0
 
   let create ~original_msg =
-    let parent_id = Envelope.id original_msg in
+    let parent_id = Smtp_envelope.id original_msg in
     let t =
-      sprintf !"%{Envelope.Id}-%s" parent_id
-        (Common.urlbase64_encode_float ~length:6 (!counter |> Int.to_float))
+      sprintf !"%{Smtp_envelope.Id}-%s" parent_id
+        (Smtp_envelope.Id.urlbase64_encode_float ~length:6 (!counter |> Int.to_float)
+         |> Smtp_envelope.Id.to_string)
     in
     incr counter;
     t
@@ -175,12 +175,12 @@ type t = Stable.V2.t =
   ; id                           : Id.t
   (* with default so that sexps without a flowid still parse. *)
   ; flows                        : Log.Flows.t
-  ; parent_id                    : Envelope.Id.t
+  ; parent_id                    : Smtp_envelope.Id.t
   ; spool_date                   : Time.t
-  ; next_hop_choices             : Address.t list
+  ; next_hop_choices             : Smtp_socket_address.t list
   (* The head of this list is the time at which we should attempt a delivery
      after the next time a delivery fails. *)
-  ; mutable retry_intervals      : Retry_interval.t list
+  ; mutable retry_intervals      : Smtp_envelope.Retry_interval.t list
   ; mutable remaining_recipients : Email_address.Stable.V1.t list
   (* Currently not used, but saved to disk to aid in triaging frozen messages and failed
      deliveries. Addresses on this list will not be included in remaining_recipients,
@@ -188,7 +188,7 @@ type t = Stable.V2.t =
   ; mutable failed_recipients    : Email_address.Stable.V1.t list
   ; mutable relay_attempts       : (Time.t * Error.t) list
   ; mutable status               : Status.t
-  ; mutable envelope_info        : Envelope.Info.t
+  ; mutable envelope_info        : Smtp_envelope.Info.t
   } [@@deriving fields, sexp_of]
 
 (* type alias to make code more readable below *)
@@ -234,7 +234,7 @@ module On_disk = struct
   module Name_generator = struct
     module Unique_name = Id
 
-    type t = Envelope.t
+    type t = Smtp_envelope.t
     let next original_msg ~attempt:_ = Id.create ~original_msg
   end
 
@@ -270,16 +270,16 @@ let enqueue meta_spool queue ~meta ~id ~email =
   Deferred.Or_error.ok_unit
 ;;
 
-let create spool ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_msg =
-  let parent_id = Envelope.id original_msg in
+let create spool ~log:_ ~initial_status envelope_routed ~flows ~original_msg =
+  let parent_id = Smtp_envelope.id original_msg in
   let next_hop_choices =
-    Envelope.With_next_hop.next_hop_choices envelope_with_next_hop
+    Smtp_envelope.Routed.next_hop_choices envelope_routed
   in
   let retry_intervals =
-    Envelope.With_next_hop.retry_intervals envelope_with_next_hop
+    Smtp_envelope.Routed.retry_intervals envelope_routed
   in
-  let envelope = Envelope.With_next_hop.envelope envelope_with_next_hop in
-  let remaining_recipients = Envelope.recipients envelope in
+  let envelope = Smtp_envelope.Routed.envelope envelope_routed in
+  let remaining_recipients = Smtp_envelope.recipients envelope in
   Queue.of_status' initial_status |> Deferred.return
   >>=? fun queue ->
   On_disk_spool.Unique_name.reserve spool original_msg
@@ -297,9 +297,9 @@ let create spool ~log:_ ~initial_status envelope_with_next_hop ~flows ~original_
       ~status:initial_status
       ~id:(id :> string)
       ~flows
-      ~envelope_info:(Envelope.info envelope)
+      ~envelope_info:(Smtp_envelope.info envelope)
   in
-  let email = Envelope.email envelope in
+  let email = Smtp_envelope.email envelope in
   enqueue spool queue ~meta ~id ~email
   >>|? fun () ->
   meta
@@ -314,7 +314,7 @@ let load_with_envelope entry =
   let%bind meta = load entry in
   let data_file = On_disk_spool.Entry.Direct.data_file entry in
   let%bind email = On_disk_spool.Data_file.load data_file in
-  return (meta, Envelope.create' ~info:(envelope_info meta) ~email)
+  return (meta, Smtp_envelope.create' ~info:(envelope_info meta) ~email)
 ;;
 
 let last_relay_attempt t =
@@ -322,7 +322,7 @@ let last_relay_attempt t =
 ;;
 
 let with_file t
-      (f : (unit -> Envelope.t Or_error.t Deferred.t) ->
+      (f : (unit -> Smtp_envelope.t Or_error.t Deferred.t) ->
        [`Sync_meta | `Sync_email of Email.t | `Unlink] Or_error.t Deferred.t)
   : unit Or_error.t Deferred.t =
   entry t
@@ -344,7 +344,7 @@ let with_file t
         let get_envelope () =
           On_disk_spool.Data_file.load data_file
           >>|? fun email ->
-          Envelope.create' ~info:(envelope_info meta) ~email
+          Smtp_envelope.create' ~info:(envelope_info meta) ~email
         in
         f get_envelope
         >>= function
@@ -371,7 +371,7 @@ let map_email t ~f =
   with_file t (fun get_envelope ->
     get_envelope ()
     >>=? fun envelope ->
-    let email' = f (Envelope.email envelope) in
+    let email' = f (Smtp_envelope.email envelope) in
     return (Ok (`Sync_email email')))
 ;;
 
@@ -413,7 +413,9 @@ let remove t ~log =
 ;;
 
 let send_to_hops t ~log ~client_cache get_envelope =
-  let hops_tag = Sexp.to_string ([%sexp_of: Address.t list] t.next_hop_choices) in
+  let hops_tag =
+    Sexp.to_string ([%sexp_of: Smtp_socket_address.t list] t.next_hop_choices)
+  in
   Log.debug log (lazy (Log.Message.create
                          ~here:[%here]
                          ~flows:t.flows
@@ -424,12 +426,12 @@ let send_to_hops t ~log ~client_cache get_envelope =
   Client_cache.Tcp.with_'
     ~give_up:(Clock.after (Time.Span.of_min 2.))
     ~cache:client_cache t.next_hop_choices
-    ?route:(Envelope.Info.route t.envelope_info)
+    ?route:(Smtp_envelope.Info.route t.envelope_info)
     ~f:(fun ~flows client ->
       let flows = Log.Flows.union t.flows flows in
       get_envelope ()
       >>=? fun envelope ->
-      let envelope = Envelope.set envelope ~recipients:t.remaining_recipients () in
+      let envelope = Smtp_envelope.set envelope ~recipients:t.remaining_recipients () in
       Client.send_envelope client ~log ~flows ~component:["spool";"send"] envelope)
   >>= function
   | `Ok (hop, (Error e)) ->
@@ -525,7 +527,8 @@ let do_send t ~log ~client_cache =
         t.status <- `Frozen;
         Ok `Sync_meta
       | `Try_later, r :: rs ->
-        t.status <- `Send_at (Time.add (Time.now ()) (Retry_interval.to_span r));
+        t.status <-
+          `Send_at (Time.add (Time.now ()) (Smtp_envelope.Retry_interval.to_span r));
         t.retry_intervals <- rs;
         Ok `Sync_meta)
 ;;

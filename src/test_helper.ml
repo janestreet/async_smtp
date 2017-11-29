@@ -1,5 +1,6 @@
 open Core
 open Async
+open Async_smtp_types
 
 type 'a smtp_flags
   =  ?tls:bool
@@ -103,13 +104,13 @@ let envelope
       ?(data="Subject: TEST EMAIL\n\nTEST EMAIL")
       () =
   let sender, sender_args =
-    Sender.of_string_with_arguments sender
+    Smtp_envelope.Sender.of_string_with_arguments sender
       ~allowed_extensions:Smtp_extension.all
     |> Or_error.ok_exn
   in
   let recipients = List.map recipients ~f:(fun s -> Email_message.Email_address.of_string_exn s) in
   let email = Email_message.Email.of_string data in
-  Envelope.create ~sender ~sender_args ~recipients ~email ()
+  Smtp_envelope.create ~sender ~sender_args ~recipients ~email ()
 ;;
 
 let run
@@ -251,13 +252,13 @@ let server_impl
       ~emulate_tls:tls
       ~send:(fun msgs ->
         if echo_delivery then
-          List.iter msgs ~f:(printf !"SEND: %{sexp:Envelope.With_next_hop.t}\n");
+          List.iter msgs ~f:(printf !"SEND: %{sexp:Smtp_envelope.Routed.t}\n");
         send_seq := !send_seq + 1;
         Deferred.Or_error.return (sprintf "SENT-%d" !send_seq))
       ~quarantine:(fun ~reason msgs ->
         if echo_delivery then begin
           printf !"QUARANTINE_REASON: %{sexp:Quarantine_reason.t}\n" reason;
-          List.iter msgs ~f:(printf !"QUARANTINE: %{sexp:Envelope.With_next_hop.t}\n");
+          List.iter msgs ~f:(printf !"QUARANTINE: %{sexp:Smtp_envelope.Routed.t}\n");
         end;
         Deferred.Or_error.ok_unit)
       ~local:(`Inet (Host_and_port.create ~host:"server" ~port:0))

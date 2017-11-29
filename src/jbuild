@@ -11,10 +11,10 @@
     textutils
     email_message
     re2
+    async_smtp_types
     ))
   (preprocess (pps (ppx_jane ppx_driver.runner)))
   ))
-(ocamllex (mail_from_lexer))
 
 
 (jbuild_version 1)

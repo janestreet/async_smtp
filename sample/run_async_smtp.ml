@@ -39,7 +39,7 @@ module Server = Smtp_server.Make(struct
       let process ~log:_ _session t email =
         let envelope = smtp_envelope t email in
         return (`Send
-                  [ Smtp_envelope_with_next_hop.create
+                  [ Smtp_envelope.Routed.create
                       ~envelope
                       ~next_hop_choices:[destination]
                       ~retry_intervals:[]

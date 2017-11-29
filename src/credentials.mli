@@ -1,4 +1,5 @@
 open! Core
+open Async_smtp_types
 
 module type Mech = Auth.Client
 

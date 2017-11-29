@@ -1,6 +1,7 @@
 open Core
 open Async
 open Async_ssl.Std
+open Async_smtp_types
 
 module Log = Mail_log
 
@@ -8,10 +9,11 @@ module Config = Client_config
 
 module Peer_info = struct
   type t =
-    { dest : Address.t
+    { dest : Smtp_socket_address.t
     ; greeting : string Set_once.Stable.V1.t
     ; hello : [ `Simple of string
-              | `Extended of string * (Smtp_extension.t list) ] Set_once.Stable.V1.t
+              | `Extended of string * (Smtp_extension.t list)
+              ] Set_once.Stable.V1.t
     } [@@deriving sexp_of, fields]
 
   let create ~dest () =
@@ -37,7 +39,8 @@ module Peer_info = struct
   let supports_extension t extension =
     match extensions t with
     | None -> false
-    | Some extensions -> List.mem extensions extension ~equal:Smtp_extension.equal
+    | Some extensions ->
+      List.mem extensions extension ~equal:Smtp_extension.equal
 
   let greeting t =
     Set_once.get t.greeting
@@ -466,7 +469,9 @@ let should_try_tls t : Config.Tls.t option =
         match Config.Tls.mode tls with
         | `Always_try | `Required -> Some tls
         | `If_available ->
-          if supports_extension t Smtp_extension.Start_tls then Some tls else None
+          if supports_extension t Smtp_extension.Start_tls
+          then Some tls
+          else None
 
 (* Will fail if negotiated security level is lower than that required by the
    config. *)

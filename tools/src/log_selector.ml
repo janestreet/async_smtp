@@ -61,7 +61,7 @@ module Base = struct
       Smtp_mail_log.Message.sender msg
       |> Option.map ~f:(function
         | `String str -> str
-        | `Sender sender -> Smtp_sender.to_string sender)
+        | `Sender sender -> Smtp_envelope.Sender.to_string sender)
       |> Option.value_map ~default:false ~f:(Regex.matches regex)
     | `envelope_recipient regex
     | `recipient regex ->

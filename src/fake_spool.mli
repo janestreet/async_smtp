@@ -1,5 +1,6 @@
 open! Core
 open! Async
+open Async_smtp_types
 
 type t
 
@@ -7,7 +8,7 @@ type t
    there. *)
 val create
   :  config:Server_config.t
-  -> send:(Envelope.With_next_hop.t -> unit Or_error.t Deferred.t)
+  -> send:(Smtp_envelope.Routed.t -> unit Or_error.t Deferred.t)
   -> t Or_error.t Deferred.t
 
 (* Write the message to disk.
@@ -17,9 +18,9 @@ val create
 *)
 val add :
   t
-  -> original_msg:Envelope.t
-  -> Envelope.With_next_hop.t list
-  -> Envelope.Id.t Or_error.t Deferred.t
+  -> original_msg:Smtp_envelope.t
+  -> Smtp_envelope.Routed.t list
+  -> Smtp_envelope.Id.t Or_error.t Deferred.t
 
 val flush
   : ?timeout:unit Deferred.t

@@ -19,6 +19,6 @@ val start_exn : Smtp_server.Config.t -> log : Log.t -> t Deferred.t
 val send_receive
   :  t
   -> ?timeout : Time.Span.t (** defaults to 10 seconds *)
-  -> Address.t
+  -> Smtp_socket_address.t
   -> Smtp_envelope.t
   -> Smtp_envelope.t Or_error.t Deferred.t

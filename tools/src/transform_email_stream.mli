@@ -1,6 +1,6 @@
 open! Core
 open! Async
-open Async_smtp
+open Async_smtp_types
 
 module Config : sig
   type t [@@deriving sexp]

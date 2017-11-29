@@ -1,10 +1,9 @@
 module Stable = struct
   open Core.Core_stable
-  open Email_message.Email_message_stable
 
   module V1 = struct
     type t =
-      | Auth of Email_address.V1.t option
+      | Auth of Email_address.Stable.V1.t option
       | Body of [`Mime_8bit | `Mime_7bit ]
     [@@deriving bin_io, sexp]
   end
@@ -12,7 +11,6 @@ end
 
 open! Core
 open! Async
-open Email_message
 
 type t = Stable.V1.t =
   | Auth of Email_address.t option

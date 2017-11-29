@@ -55,6 +55,7 @@ module Stable = struct
 end
 
 open! Core
+open Async_smtp_types
 
 module Login = struct
   type t = Stable.Login.V1.t =

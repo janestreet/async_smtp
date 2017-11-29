@@ -1,16 +1,17 @@
 open! Core
+open Async_smtp_types
 
 type t [@@deriving sexp_of, compare]
 
 val description     : t -> string
-val envelope_sender : t -> Sender.t
+val envelope_sender : t -> Smtp_envelope.Sender.t
 val from_headers    : t -> string
 
 val to_string : t -> string
 
 val of_envelope
   :  description:string
-  -> Envelope.t
+  -> Smtp_envelope.t
   -> t
 
 module Stable : sig
