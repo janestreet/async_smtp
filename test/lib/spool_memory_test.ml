@@ -6,22 +6,23 @@ open Email_message
 open Expect_test_helpers
 
 let main ~tmp_dir ~iterations ~msg_size =
-  let%bind spool_dir = Spooled_message.On_disk_spool.create tmp_dir >>| ok_exn in
+  let%bind spool_dir = Message_spool.create tmp_dir >>| ok_exn in
   let log = Lazy.force Log.Global.log in
   let email =
     Email.Simple.create ~to_:[] ~subject:""
       (Email.Simple.Content.text (String.init msg_size ~f:(fun _ -> '0')))
   in
   let envelope = Smtp_envelope.create ~sender:`Null ~recipients:[] ~email () in
-  let envelope_routed =
+  let envelope_batch =
     Smtp_envelope.Routed.create ~envelope ~next_hop_choices:[] ~retry_intervals:[]
+    |> Smtp_envelope.Routed.Batch.single_envelope
   in
   let spool () =
-    Spooled_message.create
+    Message_spool.enqueue
       spool_dir
       ~log
       ~initial_status:`Frozen
-      envelope_routed
+      envelope_batch
       ~flows:Smtp_mail_log.Flows.none
       ~original_msg:envelope
     >>| ok_exn

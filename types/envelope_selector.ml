@@ -26,18 +26,22 @@ module Base = struct
     | `all_envelope_recipients of Regex.t
     ] [@@deriving sexp]
 
-  let matches t envelope =
+  let matches' t envelope =
     match t with
     | (#Email_selector.Base.t as t) ->
-      Email_selector.Base.matches t (Envelope.email envelope)
+      Email_selector.Base.matches' t (Envelope_bodiless.headers envelope)
     | `envelope_sender regex ->
-      Regex.matches regex (Envelope.string_sender envelope)
+      Regex.matches regex (Envelope_bodiless.string_sender envelope)
     | `exists_envelope_recipient regex ->
-      List.exists (Envelope.string_recipients envelope) ~f:(fun recipient ->
+      List.exists (Envelope_bodiless.string_recipients envelope) ~f:(fun recipient ->
         Regex.matches regex recipient)
     | `all_envelope_recipients regex ->
-      List.for_all (Envelope.string_recipients envelope) ~f:(fun recipient ->
+      List.for_all (Envelope_bodiless.string_recipients envelope) ~f:(fun recipient ->
         Regex.matches regex recipient)
+
+  let matches t envelope =
+    let bodiless, _ = Envelope.split_bodiless envelope in
+    matches' t bodiless
 
   let examples : t list =
     [ `envelope_sender (Regex.of_string ".*@janestreet.com")
@@ -48,8 +52,12 @@ end
 
 type t = Base.t Blang.t [@@deriving sexp]
 
+let matches' t envelope =
+  Blang.eval t (fun base -> Base.matches' base envelope)
+
 let matches t envelope =
-  Blang.eval t (fun base -> Base.matches base envelope)
+  let bodiless, _ = Envelope.split_bodiless envelope in
+  matches' t bodiless
 
 let example : t =
   ((Email_selector.Base.examples :> Base.t list) @ Base.examples)

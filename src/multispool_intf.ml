@@ -130,6 +130,8 @@ module type S = sig
   module Data_file : sig
     type t
 
+    val path : t -> string
+
     val load
       :  t
       -> Spoolable.Data.t Deferred.Or_error.t

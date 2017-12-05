@@ -21,10 +21,10 @@ end
 
 module type For_test = sig
   val session
-    :  ?send:(Smtp_envelope.Routed.t list -> string Deferred.Or_error.t)
+    :  ?send:(Smtp_envelope.Routed.Batch.t list -> string Deferred.Or_error.t)
     -> ?quarantine:(
       reason:Quarantine_reason.t
-      -> Smtp_envelope.Routed.t list
+      -> Smtp_envelope.Routed.Batch.t list
       -> unit Deferred.Or_error.t)
     -> log:Mail_log.t
     -> ?max_message_size:Byte_units.t
@@ -68,14 +68,8 @@ let read_data ~max_size reader =
       if too_long then loop ~is_first None
       else begin
         if not is_first then add_string "\n";
-        let len = String.length line in
-        if len > 1 && (String.get line 0 |> Char.equal '.')
-        then begin
-          (* slice takes start and stop positions. *)
-          let s = String.slice line 1 len in
-          add_string s
-        end
-        else add_string line;
+        let decoded = Dot_escaping.decode_line_string line in
+        add_string decoded;
         loop ~is_first:false accum
       end
   in
@@ -668,13 +662,16 @@ module Make(Cb : Plugin.S) = struct
               ok_completed ~here:[%here] ~flows ~component ok
               >>= fun () ->
               top ~session
-            | Ok (`Quarantine (envelopes_with_next_hops, reply, reason)) ->
+            | Ok (`Quarantine (envelope_batches, reply, reason)) ->
               begin
+                let envelopes_for_logging =
+                  List.concat_map envelope_batches ~f:Smtp_envelope.Routed.Batch.to_envelopes
+                in
                 let component = ["smtp-server"; "session"; "envelope"; "quarantine"] in
-                quarantine ~flows ~reason ~original_msg envelopes_with_next_hops
+                quarantine ~flows ~reason ~original_msg envelope_batches
                 >>= function
                 | Error err ->
-                  List.iter envelopes_with_next_hops ~f:(fun envelope_routed ->
+                  List.iter envelopes_for_logging ~f:(fun envelope_routed ->
                     Log.error log
                       (lazy (Log.Message.of_error
                                ~here:[%here]
@@ -688,7 +685,7 @@ module Make(Cb : Plugin.S) = struct
                   >>= fun () ->
                   top ~session
                 | Ok () ->
-                  List.iter envelopes_with_next_hops ~f:(fun envelope_routed ->
+                  List.iter envelopes_for_logging ~f:(fun envelope_routed ->
                     let msg_id =
                       Smtp_envelope.Routed.envelope envelope_routed
                       |> Smtp_envelope.id |> Smtp_envelope.Id.to_string
@@ -704,12 +701,15 @@ module Make(Cb : Plugin.S) = struct
                   >>= fun () ->
                   top ~session
               end
-            | Ok (`Send envelopes_with_next_hops) ->
+            | Ok (`Send envelope_batches) ->
+              let envelopes_for_logging =
+                List.concat_map envelope_batches ~f:Smtp_envelope.Routed.Batch.to_envelopes
+              in
               let component = ["smtp-server"; "session"; "envelope"; "spooling"] in
-              send_envelope ~flows ~original_msg envelopes_with_next_hops
+              send_envelope ~flows ~original_msg envelope_batches
               >>= function
               | Error err ->
-                List.iter envelopes_with_next_hops ~f:(fun envelope_routed ->
+                List.iter envelopes_for_logging ~f:(fun envelope_routed ->
                   Log.error log
                     (lazy (Log.Message.of_error
                              ~here:[%here]
@@ -723,7 +723,7 @@ module Make(Cb : Plugin.S) = struct
                 >>= fun () ->
                 top ~session
               | Ok id ->
-                List.iter envelopes_with_next_hops ~f:(fun envelope_routed ->
+                List.iter envelopes_for_logging ~f:(fun envelope_routed ->
                   let sender =
                     `Sender (Smtp_envelope.Routed.sender envelope_routed)
                   in
@@ -734,19 +734,21 @@ module Make(Cb : Plugin.S) = struct
                   let message_size =
                     Smtp_envelope.Routed.email envelope_routed
                     |> Email.raw_content
-                    |> Bigstring_shared.length
+                    |> Email.Raw_content.length
                   in
-                  Log.info log (lazy (Log.Message.create
-                                        ~here:[%here]
-                                        ~flows
-                                        ~component
-                                        ~spool_id:id
-                                        ~sender
-                                        ~recipients
-                                        ~message_size
-                                        ~tags:(List.map (Smtp_envelope.Routed.next_hop_choices envelope_routed)
-                                                 ~f:(fun c -> "next-hop",Smtp_socket_address.to_string c))
-                                        "SPOOLED")));
+                  Log.info log
+                    (lazy (Log.Message.create
+                             ~here:[%here]
+                             ~flows
+                             ~component
+                             ~email:(`Envelope (Smtp_envelope.Routed.envelope envelope_routed))
+                             ~spool_id:id
+                             ~sender
+                             ~recipients
+                             ~message_size
+                             ~tags:(List.map (Smtp_envelope.Routed.next_hop_choices envelope_routed)
+                                      ~f:(fun c -> "next-hop",Smtp_socket_address.to_string c))
+                             "SPOOLED")));
                 ok_completed ~here:[%here] ~flows ~component (sprintf "id=%s" id)
                 >>= fun () ->
                 top ~session

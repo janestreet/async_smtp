@@ -156,7 +156,7 @@ let compare_message_body =
   let f envelope =
     Envelope.email envelope |> Email.raw_content
   in
-  Compare.map ~f Bigstring_shared.compare
+  Compare.map ~f Email.Raw_content.compare
 ;;
 
 let compare_message_headers =

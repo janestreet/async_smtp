@@ -32,10 +32,10 @@ val read_mbox
 module type For_test = sig
   val session
     (** [send] and [quarantine] default to raising an exception *)
-    :  ?send:(Smtp_envelope.Routed.t list -> string Deferred.Or_error.t)
+    :  ?send:(Smtp_envelope.Routed.Batch.t list -> string Deferred.Or_error.t)
     -> ?quarantine:(
       reason:Quarantine_reason.t
-      -> Smtp_envelope.Routed.t list
+      -> Smtp_envelope.Routed.Batch.t list
       -> unit Deferred.Or_error.t)
     -> log:Mail_log.t
     -> ?max_message_size:Byte_units.t

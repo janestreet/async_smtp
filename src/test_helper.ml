@@ -252,13 +252,13 @@ let server_impl
       ~emulate_tls:tls
       ~send:(fun msgs ->
         if echo_delivery then
-          List.iter msgs ~f:(printf !"SEND: %{sexp:Smtp_envelope.Routed.t}\n");
+          List.iter msgs ~f:(printf !"SEND: %{sexp:Smtp_envelope.Routed.Batch.t}\n");
         send_seq := !send_seq + 1;
         Deferred.Or_error.return (sprintf "SENT-%d" !send_seq))
       ~quarantine:(fun ~reason msgs ->
         if echo_delivery then begin
           printf !"QUARANTINE_REASON: %{sexp:Quarantine_reason.t}\n" reason;
-          List.iter msgs ~f:(printf !"QUARANTINE: %{sexp:Smtp_envelope.Routed.t}\n");
+          List.iter msgs ~f:(printf !"QUARANTINE: %{sexp:Smtp_envelope.Routed.Batch.t}\n");
         end;
         Deferred.Or_error.ok_unit)
       ~local:(`Inet (Host_and_port.create ~host:"server" ~port:0))

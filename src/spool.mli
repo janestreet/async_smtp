@@ -63,13 +63,13 @@ val create
   -> t Deferred.Or_error.t
 
 (** Immediately write the message to disk and queue it for sending. The
-    [Envelope_routed.t list] represents the different "sections" of one
+    [Smtp_envelope.Routed.t list] represents the different "sections" of one
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
-  -> Smtp_envelope.Routed.t list
+  -> Smtp_envelope.Routed.Batch.t list
   -> Smtp_envelope.Id.t Deferred.Or_error.t
 
 (* Move the message into a special quarantine directory where it can be manually
@@ -79,7 +79,7 @@ val quarantine
   -> reason: Quarantine_reason.t
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
-  -> Smtp_envelope.Routed.t list
+  -> Smtp_envelope.Routed.Batch.t list
   -> unit Deferred.Or_error.t
 
 (** [kill_and_flush ~timeout t] makes sure no new delivery sessions are being

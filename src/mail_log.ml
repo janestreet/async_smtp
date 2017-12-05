@@ -54,6 +54,7 @@ module Mail_fingerprint = struct
     | Error _ ->
       { headers
       ; md5 = Some (Email.raw_content email
+                    |> Email.Raw_content.to_bigstring_shared
                     |> Bigstring_shared.to_string
                     |> Md5.digest_string
                     |> Md5.to_hex)
@@ -261,8 +262,12 @@ module Message = struct
       | None ->
         match email with
         | Some (`Envelope envelope) ->
-          Some (Smtp_envelope.email envelope |> Email.raw_content |> Bigstring_shared.length)
-        | Some (`Email email) -> Some (Email.raw_content email |> Bigstring_shared.length)
+          Some (Smtp_envelope.email envelope
+                |> Email.raw_content
+                |> Email.Raw_content.length)
+        | Some (`Email email) ->
+          Some (Email.raw_content email
+                |> Email.Raw_content.length)
         | Some (`Fingerprint _) -> None
         | None -> None
     in

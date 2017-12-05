@@ -80,6 +80,23 @@ module Tcp : sig
       ) Tcp.with_connect_options
 end
 
+module Expert : sig
+  val send_envelope
+    :  t
+    -> log:Mail_log.t
+    -> ?flows:Mail_log.Flows.t
+    -> ?component:Mail_log.Component.t
+    (** Send the raw data of the [Email.t].
+
+        [send_data] must:
+        - not include a trailing "\r\n.\r\n"
+        - dot escape the content
+        - use \r\n as the end of line marker *)
+    -> send_data:(t -> unit Deferred.Or_error.t)
+    -> Smtp_envelope.Info.t
+    -> Envelope_status.t Deferred.Or_error.t
+end
+
 module For_test : sig
   val with_
     :  ?config:Client_config.t

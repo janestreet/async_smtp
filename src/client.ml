@@ -102,120 +102,99 @@ end
 
 let (>>=??) = Smtp_monad.(>>=)
 
-let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Deferred.Or_error.t =
-  let flows = match flows with
-    | None -> Log.Flows.create `Outbound_envelope
-    | Some flows -> flows
-  in
-  let component = component @ ["send-envelope"] in
-  with_reset t ~log ~flows ~component ~f:(fun t ->
-    Log.info log (lazy (Log.Message.create
-                          ~here:[%here]
-                          ~flows
-                          ~component
-                          ~email:(`Envelope envelope)
-                          ?dest:(remote_address t)
-                          ~session_marker:`Sending
-                          "sending"));
-    send_receive t ~log ~flows ~component:(component @ ["sender"]) ~here:[%here]
-      (Smtp_command.Sender
-         (Smtp_envelope.Sender.to_string_with_arguments
-            (Smtp_envelope.sender envelope, Smtp_envelope.sender_args envelope)))
-    >>=? begin function
-    | `Bsmtp -> return (Ok (Ok ()))
-    | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
-    | `Received reply ->
+let flush_writer_with_timeout ~timeout ~writer =
+  Clock.with_timeout timeout (Writer.flushed writer)
+  >>| function
+  | `Timeout ->
+    Or_error.errorf !"Timeout %{Time.Span} waiting for data to flush" timeout
+  | `Result () -> Ok ()
+;;
+
+module Expert = struct
+  let send_envelope t ~log ?flows ?(component=[]) ~send_data envelope_info =
+    let flows = match flows with
+      | None -> Log.Flows.create `Outbound_envelope
+      | Some flows -> flows
+    in
+    let component = component @ ["send-envelope"] in
+    with_reset t ~log ~flows ~component ~f:(fun t ->
       Log.info log (lazy (Log.Message.create
                             ~here:[%here]
                             ~flows
-                            ~component:(component @ ["sender"])
-                            ~reply "send rejected"));
-      return (Ok (Error (`Rejected_sender reply)))
-    end
-    >>=?? fun () ->
-    begin
-      Deferred.Or_error.List.map ~how:`Sequential
-        (Smtp_envelope.recipients envelope)
-        ~f:(fun recipient ->
-          send_receive t ~log ~flows ~component:(component @ ["recipient"]) ~here:[%here]
-            (Smtp_command.Recipient (recipient |> Email_address.to_string))
-          >>|? function
-          | `Bsmtp -> `Fst recipient
-          | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> `Fst recipient
-          | `Received reply ->
-            Log.info log (lazy (Log.Message.create
-                                  ~here:[%here]
-                                  ~flows
-                                  ~component:(component @ ["recipient"])
-                                  ~reply "send rejected"));
-            `Snd (recipient, reply))
-      >>|? List.partition_map ~f:ident
-      >>|? function
-      | ([], rejected_recipients) ->
-        Error (`No_recipients rejected_recipients)
-      | (accepted_recipients, rejected_recipients) ->
-        Ok (accepted_recipients, rejected_recipients)
-    end
-    >>=?? fun (accepted_recipients,rejected_recipients) ->
-    send_receive t ~log ~flows ~component:(component @ ["data"]) ~here:[%here] Smtp_command.Data
-    >>=? begin function
-    | `Bsmtp -> return (Ok (Ok ()))
-    | `Received { Smtp_reply.code = `Start_mail_input_354; _ } -> return (Ok (Ok ()))
-    | `Received reply ->
-      Log.info log (lazy (Log.Message.create
-                            ~here:[%here]
-                            ~flows
-                            ~component:(component @ ["data"])
-                            ~reply "send rejected"));
-      return (Ok (Error (`Rejected_sender_and_recipients (reply,
-                                                          rejected_recipients))))
-    end
-    >>=?? fun () ->
-    begin
+                            ~component
+                            ?dest:(remote_address t)
+                            ~session_marker:`Sending
+                            "sending"));
+      send_receive t ~log ~flows ~component:(component @ ["sender"]) ~here:[%here]
+        (Smtp_command.Sender
+           (Smtp_envelope.Sender.to_string_with_arguments
+              (Smtp_envelope.Info.sender envelope_info,
+               Smtp_envelope.Info.sender_args envelope_info)))
+      >>=? begin function
+      | `Bsmtp -> return (Ok (Ok ()))
+      | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
+      | `Received reply ->
+        Log.info log (lazy (Log.Message.create
+                              ~here:[%here]
+                              ~flows
+                              ~component:(component @ ["sender"])
+                              ~reply "send rejected"));
+        return (Ok (Error (`Rejected_sender reply)))
+      end
+      >>=?? fun () ->
+      begin
+        Deferred.Or_error.List.map ~how:`Sequential
+          (Smtp_envelope.Info.recipients envelope_info)
+          ~f:(fun recipient ->
+            send_receive t ~log ~flows ~component:(component @ ["recipient"]) ~here:[%here]
+              (Smtp_command.Recipient (recipient |> Email_address.to_string))
+            >>|? function
+            | `Bsmtp -> `Fst recipient
+            | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> `Fst recipient
+            | `Received reply ->
+              Log.info log (lazy (Log.Message.create
+                                    ~here:[%here]
+                                    ~flows
+                                    ~component:(component @ ["recipient"])
+                                    ~reply "send rejected"));
+              `Snd (recipient, reply))
+        >>|? List.partition_map ~f:ident
+        >>|? function
+        | ([], rejected_recipients) ->
+          Error (`No_recipients rejected_recipients)
+        | (accepted_recipients, rejected_recipients) ->
+          Ok (accepted_recipients, rejected_recipients)
+      end
+      >>=?? fun (accepted_recipients,rejected_recipients) ->
+      send_receive t ~log ~flows ~component:(component @ ["data"]) ~here:[%here] Smtp_command.Data
+      >>=? begin function
+      | `Bsmtp -> return (Ok (Ok ()))
+      | `Received { Smtp_reply.code = `Start_mail_input_354; _ } -> return (Ok (Ok ()))
+      | `Received reply ->
+        Log.info log (lazy (Log.Message.create
+                              ~here:[%here]
+                              ~flows
+                              ~component:(component @ ["data"])
+                              ~reply "send rejected"));
+        return (Ok (Error (`Rejected_sender_and_recipients (reply,
+                                                            rejected_recipients))))
+      end
+      >>=?? fun () ->
       Deferred.Or_error.try_with_join (fun () ->
         Log.debug log (lazy (Log.Message.create
                                ~here:[%here]
                                ~flows
                                ~component:(component @ ["data"])
                                "starting transmitting body"));
-        let writer = writer t in
-        let block_length = ref 0 in
-        (* We will send at most [max_block_length + <max line length> + 1]
-           bytes per block. *)
-        let max_block_length = 16 * 1024 in
-        let timeout = Config.send_receive_timeout (config t) in
-        let flush () =
-          Clock.with_timeout timeout (Writer.flushed writer)
-          >>| function
-          | `Timeout ->
-            Or_error.errorf !"Timeout %{Time.Span} waiting for data to flush" timeout
-          | `Result () -> Ok ()
-        in
-        Smtp_envelope.email envelope
-        |> Email.to_string
-        |> String.split ~on:'\n'
-        |> Deferred.Or_error.List.iter ~how:`Sequential ~f:(fun line ->
-          begin
-            if !block_length >= max_block_length
-            then begin
-              block_length := 0;
-              flush ()
-            end else Deferred.Or_error.ok_unit
-          end
-          >>|? fun () ->
-          (* dot escaping... *)
-          if String.is_prefix ~prefix:"." line then begin
-            block_length := !block_length + 1;
-            Writer.write writer "."
-          end;
-          block_length := !block_length + String.length line;
-          Writer.write writer line;
-          Writer.write writer "\r\n"
-        )
+        send_data t
         >>=? fun () ->
+        let writer = writer t in
+        Writer.write writer "\r\n";
         Writer.write writer ".";
         Writer.write writer "\r\n";
-        flush ()
+        flush_writer_with_timeout
+          ~timeout:(Config.send_receive_timeout (config t))
+          ~writer
         >>=? fun () ->
         Log.debug log (lazy (Log.Message.create
                                ~here:[%here]
@@ -239,7 +218,7 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                 ~here:[%here]
                                 ~flows
                                 ~component
-                                ~sender:(`Sender (Smtp_envelope.sender envelope))
+                                ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
                                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                                 ?dest:(remote_address t)
                                 ~tags:[ "remote-id",remote_id ]
@@ -253,8 +232,41 @@ let send_envelope t ~log ?flows ?(component=[]) envelope : Envelope_status.t Def
                                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                                 ~reply
                                 "send rejected"));
-          Error (`Rejected_body (reply, rejected_recipients)))
-    end)
+          Error (`Rejected_body (reply, rejected_recipients))))
+end
+
+let send_data_via_reader_writer t ~email =
+  let block_length = ref 0 in
+  (* We will send at most [max_block_length + <max line length> + 1]
+     bytes per block. *)
+  let max_block_length = 16 * 1024 in
+  let timeout = Config.send_receive_timeout (config t) in
+  let writer = writer t in
+  Email.to_string email
+  |> String.split ~on:'\n'
+  |> (fun lines ->
+    let num_lines = List.length lines in
+    Deferred.Or_error.List.iteri lines ~how:`Sequential ~f:(fun i line ->
+      begin
+        if !block_length >= max_block_length
+        then begin
+          block_length := 0;
+          flush_writer_with_timeout ~timeout ~writer
+        end else Deferred.Or_error.ok_unit
+      end
+      >>|? fun () ->
+      let encoded = Dot_escaping.encode_line_string line in
+      String_monoid.output_unix encoded writer;
+      block_length := !block_length + String_monoid.length encoded;
+      if not (i = num_lines - 1)
+      then Writer.write writer "\r\n"))
+;;
+
+let send_envelope t ~log ?flows ?component envelope =
+  Expert.send_envelope t ~log ?flows ?component
+    ~send_data:(send_data_via_reader_writer ~email:(Smtp_envelope.email envelope))
+    (Smtp_envelope.info envelope)
+;;
 
 module For_test = struct
   let with_

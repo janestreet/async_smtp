@@ -124,8 +124,8 @@ module type Envelope = sig
     -> t
     -> Email.t
     -> [ `Consume of string
-       | `Send of Smtp_envelope.Routed.t list
-       | `Quarantine of Smtp_envelope.Routed.t list * Smtp_reply.t * Quarantine_reason.t
+       | `Send of Smtp_envelope.Routed.Batch.t list
+       | `Quarantine of Smtp_envelope.Routed.Batch.t list * Smtp_reply.t * Quarantine_reason.t
        ] Smtp_monad.t
 
 end
@@ -193,8 +193,8 @@ module Simple : sig
       -> t
       -> Email.t
       -> [ `Consume of string
-         | `Send of Smtp_envelope.Routed.t list
-         | `Quarantine of Smtp_envelope.Routed.t list * Smtp_reply.t * Quarantine_reason.t
+         | `Send of Smtp_envelope.Routed.Batch.t list
+         | `Quarantine of Smtp_envelope.Routed.Batch.t list * Smtp_reply.t * Quarantine_reason.t
          ] Smtp_monad.t
   end
 
@@ -267,14 +267,13 @@ end = struct
         return t
 
     let process ~log:_ _session t email =
-      let envelope = smtp_envelope t email in
-      return
-        (`Send
-           [ Smtp_envelope.Routed.create
-               ~envelope
-               ~next_hop_choices:[]
-               ~retry_intervals:[]
-           ])
+      let envelope =
+        Smtp_envelope.Routed.create
+          ~envelope:(smtp_envelope t email)
+          ~next_hop_choices:[]
+          ~retry_intervals:[]
+      in
+      return (`Send [Smtp_envelope.Routed.Batch.single_envelope envelope])
   end
 
   let rpcs () = []

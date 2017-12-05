@@ -50,18 +50,18 @@ let create ?id ~sender ?sender_args ~recipients ?rejected_recipients ?route ~ema
 let create' ~info ~email = Fields.create ~info ~email
 
 let set
-      { info; email }
       ?sender
       ?sender_args
       ?recipients
       ?rejected_recipients
       ?route
-      ?(email = email)
+      ?email
+      t
       () =
   { info =
-      Envelope_info.set info ?sender ?sender_args
+      Envelope_info.set t.info ?sender ?sender_args
         ?recipients ?rejected_recipients ?route ()
-  ; email
+  ; email = Option.value email ~default:t.email
   }
 ;;
 
@@ -75,6 +75,26 @@ let modify_email t ~f =
   let email = email t in
   let email = f email in
   { t with email }
+;;
+
+let of_bodiless bodiless body =
+  let info = Envelope_bodiless.info bodiless in
+  let email =
+    Email.create
+      ~headers:(Envelope_bodiless.headers bodiless)
+      ~raw_content:body
+  in
+  create' ~info ~email
+;;
+
+let split_bodiless { info; email } =
+  let bodiless = Envelope_bodiless.create' ~info ~headers:(Email.headers email) in
+  bodiless, Email.raw_content email
+;;
+
+let with_bodiless t f =
+  let bodiless, body = split_bodiless t in
+  of_bodiless (f bodiless) body
 ;;
 
 include Envelope_container.Make_with_headers(struct

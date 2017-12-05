@@ -6,6 +6,7 @@
    (async
     async_inotify
     async_ssl
+    async_sendfile
     core_extended.base64
     core
     textutils

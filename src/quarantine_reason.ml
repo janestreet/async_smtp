@@ -29,11 +29,11 @@ let to_string t = Sexp.to_string (sexp_of_t t)
 
 let of_envelope ~description envelope =
   let from_headers =
-    Smtp_envelope.find_all_headers envelope "From"
+    Smtp_envelope.Bodiless.find_all_headers envelope "From"
     |> String.concat ~sep:", "
   in
   { description
-  ; envelope_sender = Smtp_envelope.sender envelope
+  ; envelope_sender = Smtp_envelope.Bodiless.sender envelope
   ; from_headers
   }
 ;;

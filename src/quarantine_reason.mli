@@ -11,7 +11,7 @@ val to_string : t -> string
 
 val of_envelope
   :  description:string
-  -> Smtp_envelope.t
+  -> Smtp_envelope.Bodiless.t
   -> t
 
 module Stable : sig

@@ -71,7 +71,6 @@ module Config = Server_config
 
 
 module Message_id    = Message.Id
-module Message_spool = Message.On_disk_spool
 module Message_queue = Message.Queue
 
 module Log = Mail_log
@@ -259,7 +258,7 @@ let rec enqueue ?at t spooled_msg =
            causing a permanent status change. *)
         return ()
       | `Send_now  | `Send_at _ ->
-        Message.send spooled_msg ~log:t.log ~client_cache:t.client_cache
+        Message_spool.send spooled_msg ~log:t.log ~client_cache:t.client_cache
         >>| function
         | Error e ->
           Log.error t.log
@@ -324,7 +323,7 @@ let load t =
                            ~tags:["entries", sprintf !"%{sexp:Message_spool.Entry.t list}" entries]
                            "found files"));
   Deferred.List.iter entries ~how:`Parallel ~f:(fun entry ->
-    Message.load entry
+    Message_spool.Entry.to_message entry
     >>| function
     | Error e ->
       Log.error t.log
@@ -356,36 +355,36 @@ let create ~config ~log () =
   return (Ok t)
 ;;
 
-let add t ~flows ~original_msg messages =
-  Deferred.Or_error.List.iter messages ~how:`Parallel ~f:(fun envelope_routed ->
-    Message.create
+let add t ~flows ~original_msg envelope_batches =
+  Deferred.Or_error.List.iter envelope_batches ~how:`Parallel ~f:(fun envelope_batch ->
+    Message_spool.enqueue
       t.spool
       ~log:t.log
       ~flows:(Log.Flows.extend flows `Outbound_envelope)
       ~initial_status:`Send_now
-      envelope_routed
+      envelope_batch
       ~original_msg
-    >>|? fun spooled_msg ->
-    add_message t spooled_msg;
-    enqueue t spooled_msg;
-    spooled_event t ~here:[%here] spooled_msg)
+    >>|? fun spooled_msgs ->
+    List.iter spooled_msgs ~f:(fun msg ->
+      add_message t msg;
+      enqueue t msg;
+      spooled_event t ~here:[%here] msg))
   >>|? fun () ->
   Smtp_envelope.id original_msg
 ;;
 
-let quarantine t ~reason ~flows ~original_msg messages =
-  Deferred.Or_error.List.iter messages
-    ~how:`Parallel
-    ~f:(fun envelope_routed ->
-      Message.create
-        t.spool
-        ~log:t.log
-        ~flows:(Log.Flows.extend flows `Outbound_envelope)
-        ~initial_status:(`Quarantined reason)
-        envelope_routed
-        ~original_msg
-      >>|? fun quarantined_msg ->
-      quarantined_event ~here:[%here] t (`Reason reason) quarantined_msg)
+let quarantine t ~reason ~flows ~original_msg envelope_batches =
+  Deferred.Or_error.List.iter envelope_batches ~how:`Parallel ~f:(fun envelope_batch ->
+    Message_spool.enqueue
+      t.spool
+      ~log:t.log
+      ~flows:(Log.Flows.extend flows `Outbound_envelope)
+      ~initial_status:(`Quarantined reason)
+      envelope_batch
+      ~original_msg
+    >>|? fun quarantined_msgs ->
+    List.iter quarantined_msgs ~f:(fun msg ->
+      quarantined_event ~here:[%here] t (`Reason reason) msg))
 ;;
 
 let kill_and_flush ?(timeout = Deferred.never ()) t =
@@ -407,7 +406,7 @@ let with_outstanding_msg t id ~f =
 let freeze t ids =
   Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
     with_outstanding_msg t id ~f:(fun spooled_msg ->
-      Message.freeze spooled_msg ~log:t.log
+      Message_spool.freeze spooled_msg ~log:t.log
       >>=? fun () ->
       frozen_event t ~here:[%here] spooled_msg;
       Deferred.Or_error.ok_unit))
@@ -422,7 +421,7 @@ end
 
 let send_msgs ?(retry_intervals = []) t ids =
   let do_send ?event msg =
-    Message.mark_for_send_now ~retry_intervals msg ~log:t.log
+    Message_spool.mark_for_send_now ~retry_intervals msg ~log:t.log
     >>=? fun () ->
     Option.iter event ~f:(fun event -> event t msg);
     enqueue t msg;
@@ -449,7 +448,7 @@ let remove t ids =
       begin
         match Message.status spooled_msg with
         | `Frozen ->
-          Message.remove spooled_msg ~log:t.log
+          Message_spool.remove spooled_msg ~log:t.log
         | `Send_at _ | `Send_now | `Sending | `Delivered | `Removed | `Quarantined _ ->
           Error (Error.of_string "Cannot remove a message that is not currently frozen")
           |> return
@@ -478,7 +477,7 @@ let recover t (info : Recover_info.t) =
   Deferred.Or_error.List.iter msgids ~how:`Parallel ~f:(fun id ->
     let name = Message_id.to_string id in
     let entry = Message_spool.Entry.create t.spool from_queue ~name in
-    Message.load entry
+    Message_spool.Entry.to_message entry
     >>= function
     | Error e ->
       let e = Error.tag e ~tag:"Failed to recover message" in
@@ -492,10 +491,10 @@ let recover t (info : Recover_info.t) =
       return (Error e)
     | Ok msg ->
       Option.value_map info.wrapper ~default:Deferred.Or_error.ok_unit ~f:(fun wrapper ->
-        Message.map_email msg ~f:(fun email ->
+        Message_spool.map_email msg ~f:(fun email ->
           Email_wrapper.add wrapper email))
       >>=? fun () ->
-      Message.freeze msg ~log:t.log
+      Message_spool.freeze msg ~log:t.log
       >>=? fun () ->
       add_message t msg;
       recovered_event t ~here:[%here] from_queue' msg;
@@ -690,9 +689,9 @@ let status_from_disk config =
   Message_spool.ls spool [Message_queue.Active; Message_queue.Frozen]
   >>=? fun entries ->
   Deferred.List.map entries ~f:(fun entry ->
-    Message.load_with_envelope entry
+    Message_spool.Entry.to_message_with_envelope entry
     >>=? fun (message, envelope) ->
-    Message.size_of_file message
+    Message_spool.size_of_file message
     >>=? fun file_size ->
     return (Ok { Spooled_message_info. message
                ; envelope = Some envelope

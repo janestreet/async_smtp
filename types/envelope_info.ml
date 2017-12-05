@@ -55,18 +55,41 @@ include T
 include Comparable.Make_plain(T)
 include Hashable.Make_plain(T)
 
+type 'a create =
+  ?id:Envelope_id.t
+  -> sender:Sender.t
+  -> ?sender_args:Sender_argument.t list
+  -> recipients:Email_address.t list
+  -> ?rejected_recipients:Email_address.t list
+  -> ?route:string
+  -> 'a
+
+type 'a set =
+  ?sender:Sender.t
+  -> ?sender_args:Sender_argument.t list
+  -> ?recipients:Email_address.t list
+  -> ?rejected_recipients:Email_address.t list
+  -> ?route:string option
+  -> 'a
+
 let string_sender t = sender t |> Sender.to_string
 let string_recipients t = recipients t |> List.map ~f:Email_address.to_string
 
 let set
-      { sender; sender_args; id; recipients; rejected_recipients; route }
-      ?(sender = sender)
-      ?(sender_args = sender_args)
-      ?(recipients = recipients)
-      ?(rejected_recipients=rejected_recipients)
-      ?(route = route)
+      ?sender
+      ?sender_args
+      ?recipients
+      ?rejected_recipients
+      ?route
+      t
       () =
-  { sender; sender_args; id; recipients; rejected_recipients; route }
+  { sender              = Option.value sender              ~default:t.sender
+  ; sender_args         = Option.value sender_args         ~default:t.sender_args
+  ; id                  = t.id
+  ; recipients          = Option.value recipients          ~default:t.recipients
+  ; rejected_recipients = Option.value rejected_recipients ~default:t.rejected_recipients
+  ; route               = Option.value route               ~default:t.route
+  }
 ;;
 
 let create ?id ~sender ?(sender_args=[]) ~recipients ?(rejected_recipients=[]) ?route () =

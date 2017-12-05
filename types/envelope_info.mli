@@ -3,25 +3,26 @@ open Email_message
 
 type t [@@deriving sexp_of]
 
-val create
-  :  ?id:Envelope_id.t
+type 'a create =
+  ?id:Envelope_id.t
   -> sender:Sender.t
   -> ?sender_args:Sender_argument.t list
   -> recipients:Email_address.t list
   -> ?rejected_recipients:Email_address.t list
   -> ?route:string
-  -> unit
-  -> t
+  -> 'a
 
-val set
-  :  t
-  -> ?sender:Sender.t
+val create : (unit -> t) create
+
+type 'a set =
+  ?sender:Sender.t
   -> ?sender_args:Sender_argument.t list
   -> ?recipients:Email_address.t list
   -> ?rejected_recipients:Email_address.t list
   -> ?route:string option
-  -> unit
-  -> t
+  -> 'a
+
+val set : (t -> unit -> t) set
 
 (* Extracts sender and recipients from the headers. *)
 val of_email : Email.t -> t Or_error.t

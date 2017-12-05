@@ -169,14 +169,16 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       { spool; name }
     ;;
 
+    let path t = data_dir_of t.spool ^/ t.name
+
     let load t =
       S.Throttle.enqueue (fun () ->
-        S.Data.load (data_dir_of t.spool ^/ t.name))
+        S.Data.load (path t))
     ;;
 
     let save t ~contents =
       S.Throttle.enqueue (fun () ->
-        S.Data.save contents (data_dir_of t.spool ^/ t.name))
+        S.Data.save contents (path t))
     ;;
 
     let stat t =
@@ -917,7 +919,7 @@ module Monitor = struct
         List.fold problems ~init:Problem.Map.empty
           ~f:(fun private_problems p ->
             let old_count = Map.find old_private_problems p |> Option.value ~default:0 in
-            Map.add private_problems ~key:p ~data:(old_count + 1))
+            Map.set private_problems ~key:p ~data:(old_count + 1))
       in
       t.private_problems <- private_problems;
       Deferred.Or_error.ok_unit

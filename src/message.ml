@@ -85,11 +85,6 @@ open Core
 open Async
 open Async_smtp_types
 
-module Log = Mail_log
-
-let compare _ _ = `You_are_using_poly_compare
-let _silence_unused_warning = compare
-
 (* Includes parent id and an incrementing counter. *)
 module Id  = struct
   include String
@@ -108,17 +103,7 @@ module Id  = struct
   ;;
 end
 
-module Status = struct
-  type t =
-    [ `Send_now
-    | `Send_at of Time.t
-    | `Sending
-    | `Frozen
-    | `Removed
-    | `Quarantined of Quarantine_reason.t
-    | `Delivered
-    ] [@@deriving sexp_of, compare]
-end
+module Status = Stable.Status.V1
 
 module Queue = struct
   type t =
@@ -157,6 +142,64 @@ end
 module Data = struct
   type t = Email.t
 
+  let map_headers headers ~encode_or_decode =
+    let f =
+      match encode_or_decode with
+      | `Encode -> (fun s -> Dot_escaping.encode_line_string s |> String_monoid.to_string)
+      | `Decode -> Dot_escaping.decode_line_string
+    in
+    Email_headers.map' ~whitespace:`Raw headers ~f:(fun ~name ~value ->
+      f name, value)
+  ;;
+
+  let map_raw_content_bstr body ~encode_or_decode =
+    let eol, f =
+      match encode_or_decode with
+      | `Encode ->
+        "\r\n",
+        Dot_escaping.encode_line_bigstring
+      | `Decode ->
+        "\n",
+        (fun s -> Dot_escaping.decode_line_bigstring s |> String_monoid.of_bigstring)
+    in
+    (* Most likely, the output buffer will be the same length as the input buffer. Give
+       ourselves some leeway to avoid having to resize. *)
+    let buffer = Bigbuffer.create (Bigstring_shared.length body + 100) in
+    let add_transformed_line line =
+      String_monoid.output_bigbuffer (f (Bigstring_shared.to_bigstring line)) buffer
+    in
+    let rec loop seq =
+      match Sequence.hd seq with
+      | None -> ()
+      | Some line ->
+        add_transformed_line line;
+        match Sequence.tl seq with
+        | None -> ()
+        | Some tail ->
+          (* Peek the sequence so we don't add an eol marker for the last line. *)
+          if Option.is_some (Sequence.hd tail)
+          then Bigbuffer.add_string buffer eol;
+          loop tail
+    in
+    loop (Bigstring_shared.lines_seq ~include_empty_last_line:() body);
+    Bigstring_shared.of_bigbuffer_volatile buffer
+  ;;
+
+  let map_raw_content raw_content ~encode_or_decode =
+    Option.map (Email.Raw_content.Expert.to_bigstring_shared_option raw_content)
+      ~f:(map_raw_content_bstr ~encode_or_decode)
+    |> Email.Raw_content.Expert.of_bigstring_shared_option
+  ;;
+
+  let map_email t ~encode_or_decode =
+    Email.create
+      ~headers:(map_headers (Email.headers t) ~encode_or_decode)
+      ~raw_content:(map_raw_content (Email.raw_content t) ~encode_or_decode)
+  ;;
+
+  let to_email = map_email ~encode_or_decode:`Decode
+  let of_email = map_email ~encode_or_decode:`Encode
+
   let load path =
     Deferred.Or_error.try_with (fun () ->
       let%bind contents = Reader.file_contents path in
@@ -164,7 +207,8 @@ module Data = struct
   ;;
 
   let save ?temp_file t path =
-    Deferred.Or_error.try_with (fun () -> Email.save ?temp_file ~fsync:true t path)
+    Deferred.Or_error.try_with (fun () ->
+      Email.save ?temp_file ~fsync:true ~eol_except_raw_content:`CRLF t path)
   ;;
 end
 
@@ -173,18 +217,12 @@ end
 type t = Stable.V2.t =
   { spool_dir                    : string
   ; id                           : Id.t
-  (* with default so that sexps without a flowid still parse. *)
-  ; flows                        : Log.Flows.t
+  ; flows                        : Mail_log.Flows.t
   ; parent_id                    : Smtp_envelope.Id.t
   ; spool_date                   : Time.t
   ; next_hop_choices             : Smtp_socket_address.t list
-  (* The head of this list is the time at which we should attempt a delivery
-     after the next time a delivery fails. *)
   ; mutable retry_intervals      : Smtp_envelope.Retry_interval.t list
   ; mutable remaining_recipients : Email_address.Stable.V1.t list
-  (* Currently not used, but saved to disk to aid in triaging frozen messages and failed
-     deliveries. Addresses on this list will not be included in remaining_recipients,
-     and would otherwise be lost to the ether. *)
   ; mutable failed_recipients    : Email_address.Stable.V1.t list
   ; mutable relay_attempts       : (Time.t * Error.t) list
   ; mutable status               : Status.t
@@ -194,9 +232,7 @@ type t = Stable.V2.t =
 (* type alias to make code more readable below *)
 type meta = t [@@deriving sexp_of]
 
-let compare t1 t2 =
-  Sexp.compare (sexp_of_t t1) (sexp_of_t t2)
-;;
+let compare t1 t2 = Sexp.compare (sexp_of_t t1) (sexp_of_t t2)
 
 let status t =
   match t.status with
@@ -204,8 +240,51 @@ let status t =
   | status -> status
 ;;
 
-(* Throttle to pass to multispool. Don't hit the max open files system limit *)
-let throttle = Throttle.create ~continue_on_error:true ~max_concurrent_jobs:400
+let time_on_spool t = Time.diff (Time.now ()) t.spool_date
+let last_relay_attempt t = List.hd t.relay_attempts
+
+let set_status               t x = t.status               <- x
+let set_remaining_recipients t x = t.remaining_recipients <- x
+let set_failed_recipients    t x = t.failed_recipients    <- x
+let set_retry_intervals      t x = t.retry_intervals      <- x
+let add_retry_intervals      t x = t.retry_intervals      <- x @ t.retry_intervals
+let add_relay_attempt        t x = t.relay_attempts       <- x :: t.relay_attempts
+
+let of_envelope_batch envelope_batch
+      ~gen_id ~spool_dir ~spool_date ~failed_recipients ~relay_attempts
+      ~parent_id ~status ~flows =
+  (* We make sure to only map the email body once. *)
+  let data_raw_content =
+    Data.map_raw_content (Smtp_envelope.Routed.Batch.email_body envelope_batch)
+      ~encode_or_decode:`Encode
+  in
+  Deferred.Or_error.List.map (Smtp_envelope.Routed.Batch.envelopes envelope_batch)
+    ~f:(fun envelope ->
+      let headers =
+        Smtp_envelope.Bodiless.Routed.headers envelope
+        |> Data.map_headers ~encode_or_decode:`Encode
+      in
+      let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
+      let data = Email.create ~headers ~raw_content:data_raw_content in
+      let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
+      let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
+      let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
+      gen_id ()
+      >>|? fun id ->
+      { spool_dir
+      ; id
+      ; flows
+      ; parent_id
+      ; spool_date
+      ; next_hop_choices
+      ; retry_intervals
+      ; remaining_recipients
+      ; failed_recipients
+      ; relay_attempts
+      ; status
+      ; envelope_info
+      }, data)
+;;
 
 module On_disk = struct
   module Metadata = struct
@@ -239,348 +318,10 @@ module On_disk = struct
   end
 
   module Throttle = struct
-    let enqueue f = Throttle.enqueue throttle f
+    (* Don't hit the max open files system limit *)
+    let t = Throttle.create ~continue_on_error:true ~max_concurrent_jobs:400
+
+    let enqueue f = Throttle.enqueue t f
   end
 end
-
-module On_disk_spool = struct
-  include Multispool.Make(On_disk)
-
-  (* Hide optional argument from the interface *)
-  let load str = load str
-
-  let ls t queues =
-    Deferred.Or_error.List.concat_map queues ~f:(fun queue -> list t queue)
-  ;;
-end
-
-let entry t =
-  let open Deferred.Or_error.Let_syntax in
-  let open On_disk_spool in
-  let spool = load_unsafe t.spool_dir in
-  let%map queue = Queue.of_status' t.status |> Deferred.return in
-  Entry.create spool queue ~name:t.id
-;;
-
-let enqueue meta_spool queue ~meta ~id ~email =
-  let open Deferred.Or_error.Let_syntax in
-  let%bind (_ : On_disk_spool.Entry.t) =
-    On_disk_spool.enqueue meta_spool queue meta email (`Use id)
-  in
-  Deferred.Or_error.ok_unit
-;;
-
-let create spool ~log:_ ~initial_status envelope_routed ~flows ~original_msg =
-  let parent_id = Smtp_envelope.id original_msg in
-  let next_hop_choices =
-    Smtp_envelope.Routed.next_hop_choices envelope_routed
-  in
-  let retry_intervals =
-    Smtp_envelope.Routed.retry_intervals envelope_routed
-  in
-  let envelope = Smtp_envelope.Routed.envelope envelope_routed in
-  let remaining_recipients = Smtp_envelope.recipients envelope in
-  Queue.of_status' initial_status |> Deferred.return
-  >>=? fun queue ->
-  On_disk_spool.Unique_name.reserve spool original_msg
-  >>=? fun id ->
-  let meta =
-    Fields.create
-      ~spool_dir:(On_disk_spool.dir spool)
-      ~spool_date:(Time.now ())
-      ~remaining_recipients
-      ~failed_recipients:[]
-      ~next_hop_choices
-      ~retry_intervals
-      ~relay_attempts:[]
-      ~parent_id
-      ~status:initial_status
-      ~id:(id :> string)
-      ~flows
-      ~envelope_info:(Smtp_envelope.info envelope)
-  in
-  let email = Smtp_envelope.email envelope in
-  enqueue spool queue ~meta ~id ~email
-  >>|? fun () ->
-  meta
-;;
-
-let load entry =
-  On_disk_spool.Entry.Direct.contents entry
-;;
-
-let load_with_envelope entry =
-  let open Deferred.Or_error.Let_syntax in
-  let%bind meta = load entry in
-  let data_file = On_disk_spool.Entry.Direct.data_file entry in
-  let%bind email = On_disk_spool.Data_file.load data_file in
-  return (meta, Smtp_envelope.create' ~info:(envelope_info meta) ~email)
-;;
-
-let last_relay_attempt t =
-  List.hd t.relay_attempts
-;;
-
-let with_file t
-      (f : (unit -> Smtp_envelope.t Or_error.t Deferred.t) ->
-       [`Sync_meta | `Sync_email of Email.t | `Unlink] Or_error.t Deferred.t)
-  : unit Or_error.t Deferred.t =
-  entry t
-  >>=? fun entry ->
-  return (Queue.of_status' t.status)
-  >>=? fun original_queue ->
-  On_disk_spool.with_entry entry
-    ~f:(fun meta data_file ->
-      match compare t meta = 0 with
-      | false ->
-        let e =
-          Error.create
-            "spooled message in memory differs from spooled message on disk"
-            (`In_memory t, `On_disk meta, `Entry entry)
-            [%sexp_of: [`In_memory of t] * [`On_disk of t] * [`Entry of On_disk_spool.Entry.t]]
-        in
-        return (`Save (meta, original_queue), Error e)
-      | true ->
-        let get_envelope () =
-          On_disk_spool.Data_file.load data_file
-          >>|? fun email ->
-          Smtp_envelope.create' ~info:(envelope_info meta) ~email
-        in
-        f get_envelope
-        >>= function
-        | Error _ as e -> return (`Save (meta, original_queue), e)
-        | Ok (`Unlink) -> return (`Remove, Ok ())
-        | Ok (`Sync_email email) ->
-          On_disk_spool.Data_file.save data_file ~contents:email
-          >>| fun result ->
-          (`Save (meta, original_queue), result)
-        | Ok `Sync_meta ->
-          (* Derive queue from mutable [t.status] as it may have changed in [~f] *)
-          Queue.of_status' t.status
-          |> Or_error.tag ~tag:(Sexp.to_string (sexp_of_t t))
-          |> Deferred.return
-          >>= function
-          | Error _ as e -> return (`Save (meta, original_queue), e)
-          | Ok new_queue ->
-            return (`Save (t, new_queue), Ok ())
-    )
-  >>| Or_error.join
-;;
-
-let map_email t ~f =
-  with_file t (fun get_envelope ->
-    get_envelope ()
-    >>=? fun envelope ->
-    let email' = f (Smtp_envelope.email envelope) in
-    return (Ok (`Sync_email email')))
-;;
-
-let freeze t ~log =
-  with_file t (fun _get_envelope ->
-    Log.info log (lazy (Log.Message.create
-                          ~here:[%here]
-                          ~flows:t.flows
-                          ~component:["spool"]
-                          ~spool_id:t.id
-                          "frozen"));
-    t.status <- `Frozen;
-    return (Ok `Sync_meta))
-;;
-
-let mark_for_send_now ~retry_intervals t ~log =
-  with_file t (fun _get_envelope ->
-    Log.info log (lazy (Log.Message.create
-                          ~here:[%here]
-                          ~flows:t.flows
-                          ~component:["spool"]
-                          ~spool_id:t.id
-                          "send_now"));
-    t.status <- `Send_now;
-    t.retry_intervals <- retry_intervals @ t.retry_intervals;
-    return (Ok `Sync_meta))
-;;
-
-let remove t ~log =
-  with_file t (fun _get_envelope ->
-    Log.info log (lazy (Log.Message.create
-                          ~here:[%here]
-                          ~flows:t.flows
-                          ~component:["spool"]
-                          ~spool_id:t.id
-                          "removing"));
-    t.status <- `Removed;
-    return (Ok `Sync_meta))
-;;
-
-let send_to_hops t ~log ~client_cache get_envelope =
-  let hops_tag =
-    Sexp.to_string ([%sexp_of: Smtp_socket_address.t list] t.next_hop_choices)
-  in
-  Log.debug log (lazy (Log.Message.create
-                         ~here:[%here]
-                         ~flows:t.flows
-                         ~component:["spool";"send"]
-                         ~spool_id:t.id
-                         ~tags:["hops", hops_tag]
-                         "attempting delivery"));
-  Client_cache.Tcp.with_'
-    ~give_up:(Clock.after (Time.Span.of_min 2.))
-    ~cache:client_cache t.next_hop_choices
-    ?route:(Smtp_envelope.Info.route t.envelope_info)
-    ~f:(fun ~flows client ->
-      let flows = Log.Flows.union t.flows flows in
-      get_envelope ()
-      >>=? fun envelope ->
-      let envelope = Smtp_envelope.set envelope ~recipients:t.remaining_recipients () in
-      Client.send_envelope client ~log ~flows ~component:["spool";"send"] envelope)
-  >>= function
-  | `Ok (hop, (Error e)) ->
-    (* The client logs many common failures, so this might be repetitive. But
-       duplication in the error case is better than missing potential errors. *)
-    let e = Error.tag ~tag:"Unable to send envelope" e in
-    Log.info log (lazy (Log.Message.of_error
-                          ~here:[%here]
-                          ~flows:t.flows
-                          ~component:["spool"; "send"]
-                          ~spool_id:t.id
-                          ~remote_address:hop
-                          e));
-    t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
-    return `Try_later
-  | `Error_opening_all_addresses hops_and_errors ->
-    List.iter hops_and_errors ~f:(fun (hop, e) ->
-      let e = Error.tag ~tag:"Unable to open connection for hop" e in
-      Log.info log (lazy (Log.Message.of_error
-                            ~here:[%here]
-                            ~flows:t.flows
-                            ~component:["spool"; "send"]
-                            ~spool_id:t.id
-                            ~remote_address:hop
-                            e)));
-    let e = Error.createf "No hops available" in
-    t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
-    return `Try_later
-  | `Gave_up_waiting_for_address ->
-    let e = Error.createf "Gave up waiting for client" in
-    Log.info log (lazy (Log.Message.of_error
-                          ~here:[%here]
-                          ~flows:t.flows
-                          ~component:["spool"; "send"]
-                          ~spool_id:t.id
-                          ~tags:["hops", hops_tag]
-                          e));
-    t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
-    return `Try_later
-  | `Cache_is_closed ->
-    (* Shutdown is initiated, so stop trying to resend. *)
-    Log.info log (lazy (Log.Message.create
-                          ~here:[%here]
-                          ~flows:t.flows
-                          ~component:["spool"; "send"]
-                          ~spool_id:t.id
-                          ~tags:["hops", hops_tag]
-                          "Cache is closed"));
-    return `Try_later
-  | `Ok (_hop, (Ok envelope_status)) ->
-    match Client.Envelope_status.ok_or_error ~allow_rejected_recipients:false envelope_status with
-    | Ok _msg_id ->
-      (* Already logged by the client *)
-      return `Done
-    | Error e ->
-      (* We are being conservative here for simplicity - if we get a permanent error
-         from one hop, we assume that we would get the same error from the remaining
-         hops. *)
-      (* Already logged by the client *)
-      t.relay_attempts <- (Time.now (), e) :: t.relay_attempts;
-      match envelope_status with
-      | Ok (_ (* envelope_id *), rejected_recipients)
-      | Error (`No_recipients rejected_recipients) ->
-        let permanently_failed_recipients, temporarily_failed_recipients =
-          List.partition_map rejected_recipients ~f:(fun (recipient, reject) ->
-            if Smtp_reply.is_permanent_error reject then `Fst recipient
-            else `Snd recipient)
-        in
-        t.remaining_recipients <- temporarily_failed_recipients;
-        t.failed_recipients <- t.failed_recipients @ permanently_failed_recipients;
-        if List.is_empty t.remaining_recipients
-        then (return `Fail_permanently)
-        else (return `Try_later)
-      | Error (`Rejected_sender r
-              | `Rejected_sender_and_recipients (r,_)
-              | `Rejected_body (r,_)) ->
-        if Smtp_reply.is_permanent_error r
-        then (return `Fail_permanently)
-        else (return `Try_later)
-;;
-
-let do_send t ~log ~client_cache =
-  with_file t (fun get_envelope ->
-    t.status <- `Sending;
-    send_to_hops t ~log ~client_cache get_envelope
-    >>| function
-    | `Done ->
-      t.status <- `Delivered;
-      Ok `Unlink
-    | (`Fail_permanently | `Try_later) as fail ->
-      match fail, t.retry_intervals with
-      | `Fail_permanently, _ | `Try_later, [] ->
-        t.status <- `Frozen;
-        Ok `Sync_meta
-      | `Try_later, r :: rs ->
-        t.status <-
-          `Send_at (Time.add (Time.now ()) (Smtp_envelope.Retry_interval.to_span r));
-        t.retry_intervals <- rs;
-        Ok `Sync_meta)
-;;
-
-let send t ~log ~client_cache =
-  match t.status with
-  | `Send_now | `Send_at _ -> do_send t ~log ~client_cache
-  | `Frozen ->
-    return (Or_error.error_string
-              "Message.send: message is frozen")
-  | `Removed ->
-    return (Or_error.error_string
-              "Message.send: message is removed")
-  | `Quarantined _ ->
-    return (Or_error.error_string
-              "Message.send: message is quarantined")
-  | `Sending ->
-    return (Or_error.error_string
-              "Message.send: message is already being sent")
-  | `Delivered ->
-    return (Or_error.error_string
-              "Message.send: message is delivered")
-;;
-
-let size_of_file t =
-  let open Deferred.Or_error.Let_syntax in
-  let%bind entry = entry t in
-  let data_file = On_disk_spool.Entry.Direct.data_file entry in
-  let%bind stats = On_disk_spool.Data_file.stat data_file in
-  let size = Unix.Stats.size stats |> Float.of_int64 in
-  return (Byte_units.create `Bytes size)
-;;
-
-let time_on_spool t =
-  Time.diff (Time.now ()) t.spool_date
-;;
-
-module T = struct
-  type nonrec t = t [@@deriving sexp_of]
-
-  let compare t1 t2 =
-    Id.compare t1.id t2.id
-
-  let hash t = Id.hash t.id
-
-  let hash_fold_t h t =
-    Id.hash_fold_t h t.id
-end
-
-include Comparable.Make_plain(T)
-include Hashable.Make_plain(T)
-
-module On_disk_monitor = struct
-  include Multispool.Monitor.Make(On_disk)
-end
+module On_disk_spool = Multispool.Make(On_disk)

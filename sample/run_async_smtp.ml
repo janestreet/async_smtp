@@ -37,13 +37,13 @@ module Server = Smtp_server.Make(struct
         `Inet (Host_and_port.create ~host:"localhost" ~port:25)
 
       let process ~log:_ _session t email =
-        let envelope = smtp_envelope t email in
-        return (`Send
-                  [ Smtp_envelope.Routed.create
-                      ~envelope
-                      ~next_hop_choices:[destination]
-                      ~retry_intervals:[]
-                  ])
+        let envelope =
+          Smtp_envelope.Routed.create
+            ~envelope:(smtp_envelope t email)
+            ~next_hop_choices:[destination]
+            ~retry_intervals:[]
+        in
+        return (`Send [Smtp_envelope.Routed.Batch.single_envelope envelope])
     end
     let rpcs () = []
   end)

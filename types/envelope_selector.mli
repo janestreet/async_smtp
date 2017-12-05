@@ -12,11 +12,13 @@ module Base : sig
     | `all_envelope_recipients of Regex.t
     ] [@@deriving sexp]
 
-  val matches : t -> Envelope.t -> bool
+  val matches  : t -> Envelope.t -> bool
+  val matches' : t -> Envelope_bodiless.t -> bool
 end
 
 type t = Base.t Blang.t [@@deriving sexp]
 
-val matches : t -> Envelope.t -> bool
+val matches  : t -> Envelope.t          -> bool
+val matches' : t -> Envelope_bodiless.t -> bool
 
 val example : t
