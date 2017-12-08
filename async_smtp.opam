@@ -1,4 +1,5 @@
 opam-version: "1.2"
+version: "v0.10.0"
 maintainer: "opensource@janestreet.com"
 authors: ["Jane Street Group, LLC <opensource@janestreet.com>"]
 homepage: "https://github.com/janestreet/async_smtp"
@@ -9,18 +10,18 @@ build: [
   ["jbuilder" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "async"
-  "async_inotify"
-  "async_sendfile"
-  "async_shell"
-  "async_ssl"
-  "core"
-  "core_extended"
-  "email_message"
-  "ppx_driver"
-  "ppx_jane"
-  "re2"
-  "textutils"
+  "async"                   {>= "v0.10" & < "v0.11"}
+  "async_inotify"           {>= "v0.10" & < "v0.11"}
+  "async_sendfile"          {>= "v0.10" & < "v0.11"}
+  "async_shell"             {>= "v0.10" & < "v0.11"}
+  "async_ssl"               {>= "v0.10" & < "v0.11"}
+  "core"                    {>= "v0.10" & < "v0.11"}
+  "core_extended"           {>= "v0.10" & < "v0.11"}
+  "email_message"           {>= "v0.10" & < "v0.11"}
+  "ppx_driver"              {>= "v0.10" & < "v0.11"}
+  "ppx_jane"                {>= "v0.10" & < "v0.11"}
+  "re2"                     {>= "v0.10" & < "v0.11"}
+  "textutils"               {>= "v0.10" & < "v0.11"}
   "cryptokit"
   "jbuilder"                {build & >= "1.0+beta12"}
   "ocaml-migrate-parsetree" {>= "0.4"}
