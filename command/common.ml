@@ -7,14 +7,12 @@ module Command : sig
   val rpc
     :  summary:string
     -> ?readme:(unit -> string)
-    -> ('main, (Rpc.Connection.t -> unit Deferred.t)) Spec.t
-    -> 'main
+    -> (Rpc.Connection.t -> unit Deferred.t) Param.t
     -> t
   val config_or_rpc
     :  summary:string
     -> ?readme:(unit -> string)
-    -> ('main, ([`Config of Smtp_server.Config.t | `Rpc of Rpc.Connection.t] -> unit Deferred.t)) Spec.t
-    -> 'main
+    -> ([`Config of Smtp_server.Config.t | `Rpc of Rpc.Connection.t] -> unit Deferred.t) Param.t
     -> t
 end = struct
   include Command
@@ -27,9 +25,15 @@ end = struct
     | Error exn -> raise exn
   ;;
 
-  let rpc_server_or_config_flag () =
-    let open Command.Spec in
-    step (fun m rpc_server config_path ->
+  let rpc_server_or_config_flag =
+    let open Command.Let_syntax in
+    [%map_open
+      let rpc_server =
+        flag "rpc-server" (optional host_and_port)
+          ~doc:"HOST:PORT mailcore instance to query"
+      and config_path =
+        flag "config" (optional file) ~doc:"CONFIG Async_smtp config file"
+      in
       let config =
         Option.map config_path
           ~f:(fun c ->
@@ -44,38 +48,36 @@ end = struct
           let port = Smtp_server.Config.rpc_port config in
           Host_and_port.create ~host:"localhost" ~port
       in
-      m ~rpc_server ~config)
-    +> flag "rpc-server" (optional host_and_port)
-         ~doc:"HOST:PORT mailcore instance to query"
-    +> flag "config" (optional file) ~doc:"CONFIG Async_smtp config file"
+      rpc_server, config
+    ]
   ;;
 
-  let rpc ~summary ?readme the_spec main =
-    Command.async_spec ~summary ?readme
-      Command.Spec.(
-        the_spec
-        ++ step (fun m ~rpc_server ~config:_ () ->
-          rpc_client_command0 ~host_and_port:rpc_server ~f:m
-        )
-        ++ rpc_server_or_config_flag ()
-      )
-      main
-
+  let rpc ~summary ?readme main =
+    let open Command.Let_syntax in
+    Command.async ~summary ?readme
+      [%map_open
+        let main = main
+        and rpc_server, _config = rpc_server_or_config_flag
+        in
+        fun () ->
+          rpc_client_command0 ~host_and_port:rpc_server ~f:main
+      ]
   ;;
-  let config_or_rpc ~summary ?readme the_spec main =
-    Command.async_spec ~summary ?readme
-      Command.Spec.(
-        the_spec
-        ++ step (fun m ~rpc_server ~config () ->
+
+  let config_or_rpc ~summary ?readme main =
+    let open Command.Let_syntax in
+    Command.async ~summary ?readme
+      [%map_open
+        let main = main
+        and rpc_server, config = rpc_server_or_config_flag
+        in
+        fun () ->
           match config with
           | Some config ->
-            m (`Config config)
+            main (`Config config)
           | None ->
             rpc_client_command0 ~host_and_port:rpc_server ~f:(fun client ->
-              m (`Rpc client))
-        )
-        ++ rpc_server_or_config_flag ()
-      )
-      main
-
+              main (`Rpc client))
+      ]
+  ;;
 end

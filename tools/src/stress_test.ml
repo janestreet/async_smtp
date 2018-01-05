@@ -175,26 +175,17 @@ let send ~config ~client_config envelope =
           )))
     >>| Result.iter_error ~f:(Log.Global.error !"buh???: %{Error#hum}"))
 
-let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies
+let main ~dir ~host ~port ~tls ~send_n_messages ~num_copies
       ~concurrent_senders ~concurrent_receivers ~message_from_stdin
-      ?client_allowed_ciphers ?server_allowed_ciphers ~key_type () =
-  begin match dir with
-  | Some dir -> return dir
-  | None -> Unix.mkdtemp "/tmp/stress-test-"
-  end
-  >>= fun dir ->
-  let allowed_ciphers = function
-    | None -> `Secure
-    | Some allowed_ciphers -> `Only allowed_ciphers
-  in
+      ~client_allowed_ciphers ~server_allowed_ciphers ~key_type () =
   let config =
     { Config.dir
     ; host
     ; port
     ; tls
     ; send_n_messages
-    ; client_allowed_ciphers = allowed_ciphers client_allowed_ciphers
-    ; server_allowed_ciphers = allowed_ciphers server_allowed_ciphers
+    ; client_allowed_ciphers
+    ; server_allowed_ciphers
     ; key_type
     }
   in
@@ -266,7 +257,10 @@ let main ?dir ~host ~port ~tls ~send_n_messages ~num_copies
   | Ok () ->
     Deferred.return ()
 
-let cipher_list = Command.Arg_type.create (String.split ~on:':')
+let cipher_list =
+  Command.Arg_type.create (fun s ->
+    `Only (String.split ~on:':' s))
+
 let key_type = Command.Arg_type.create (fun s ->
   match String.split ~on:':' s with
   | ["rsa"; bits] -> `rsa (Int.of_string bits)
@@ -275,36 +269,44 @@ let key_type = Command.Arg_type.create (fun s ->
   | _ -> failwith "not a recognized key type. Supported rsa:BITS, dsa:BITS, ecdsa:CURVE")
 
 let command =
-  Command.async_spec
+  let open Command.Let_syntax in
+  Command.async
     ~summary:("Stress-test an smtp server by repeatedly sending and receiving a message read from stdin")
-    Command.Spec.(
-      empty
-      ++ step (fun m v -> m ?dir:v)
-      +> flag "-dir" (optional string) ~doc:" Working dir"
-      ++ step (fun m v -> m ~host:v)
-      +> flag "-host" (optional_with_default "localhost" string) ~doc:" Hostname to listen on"
-      ++ step (fun m v -> m ~port:v)
-      +> flag "-port" (optional_with_default 2525 int) ~doc:" Port to listen on"
-      ++ step (fun m v -> m ~tls:v)
-      +> flag "-tls" no_arg ~doc:" Run the stress test with TLS enabled"
-      ++ step (fun m v -> m ~send_n_messages:v)
-      +> flag "-send-n-messages" ~aliases:["-n"] (optional_with_default 1000 int) ~doc:" Number of messages to send"
-      ++ step (fun m v -> m ~num_copies:v)
-      +> flag "-num-copies" (optional_with_default 1 int) ~doc:" Number of copies of each (the) message to have in circulation"
-      ++ step (fun m v -> m ~concurrent_senders:v)
-      +> flag "-concurrent-senders" (optional_with_default 1 int) ~doc:" Number of concurrent senders"
-      ++ step (fun m v -> m ~concurrent_receivers:v)
-      +> flag "-concurrent-receivers" (optional_with_default 1 int) ~doc:" Number of concurrent receivers"
-      ++ step (fun m v -> m ~message_from_stdin:v)
-      +> flag "-message-from-stdin" no_arg ~doc:" Read the message from stdin, otherwise generate a simple message"
-      ++ step (fun m v -> Option.iter ~f:Log.Global.set_level v; m)
-      +> flag "-log-level" (optional Log.Level.arg) ~doc:" Log level"
-      ++ step (fun m v -> m ?client_allowed_ciphers:v)
-      +> flag "-client-allowed-ciphers" (optional cipher_list) ~doc:" Restrict client side SSL ciphers"
-      ++ step (fun m v -> m ?server_allowed_ciphers:v)
-      +> flag "-server-allowed-ciphers" (optional cipher_list) ~doc:" Restrict server side SSL ciphers"
-      ++ step (fun m v -> m ~key_type:v)
-      +> flag "-key-type" (optional_with_default (`rsa 2048) key_type) ~doc:" TLS Key type to use/generate"
-    )
-    main
+    [%map_open
+      let dir =
+        flag "-dir" (optional string) ~doc:" Working dir"
+        |> map ~f:(function
+          | Some dir -> dir
+          | None -> Core.Unix.mkdtemp "/tmp/stress-test-")
+      and host =
+        flag "-host" (optional_with_default "localhost" string) ~doc:" Hostname to listen on"
+      and port =
+        flag "-port" (optional_with_default 2525 int) ~doc:" Port to listen on"
+      and tls =
+        flag "-tls" no_arg ~doc:" Run the stress test with TLS enabled"
+      and send_n_messages =
+        flag "-send-n-messages" ~aliases:["-n"] (optional_with_default 1000 int) ~doc:" Number of messages to send"
+      and num_copies =
+        flag "-num-copies" (optional_with_default 1 int) ~doc:" Number of copies of each (the) message to have in circulation"
+      and concurrent_senders =
+        flag "-concurrent-senders" (optional_with_default 1 int) ~doc:" Number of concurrent senders"
+      and concurrent_receivers =
+        flag "-concurrent-receivers" (optional_with_default 1 int) ~doc:" Number of concurrent receivers"
+      and message_from_stdin =
+        flag "-message-from-stdin" no_arg ~doc:" Read the message from stdin, otherwise generate a simple message"
+      and () =
+        flag "-log-level" (optional Log.Level.arg) ~doc:" Log level"
+        |> map ~f:(Option.iter ~f:Log.Global.set_level)
+      and client_allowed_ciphers =
+        flag "-client-allowed-ciphers" (optional_with_default `Secure cipher_list) ~doc:" Restrict client side SSL ciphers"
+      and server_allowed_ciphers =
+        flag "-server-allowed-ciphers" (optional_with_default `Secure cipher_list) ~doc:" Restrict server side SSL ciphers"
+      and key_type =
+        flag "-key-type" (optional_with_default (`rsa 2048) key_type) ~doc:" TLS Key type to use/generate"
+      in
+      fun () ->
+        main ~dir ~host ~port ~tls ~send_n_messages ~num_copies
+          ~concurrent_senders ~concurrent_receivers ~message_from_stdin
+          ~client_allowed_ciphers ~server_allowed_ciphers ~key_type ()
+    ]
 ;;

@@ -159,9 +159,10 @@ let sort_emails_in_header pattern =
   let f ~remove_duplicates value =
     let remove_duplicates = Option.is_some remove_duplicates in
     (List.sort value ~cmp:Email_address.compare
-     |> (if remove_duplicates
-         then List.remove_consecutive_duplicates ~equal:Email_address.equal
-         else Fn.id)
+     |> (fun l ->
+       if remove_duplicates
+       then List.remove_consecutive_duplicates l ~equal:Email_address.equal
+       else l)
      |> List.map ~f:Email_address.to_string)
   in
   Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->
@@ -185,9 +186,10 @@ let sort_words_in_header pattern =
     (String.split value ~on:' '
      |> List.filter ~f:(fun s -> not (String.is_empty s))
      |> List.sort ~cmp:String.compare
-     |> (if remove_duplicates
-         then List.remove_consecutive_duplicates ~equal:String.equal
-         else Fn.id)
+     |> (fun l ->
+       if remove_duplicates
+       then List.remove_consecutive_duplicates l ~equal:String.equal
+       else l)
      |> String.concat ~sep:" ")
   in
   Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->

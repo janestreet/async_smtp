@@ -285,7 +285,7 @@ module For_test = struct
 end
 
 module Tcp = struct
-  let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout
+  let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?writer_buffer_size ?timeout
         ?(config = Config.default)
         ?(credentials = Credentials.anon)
         ~log
@@ -301,6 +301,7 @@ module Tcp = struct
           ?buffer_age_limit
           ?interrupt
           ?reader_buffer_size
+          ?writer_buffer_size
           ?timeout
           address
           f)

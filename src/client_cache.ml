@@ -45,13 +45,15 @@ module Tcp_options = struct
     { buffer_age_limit   : [`At_most of Time.Span.t | `Unlimited] option
     ; interrupt          : unit Deferred.t                        option
     ; reader_buffer_size : int                                    option
+    ; writer_buffer_size : int                                    option
     ; timeout            : Time.Span.t                            option
     }
 
-  let create ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout () =
+  let create ?buffer_age_limit ?interrupt ?reader_buffer_size ?writer_buffer_size ?timeout () =
     { buffer_age_limit
     ; interrupt
     ; reader_buffer_size
+    ; writer_buffer_size
     ; timeout
     }
 end
@@ -121,6 +123,7 @@ module Resource = struct
         ?buffer_age_limit:tcp_options.buffer_age_limit
         ?interrupt:tcp_options.interrupt
         ?reader_buffer_size:tcp_options.reader_buffer_size
+        ?writer_buffer_size:tcp_options.writer_buffer_size
         ?timeout:tcp_options.timeout
         ?component:common.component
         ~config:common.client_config
@@ -181,11 +184,12 @@ type t =
   ; common_args : Resource.Common_args.t
   }
 
-let init ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout
+let init ?buffer_age_limit ?interrupt ?reader_buffer_size ?writer_buffer_size ?timeout
       ?component ~log ~(cache_config : Config.t) ~client_config () =
   let config = Config.to_cache_config cache_config in
   let tcp_options =
-    Tcp_options.create ?buffer_age_limit ?interrupt ?reader_buffer_size ?timeout ()
+    Tcp_options.create ?buffer_age_limit ?interrupt ?reader_buffer_size
+      ?writer_buffer_size ?timeout ()
   in
   let common_args =
     Resource.Common_args.create ?component ~tcp_options ~log ~client_config ()

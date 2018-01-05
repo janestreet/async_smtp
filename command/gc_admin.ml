@@ -4,23 +4,27 @@ open Async_smtp
 open Common
 
 let gc_command summary rpc =
+  let open Command.Let_syntax in
   Command.rpc ~summary
-    Command.Spec.empty
-    (fun client ->
-       Rpc.Rpc.dispatch_exn rpc client ()
-       >>| fun () ->
-       printf "OK\n"
-    )
+    [%map_open
+      let () = return () in
+      fun client ->
+        Rpc.Rpc.dispatch_exn rpc client ()
+        >>| fun () ->
+        printf "OK\n"
+    ]
 ;;
 
 let gc_stat_command summary rpc =
+  let open Command.Let_syntax in
   Command.rpc ~summary
-    Command.Spec.empty
-    (fun client ->
-       Rpc.Rpc.dispatch_exn rpc client ()
-       >>| fun stat ->
-       printf !"%{sexp:Gc.Stat.t}\n" stat
-    )
+    [%map_open
+      let () = return () in
+      fun client ->
+        Rpc.Rpc.dispatch_exn rpc client ()
+        >>| fun stat ->
+        printf !"%{sexp:Gc.Stat.t}\n" stat
+    ]
 ;;
 
 let stat       = gc_stat_command "Gc.stat"       Smtp_rpc_intf.Gc.stat

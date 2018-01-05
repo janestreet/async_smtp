@@ -18,55 +18,65 @@ module Host_and_port = struct
   let inet_address addr = Tcp.Where_to_connect.of_host_and_port addr
 end
 
-module Address =struct
-  let arg_spec () =
-    Command.Spec.(
-      step (fun m inet unix dest ->
-        let dest =
-          if inet && unix then
-            failwithf "can't sepecify both -inet and -unix" ()
-          else if unix then `Unix dest
-          else if inet then `Inet (Host_and_port.of_string ~port:25 dest)
-          else if String.mem dest '/' then `Unix dest
-          else `Inet (Host_and_port.of_string ~port:25 dest)
-        in
-        m ~dest)
-      +> flag "-inet" no_arg
-           ~doc:" Intepret the address as a HOST[:PORT]"
-      +> flag "-unix" no_arg
-           ~doc:" Intepret the address as a FILE"
-      +> anon ("HOST[:PORT] | FILE" %: string))
+module Address = struct
+  let param dest =
+    let open Command.Let_syntax in
+    [%map_open
+      let inet =
+        flag "-inet" no_arg
+          ~doc:" Intepret the address as a HOST[:PORT]"
+      and unix =
+        flag "-unix" no_arg
+          ~doc:" Intepret the address as a FILE"
+      and dest = dest
+      in
+      if inet && unix then
+        failwithf "can't sepecify both -inet and -unix" ()
+      else if unix then `Unix dest
+      else if inet then `Inet (Host_and_port.of_string ~port:25 dest)
+      else if String.mem dest '/' then `Unix dest
+      else `Inet (Host_and_port.of_string ~port:25 dest)
+    ]
+
+  let param_anon =
+    param
+      Command.Param.(anon ("HOST[:PORT]|FILE" %: string))
+
+  let param_server =
+    param
+      Command.Param.(
+        flag "-server" (required string)
+          ~doc:"HOST[:PORT]|FILE  Address of SMTP server to connect to")
 end
 
 module Smtp_client_config = struct
   include Smtp_client.Config
-  let file_arg_type =
-    Command.Spec.Arg_type.file
-      (fun file -> Sexp.load_sexp_conv_exn file t_of_sexp)
 
-  let load_sync path =
-    match Core.Sys.file_exists path with
-    | `Yes -> Some (Sexp.load_sexp_conv_exn path t_of_sexp)
-    | `No | `Unknown -> None
+  let load file =
+    Sexp.load_sexp_conv_exn file t_of_sexp
 
   let default =
-    match load_sync "./.js-smtp.sexp" with
-    | Some default -> default
-    | None ->
-      ( match Sys.getenv "HOME" with
-        | Some home ->
-          (match load_sync (home ^/ ".js-smtp.sexp") with
-           | Some default -> default
-           | None -> default)
-        | None -> default)
+    lazy begin
+      try load ".js-smtp.sexp"
+      with _ ->
+      try
+        let home = Option.value (Sys.getenv "HOME") ~default:"~" in
+        load (home ^/ ".js-smtp.sexp")
+      with _ -> default
+    end
 
-  let arg_spec () =
-    Command.Spec.(
-      step (fun m smtp_config -> m ~smtp_config)
-      +> flag "-smtp-config" (optional_with_default default file_arg_type)
-           ~doc:"File with config for the mailcore smtp client \
-                 (defaults to ~/.js-smtp.sexp if it exists or system \
-                 defaults otherwise)")
+  let param =
+    let open Command.Let_syntax in
+    [%map_open
+      let config_file =
+        flag "-smtp-config" (optional file)
+          ~doc:"File with config for the mailcore smtp client \
+                (defaults to ./.js-smtp.sexp or ~/.js-smtp.sexp or system defaults)"
+      in
+      match config_file with
+      | None -> Lazy.force default
+      | Some config_file -> load config_file
+    ]
 end
 
 module Hex = struct

@@ -4,9 +4,18 @@ open Async_smtp
 open Common
 
 module Status : sig
-  type format = [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ] [@@deriving sexp]
+  module Format : sig
+    type t =
+      [ `Ascii_table
+      | `Ascii_table_with_max_width of int
+      | `Exim
+      | `Sexp
+      ] [@@deriving sexp]
 
-  val spec : unit -> (format:format -> 'a, 'a) Command.Spec.t
+    val arg_type : t Command.Param.Arg_type.t
+    val param : t Command.Param.t
+  end
+
   val dispatch
     :  format : [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
     -> Rpc.Connection.t
@@ -14,7 +23,7 @@ module Status : sig
 end
 
 module Count : sig
-  val spec : unit -> (which:[`Only_frozen | `Only_active | `All] -> 'a, 'a) Command.Spec.t
+  val which : [`Only_frozen | `Only_active | `All] Command.Param.t
 
   val dispatch
     :  which:[`Only_frozen | `Only_active | `All]
@@ -23,7 +32,7 @@ module Count : sig
 end
 
 module Set_max_send_jobs : sig
-  val spec : unit -> (num:int -> 'a, 'a) Command.Spec.t
+  val num : int Command.Param.t
 
   val dispatch
     :  num:int
@@ -32,7 +41,7 @@ module Set_max_send_jobs : sig
 end
 
 module Freeze : sig
-  val spec : unit -> (msgids:Smtp_spool.Message_id.t list -> 'a, 'a) Command.Spec.t
+  val msgids : Smtp_spool.Message_id.t list Command.Param.t
 
   val dispatch
     :  msgids:Smtp_spool.Message_id.t list
@@ -41,12 +50,8 @@ module Freeze : sig
 end
 
 module Send : sig
-  val spec :
-    unit ->
-    (?retry_intervals:Smtp_envelope.Retry_interval.t list
-     -> Smtp_spool.Send_info.t
-     -> 'a,
-     'a) Common.Command.Spec.t
+  val retry_intervals : Smtp_envelope.Retry_interval.t list Command.Param.t
+  val param : Smtp_spool.Send_info.t Command.Param.t
 
   val dispatch
     :  ?retry_intervals:Smtp_envelope.Retry_interval.t list
@@ -56,7 +61,7 @@ module Send : sig
 end
 
 module Remove : sig
-  val spec : unit -> (msgids:Smtp_spool.Message_id.t list -> 'a, 'a) Command.Spec.t
+  val msgids : Smtp_spool.Message_id.t list Command.Param.t
 
   val dispatch
     :  msgids:Smtp_spool.Message_id.t list
@@ -66,7 +71,7 @@ end
 
 
 module Recover : sig
-  val spec : unit -> (Smtp_spool.Recover_info.t -> 'a, 'a) Command.Spec.t
+  val param : Smtp_spool.Recover_info.t Command.Param.t
 
   val dispatch
     :  Smtp_spool.Recover_info.t
@@ -75,8 +80,6 @@ module Recover : sig
 end
 
 module Events : sig
-  val spec : unit -> ('a, 'a) Command.Spec.t
-
   val dispatch
     :  Rpc.Connection.t
     -> unit Deferred.t
