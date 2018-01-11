@@ -67,6 +67,7 @@ val create
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
+  -> ?initial_status:[`Frozen | `Send_now]  (** default: `Send_now *)
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
   -> Smtp_envelope.Routed.Batch.t list

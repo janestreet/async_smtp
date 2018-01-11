@@ -355,13 +355,13 @@ let create ~config ~log () =
   return (Ok t)
 ;;
 
-let add t ~flows ~original_msg envelope_batches =
+let add t ?(initial_status = `Send_now) ~flows ~original_msg envelope_batches =
   Deferred.Or_error.List.iter envelope_batches ~how:`Parallel ~f:(fun envelope_batch ->
     Message_spool.enqueue
       t.spool
       ~log:t.log
       ~flows:(Log.Flows.extend flows `Outbound_envelope)
-      ~initial_status:`Send_now
+      ~initial_status:(initial_status :> Message.Status.t)
       envelope_batch
       ~original_msg
     >>|? fun spooled_msgs ->
