@@ -68,6 +68,8 @@ val send_envelope
 
 (** Standard SMTP over tcp *)
 module Tcp : sig
+  (** Establish a connection to the given address and perform the appropriate
+      SMTP handshake. Use [send_envelope] to (attempt) to deliver messages. *)
   val with_
     : (?config:Client_config.t
        -> ?credentials:Credentials.t  (** default: [Credentials.Anon] *)

@@ -1,7 +1,6 @@
 (executables
  ((names
    (spool_memory_test
-    cache_speed_test
     test_spool
     ))
   (flags (:standard -safe-string))

@@ -1,3 +1,8 @@
+## git version
+
+- Moved the `Cache` module out to its own library: `resource_cache`.
+  (available at https://github.com/janestreet/resource_cache )
+
 ## 113.43.00
 
 - Use the ~log argument passed to `Client_simple.start` rather than

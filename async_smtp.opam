@@ -20,6 +20,7 @@ depends: [
   "ppx_driver"
   "ppx_jane"
   "re2"
+  "resource_cache"
   "textutils"
   "cryptokit"
   "jbuilder"                {build & >= "1.0+beta12"}

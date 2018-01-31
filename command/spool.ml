@@ -89,7 +89,6 @@ module Count = struct
       | `Only_frozen -> is_frozen status
       | `Only_active -> is_active status)
     >>| List.length
-    >>| printf "%d\n"
 
   let command =
     let open Command.Let_syntax in
@@ -103,6 +102,7 @@ module Count = struct
           >>| printf "%d\n"
         | `Rpc client ->
           dispatch ~which client
+          >>| printf "%d\n"
       ]
 end
 

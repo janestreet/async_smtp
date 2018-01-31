@@ -25,9 +25,9 @@ module Code = struct
     | `Transaction_failed_554
     | `From_to_parameters_bad_555
     | `Other of 'a
-    ] [@@deriving sexp, enumerate]
+    ] [@@deriving bin_io, sexp, enumerate]
 
-  type t = int t_ [@@deriving sexp]
+  type t = int t_ [@@deriving bin_io, sexp]
 
   let of_int = function
     | 220 -> `Service_ready_220
@@ -103,7 +103,7 @@ end
 type t =
   { code : Code.t
   ; raw_message : string list
-  }
+  } [@@deriving bin_io]
 
 include Sexpable.Of_sexpable(struct
     type t = int * string list [@@deriving sexp]

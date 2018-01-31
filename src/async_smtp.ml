@@ -30,7 +30,6 @@ module Smtp_spool_queue        = Message.Queue
 module Smtp_spool              = Spool
 
 module Private = struct
-  module Cache           = Cache
   module Client_cache    = Client_cache
   module Message_spool   = Message_spool
   module Message         = Message

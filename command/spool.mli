@@ -28,7 +28,7 @@ module Count : sig
   val dispatch
     :  which:[`Only_frozen | `Only_active | `All]
     -> Rpc.Connection.t
-    -> unit Deferred.t
+    -> int Deferred.t
 end
 
 module Set_max_send_jobs : sig

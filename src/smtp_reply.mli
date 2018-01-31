@@ -28,7 +28,7 @@ type t = private
       | `Other of int
       ]
   ; raw_message : string list
-  } [@@deriving sexp]
+  } [@@deriving bin_io, sexp]
 
 val code : t -> int
 

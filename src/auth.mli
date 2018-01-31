@@ -28,6 +28,10 @@ end
 
 
 module type Client = sig
+  (** A mechanism with [require_tls] will only be used if STARTTLS was negotiated during
+      the SMTP session. [Login] and [Plain] below both require tls. If you need to use
+      one of these mechanisms on an insecure transport you need to define your own
+      custom mechanisms. *)
   val require_tls : bool
   val mechanism : string
   (** perform the client side authentication negotiation.

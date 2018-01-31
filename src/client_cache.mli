@@ -1,22 +1,9 @@
 open! Core
 open Async
+open Resource_cache
 open Async_smtp_types
 
-module Config : sig
-  type t =
-    { max_open_connections          : int
-    ; cleanup_idle_connection_after : Time.Span.t
-    ; max_connections_per_address   : int
-    ; max_connection_reuse          : int
-    } [@@deriving fields, sexp, bin_io, compare]
-
-  val create
-    :  max_open_connections:int
-    -> cleanup_idle_connection_after:Time.Span.t
-    -> max_connections_per_address:int
-    -> max_connection_reuse:int
-    -> t
-end
+module Config = Cache.Address_config
 
 module Address_and_route : sig
   type t =
@@ -26,7 +13,7 @@ module Address_and_route : sig
   include Identifiable.S with type t := t
 end
 
-module Status : Cache.Status_intf with module Key := Address_and_route
+module Status : Cache.Status_intf with type Key.t = Address_and_route.t
 
 type t
 

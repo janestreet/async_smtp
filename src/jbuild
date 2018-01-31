@@ -13,6 +13,7 @@
     email_message
     re2
     async_smtp_types
+    resource_cache
     ))
   (preprocess (pps (ppx_jane ppx_driver.runner)))
   ))
