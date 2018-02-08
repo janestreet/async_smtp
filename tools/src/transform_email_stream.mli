@@ -18,7 +18,7 @@ end
 module Bodies : sig
   module Rewrite : sig
     type t =
-      { if_contains : Re2.Regex.t
+      { if_contains : Re2.t
       ; rewrite_to  : string
       }
   end

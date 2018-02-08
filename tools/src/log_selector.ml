@@ -1,6 +1,6 @@
 open Core
 open Async_smtp
-open Re2
+module Regex = Re2
 
 let readme = "The query language is the Blang language:
 

@@ -30,7 +30,7 @@ end
 module Bodies = struct
   module Rewrite = struct
     type t =
-      { if_contains : Re2.Regex.t
+      { if_contains : Re2.t
       ; rewrite_to  : string
       } [@@deriving sexp]
   end
@@ -48,7 +48,7 @@ module Bodies = struct
     | _ ->
       Envelope.modify_email ~f:(fun email ->
         let rewrite = List.find t.rewrites ~f:(fun (rewrite : Rewrite.t) ->
-          Re2.Regex.matches rewrite.if_contains (Email.to_string email))
+          Re2.matches rewrite.if_contains (Email.to_string email))
         in
         match rewrite with
         | None -> email

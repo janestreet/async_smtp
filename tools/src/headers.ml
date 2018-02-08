@@ -71,8 +71,8 @@ let match_header conds =
           match if_ with
           | None -> cond
           | Some (`Contains s) ->
-            let re = Re2.Regex.escape s |> Re2.Regex.create_exn in
-            fun ~name ~value -> cond ~name ~value && Re2.Regex.matches re value
+            let re = Re2.escape s |> Re2.create_exn in
+            fun ~name ~value -> cond ~name ~value && Re2.matches re value
         in
         Map.add_multi acc ~key:name ~data:cond)
   in
@@ -94,8 +94,8 @@ let match_listed_header conds =
           match if_ with
           | None -> cond
           | Some (`Contains s) ->
-            let re = Re2.Regex.escape s |> Re2.Regex.create_exn in
-            fun ~name ~value -> cond ~name ~value && Re2.Regex.matches re value
+            let re = Re2.escape s |> Re2.create_exn in
+            fun ~name ~value -> cond ~name ~value && Re2.matches re value
         in
         Map.add_multi acc ~key:name ~data:(cond, remove_duplicates))
   in
@@ -113,10 +113,9 @@ let strip_whitespace_headers =
 ;;
 
 let normalize_whitespace s =
-  let open Re2 in
   let replace pattern replacement s =
-    let regex = Regex.create_exn pattern in
-    Regex.replace_exn regex s ~f:(fun _m -> replacement)
+    let regex = Re2.create_exn pattern in
+    Re2.replace_exn regex s ~f:(fun _m -> replacement)
   in
   let merge_spaces s     = replace "\\s\\s*" " " s in
   let normalize_commas s = replace "\\s*,\\s*" ", " s in

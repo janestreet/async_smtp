@@ -55,7 +55,7 @@ let read_data ~max_size reader =
     >>= function
     | `Eof ->
       if not is_first then add_string "\n";
-      return ()
+      Deferred.return `Eof
     | `Ok "." ->
       return ()
     | `Ok line ->
@@ -594,6 +594,13 @@ module Make(Cb : Plugin.S) = struct
         >>= fun () ->
         read_data ~max_size:max_message_size reader
         >>= function
+        | `Eof ->
+          Log.info log (lazy (Log.Message.create
+                                ~here:[%here]
+                                ~flows
+                                ~component
+                                "MESSAGE_ABORTED"));
+          return ()
         | `Too_much_data ->
           write_reply ~here:[%here] ~flows ~component Smtp_reply.exceeded_storage_allocation_552
           >>= fun () ->

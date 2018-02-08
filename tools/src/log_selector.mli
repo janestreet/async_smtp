@@ -1,18 +1,17 @@
 open! Core
-open Re2
 open Async_smtp
 
 module Base : sig
   type t =
-    [ `envelope_sender of Regex.t
-    | `envelope_recipient of Regex.t
-    | `recipient of Regex.t
-    | `subject of Regex.t
-    | `rfc822_id of Regex.t
+    [ `envelope_sender of Re2.t
+    | `envelope_recipient of Re2.t
+    | `recipient of Re2.t
+    | `subject of Re2.t
+    | `rfc822_id of Re2.t
     | `flows of Smtp_mail_log.Flows.t
     ] [@@deriving sexp]
 
-  val regex : t -> Regex.t
+  val regex : t -> Re2.t
 end
 
 type t = Base.t Blang.t [@@deriving sexp]

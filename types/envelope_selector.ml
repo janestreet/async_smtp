@@ -15,7 +15,7 @@ end = struct
   end
 end
 
-open Re2
+module Regex = Re2
 
 module Base = struct
   type t =
