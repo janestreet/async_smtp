@@ -65,7 +65,7 @@ let string         = binable (module String)
 let int            = binable (module Int)
 let unit           = binable (module Unit)
 let bool           = binable (module Bool)
-let span           = binable (module Time.Span.Stable.V2)
+let span           = binable (module Time.Stable.Span.V2)
 let retry_interval = binable (module Smtp_envelope.Retry_interval.Stable.V2)
 let error          = binable (module Error.Stable.V2)
 
