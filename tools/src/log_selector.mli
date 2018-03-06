@@ -23,7 +23,7 @@ type t = Base.t Blang.t [@@deriving sexp]
     - The empty conjunction list (top) is equivalent to [True]
     - A disjunction containing a [Not] is replaced by [True]
     - An empty disjuction list (middle) is equivalent to [False], and the whole
-    cnf will be rewritten to [ [ ] ].
+      cnf will be rewritten to [ [ ] ].
 *)
 val permissive_cnf : t -> Base.t list list
 
