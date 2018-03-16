@@ -1,4 +1,4 @@
-## git version
+## v0.11
 
 - Moved the `Cache` module out to its own library: `resource_cache`.
   (available at https://github.com/janestreet/resource_cache )
