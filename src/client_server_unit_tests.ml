@@ -67,7 +67,7 @@ let%test_module _ =
       >>= fun server ->
       let port = Server.ports server |> List.hd_exn in
       Clock.with_timeout (Time.Span.of_sec 10.) begin
-        Deferred.all_ignore
+        Deferred.all_unit
           [ begin
             Client.Tcp.with_
               ~log

@@ -191,6 +191,6 @@ let sort config pipe =
   | order ->
     Pipe.create_reader ~close_on_exception:true (fun out ->
       Pipe.to_list pipe
-      >>| List.stable_sort ~cmp:(compare_message order)
+      >>| List.stable_sort ~compare:(compare_message order)
       >>= Deferred.List.iter ~f:(Pipe.write out)
     )

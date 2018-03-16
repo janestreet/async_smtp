@@ -4,7 +4,7 @@
   (libraries (async
               core
               async_smtp))
-  (preprocess (pps (ppx_jane ppx_driver.runner)))))
+  (preprocess (pps (ppx_jane ppxlib.runner)))))
 
 
 (jbuild_version 1)

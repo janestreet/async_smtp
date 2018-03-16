@@ -43,7 +43,7 @@ module Utils = struct
   let ls_sorted dir =
     let open Deferred.Or_error.Let_syntax in
     let%bind entries = ls dir in
-    return (List.sort ~cmp:String.compare entries)
+    return (List.sort ~compare:String.compare entries)
   ;;
 
   let is_dir path =

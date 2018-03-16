@@ -123,7 +123,7 @@ module Config = struct
     end
     >>= fun tls_options ->
     let spool_dir = t.dir ^/ "spool-not-used" in
-    Deferred.all_ignore
+    Deferred.all_unit
       [ Unix.mkdir ~p:() spool_dir ]
     >>| fun () ->
     let client =

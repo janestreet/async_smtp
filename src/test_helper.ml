@@ -55,7 +55,7 @@ let with_stdout_log ~tag ~level (f:(log:Log.t -> 'a Deferred.t)) : 'a Deferred.t
 ;;
 
 let drain_and_closed r =
-  Deferred.all_ignore
+  Deferred.all_unit
     [ Monitor.try_with (fun () -> Reader.lines r |> Pipe.drain) >>| ignore
     ; Reader.close_finished r
     ]
@@ -125,7 +125,7 @@ let run
       [%here] "server->client"
   in
   let shutdown_now () =
-    Deferred.all_ignore
+    Deferred.all_unit
       [ drain_and_closed client_r
       ; Writer.close client_w
       ; drain_and_closed server_r
@@ -142,7 +142,7 @@ let run
   Monitor.protect
     ~finally:shutdown_now
     (fun () ->
-       Deferred.all_ignore
+       Deferred.all_unit
          [ print_and_ignore_exn "client"
              (fun () ->
                 client client_r client_w)

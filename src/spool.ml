@@ -547,7 +547,7 @@ module Status = struct
       let f = Spooled_message_info.time_on_spool in
       Time.Span.compare (f a) (f b)
     in
-    List.sort ~cmp t
+    List.sort ~compare:cmp t
   ;;
 
   let to_string_exim t =

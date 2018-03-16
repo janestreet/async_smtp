@@ -157,7 +157,7 @@ let mask_headers cond =
 let sort_emails_in_header pattern =
   let f ~remove_duplicates value =
     let remove_duplicates = Option.is_some remove_duplicates in
-    (List.sort value ~cmp:Email_address.compare
+    (List.sort value ~compare:Email_address.compare
      |> (fun l ->
        if remove_duplicates
        then List.remove_consecutive_duplicates l ~equal:Email_address.equal
@@ -184,7 +184,7 @@ let sort_words_in_header pattern =
     let remove_duplicates = Option.is_some remove_duplicates in
     (String.split value ~on:' '
      |> List.filter ~f:(fun s -> not (String.is_empty s))
-     |> List.sort ~cmp:String.compare
+     |> List.sort ~compare:String.compare
      |> (fun l ->
        if remove_duplicates
        then List.remove_consecutive_duplicates l ~equal:String.equal
@@ -200,14 +200,14 @@ let sort_words_in_header pattern =
 let sort_headers =
   Envelope.modify_headers ~f:(fun headers ->
     Email_headers.to_list ~whitespace:`Raw headers
-    |> List.stable_sort ~cmp:Header.compare
+    |> List.stable_sort ~compare:Header.compare
     |> Email_headers.of_list ~whitespace:`Raw)
 ;;
 
 let sort_envelope_recipients message =
   let recipients =
     Envelope.recipients message
-    |> List.stable_sort ~cmp:Email_address.compare
+    |> List.stable_sort ~compare:Email_address.compare
   in
   Envelope.set message ~recipients ()
 

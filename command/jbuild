@@ -8,7 +8,7 @@
               email_message
               re2
               async_smtp))
-  (preprocess (pps (ppx_jane ppx_driver.runner)))
+  (preprocess (pps (ppx_jane ppxlib.runner)))
   ))
 
 

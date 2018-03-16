@@ -7,7 +7,7 @@
     core
     email_message
     ))
-  (preprocess (pps (ppx_jane ppx_driver.runner)))
+  (preprocess (pps (ppx_jane ppxlib.runner)))
  ))
 (ocamllex (mail_from_lexer))
 
