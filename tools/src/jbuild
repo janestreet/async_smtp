@@ -1,7 +1,6 @@
 (library
  ((name async_smtp_tools)
   (public_name async_smtp.tools)
-  (flags (:standard -safe-string))
   (libraries (async
               core
               textutils

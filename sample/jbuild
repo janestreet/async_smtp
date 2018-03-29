@@ -1,6 +1,5 @@
 (executables
  ((names (run_async_smtp sendmail inline_image))
-  (flags (:standard -safe-string))
   (libraries (async
               core
               async_smtp))
