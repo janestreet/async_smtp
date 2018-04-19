@@ -36,6 +36,7 @@ let send'
       ?(cc=[])
       ?(bcc=[])
       ?reply_to
+      ?bounce_to
       ~subject
       ?id
       ?in_reply_to
@@ -59,7 +60,7 @@ let send'
       ?attachments
       content in
   let recipients = to_ @ cc @ bcc in
-  let sender = `Email from in
+  let sender = `Email (Option.value ~default:from bounce_to) in
   let server = Option.map server ~f:(fun hp -> `Inet hp) in
   Expert.send' ?log ?credentials ?server ~sender ?sender_args ~recipients email
 
@@ -73,6 +74,7 @@ let send
       ?cc
       ?bcc
       ?reply_to
+      ?bounce_to
       ~subject
       ?id
       ?in_reply_to
@@ -91,6 +93,7 @@ let send
     ?cc
     ?bcc
     ?reply_to
+    ?bounce_to
     ~subject
     ?id
     ?in_reply_to
