@@ -145,6 +145,7 @@ let mark_for_send_now ~retry_intervals t ~log =
                           "send_now"));
     Message.set_status t `Send_now;
     Message.add_retry_intervals t retry_intervals;
+    Message.move_failed_recipients_to_remaining_recipients t;
     return (Ok `Sync_meta))
 ;;
 

@@ -2,7 +2,7 @@ open Core
 open Async
 open Async_ssl.Std
 
-module Tls = struct
+module Tls_options = struct
   type t =
     { version:Ssl.Version.t option
     ; options:Ssl.Opt.t list option
@@ -12,6 +12,13 @@ module Tls = struct
     ; key_file:string
     ; ca_file:string option
     ; ca_path : string option
+    } [@@deriving fields, sexp]
+end
+
+module Tcp_options = struct
+  type t =
+    { max_accepts_per_batch : int sexp_option
+    ; backlog               : int sexp_option
     } [@@deriving fields, sexp]
 end
 
@@ -28,7 +35,8 @@ type t =
   ; rpc_port                             : int
   ; malformed_emails                     : [ `Reject | `Wrap ]
   ; max_message_size                     : Byte_units.t
-  ; tls_options                          : Tls.t sexp_option
+  ; tls_options                          : Tls_options.t sexp_option
+  ; tcp_options                          : Tcp_options.t sexp_option
   ; client                               : Client_config.t
   } [@@deriving fields, sexp]
 
@@ -49,5 +57,6 @@ let default =
   ; malformed_emails = `Reject
   ; max_message_size = Byte_units.create `Megabytes 24.
   ; tls_options = None
+  ; tcp_options = None
   ; client = Client_config.default
   }

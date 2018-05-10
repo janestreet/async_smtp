@@ -64,6 +64,7 @@ val set_remaining_recipients : t -> Email_address.t           list -> unit
     and would otherwise be lost to the ether. *)
 val failed_recipients     : t -> Email_address.Stable.V1.t list
 val set_failed_recipients : t -> Email_address.t           list -> unit
+val move_failed_recipients_to_remaining_recipients : t -> unit
 
 val relay_attempts     : t -> (Time.t * Error.t) list
 val add_relay_attempt  : t -> (Time.t * Error.t) -> unit

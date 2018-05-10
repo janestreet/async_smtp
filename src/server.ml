@@ -28,7 +28,7 @@ module type For_test = sig
       -> unit Deferred.Or_error.t)
     -> log:Mail_log.t
     -> ?max_message_size:Byte_units.t
-    -> ?tls_options:Config.Tls.t
+    -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
     -> ?malformed_emails:[`Reject|`Wrap]
     -> ?local:Smtp_socket_address.t
@@ -345,14 +345,14 @@ module Make(Cb : Plugin.S) = struct
       let reader_pipe_r,reader_pipe_w = Pipe.create () in
       let writer_pipe_r,writer_pipe_w = Pipe.create () in
       Ssl.server
-        ?version:tls_options.Config.Tls.version
-        ?options:tls_options.Config.Tls.options
-        ?name:tls_options.Config.Tls.name
-        ?ca_file:tls_options.Config.Tls.ca_file
-        ?ca_path:tls_options.Config.Tls.ca_path
-        ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
-        ~crt_file:tls_options.Config.Tls.crt_file
-        ~key_file:tls_options.Config.Tls.key_file
+        ?version:tls_options.Config.Tls_options.version
+        ?options:tls_options.Config.Tls_options.options
+        ?name:tls_options.Config.Tls_options.name
+        ?ca_file:tls_options.Config.Tls_options.ca_file
+        ?ca_path:tls_options.Config.Tls_options.ca_path
+        ~allowed_ciphers:tls_options.Config.Tls_options.allowed_ciphers
+        ~crt_file:tls_options.Config.Tls_options.crt_file
+        ~key_file:tls_options.Config.Tls_options.key_file
         (* Closing ssl connection will close the pipes which will in turn close
            the readers. *)
         ~net_to_ssl:(Reader.pipe old_reader)
@@ -869,7 +869,15 @@ module Make(Cb : Plugin.S) = struct
     let start_servers where ~make_local_address ~make_tcp_where_to_listen
           ~make_remote_address ~to_server =
       let local_address = make_local_address where in
+      let tcp_options = Config.tcp_options config in
+      let max_accepts_per_batch =
+        Option.bind tcp_options ~f:Config.Tcp_options.max_accepts_per_batch
+      in
+      let backlog =
+        Option.bind tcp_options ~f:Config.Tcp_options.backlog
+      in
       Tcp.Server.create (make_tcp_where_to_listen where)
+        ?max_accepts_per_batch ?backlog
         ~on_handler_error:(`Call (fun remote_address exn ->
           let remote_address = make_remote_address remote_address in
           (* Silence the [inner_monitor] errors *)

@@ -14,7 +14,7 @@ let config =
   ; max_message_size = Byte_units.create `Megabytes 1.
   ; tls_options =
       Some
-        { Smtp_server.Config.Tls.
+        { Smtp_server.Config.Tls_options.
           version = None
         ; options = None
         ; name = None
@@ -24,6 +24,7 @@ let config =
         ; ca_file = None
         ; ca_path  = None
         }
+  ; tcp_options = None
   ; client = Smtp_client.Config.default
   }
 

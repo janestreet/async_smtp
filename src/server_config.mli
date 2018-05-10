@@ -2,7 +2,7 @@ open! Core
 open! Async
 open Async_ssl.Std
 
-module Tls : sig
+module Tls_options : sig
   type t =
     { version : Ssl.Version.t option
     ; options : Ssl.Opt.t list option
@@ -12,6 +12,13 @@ module Tls : sig
     ; key_file : string
     ; ca_file : string option
     ; ca_path : string option
+    } [@@deriving fields, sexp]
+end
+
+module Tcp_options : sig
+  type t =
+    { max_accepts_per_batch : int sexp_option
+    ; backlog               : int sexp_option
     } [@@deriving fields, sexp]
 end
 
@@ -28,7 +35,8 @@ type t =
   ; rpc_port                             : int
   ; malformed_emails                     : [ `Reject | `Wrap ]
   ; max_message_size                     : Byte_units.t
-  ; tls_options                          : Tls.t option
+  ; tls_options                          : Tls_options.t option
+  ; tcp_options                          : Tcp_options.t option
   ; client                               : Client_config.t
   } [@@deriving fields, sexp]
 

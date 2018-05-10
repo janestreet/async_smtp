@@ -75,7 +75,7 @@ module Config = struct
       ]
     >>| fun () ->
     let server =
-      { Smtp_server.Config.Tls.
+      { Smtp_server.Config.Tls_options.
         version = None
       ; options = None
       ; name = None
@@ -145,6 +145,7 @@ module Config = struct
       ; malformed_emails = `Reject
       ; max_message_size = Byte_units.create `Megabytes 1.
       ; tls_options = Option.map ~f:fst tls_options
+      ; tcp_options = None
       ; client
       }
     in

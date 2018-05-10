@@ -39,7 +39,7 @@ module type For_test = sig
       -> unit Deferred.Or_error.t)
     -> log:Mail_log.t
     -> ?max_message_size:Byte_units.t
-    -> ?tls_options:Config.Tls.t
+    -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
     -> ?malformed_emails:[`Reject|`Wrap]
     -> ?local:Smtp_socket_address.t

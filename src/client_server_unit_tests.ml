@@ -124,7 +124,7 @@ let%test_module _ =
           { Server.Config.default with
             tls_options =
               Some
-                { Server.Config.Tls.
+                { Server.Config.Tls_options.
                   version = None
                 ; options = None
                 ; name = Some "localhost"

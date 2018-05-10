@@ -250,6 +250,11 @@ let set_retry_intervals      t x = t.retry_intervals      <- x
 let add_retry_intervals      t x = t.retry_intervals      <- x @ t.retry_intervals
 let add_relay_attempt        t x = t.relay_attempts       <- x :: t.relay_attempts
 
+let move_failed_recipients_to_remaining_recipients t =
+  t.remaining_recipients <- t.remaining_recipients @ t.failed_recipients;
+  t.failed_recipients <- []
+;;
+
 let of_envelope_batch envelope_batch
       ~gen_id ~spool_dir ~spool_date ~failed_recipients ~relay_attempts
       ~parent_id ~status ~flows =
