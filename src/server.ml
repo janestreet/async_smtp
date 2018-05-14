@@ -962,19 +962,26 @@ module Make(Cb : Plugin.S) = struct
     | Inet server -> Some (Tcp.Server.listening_on server)
     | Unix _server -> None)
 
-  let close ?timeout t =
+  let close ?(timeout = Deferred.never ()) t =
     Deferred.List.iter ~how:`Parallel t.servers ~f:(function
       | Inet server -> Tcp.Server.close server
       | Unix server -> Tcp.Server.close server)
     >>= fun () ->
-    Deferred.List.iter ~how:`Parallel t.servers ~f:(function
-      | Inet server -> Tcp.Server.close_finished server
-      | Unix server -> Tcp.Server.close_finished server)
-    >>= fun () ->
-    Spool.kill_and_flush ?timeout t.spool
+    let finished =
+      [ Spool.kill_and_flush t.spool ]
+      @ (List.map t.servers ~f:(function
+        | Inet server -> Tcp.Server.close_finished_and_handlers_determined server
+        | Unix server -> Tcp.Server.close_finished_and_handlers_determined server))
+      |> Deferred.all_unit
+    in
+    Deferred.choose
+      [ Deferred.choice timeout
+          (fun () -> `Timeout)
+      ; Deferred.choice finished
+          (fun () -> `Finished) ]
     >>= function
     | `Finished -> Deferred.Or_error.ok_unit
-    | `Timeout  -> Deferred.Or_error.error_string "Messages remaining in queue"
+    | `Timeout  -> Deferred.Or_error.error_string "Timed out flushing all sessions."
 end
 
 module For_test(P : Plugin.S) = struct

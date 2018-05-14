@@ -144,12 +144,14 @@ module Event = struct
 end
 
 type t =
-  { spool             : Message_spool.t
-  ; mutable is_killed : bool
-  ; messages          : Message.t Message_id.Table.t
-  ; event_stream      : (Event.t -> unit) Bus.Read_write.t
-  ; client_cache      : Client_cache.t
-  ; log               : Log.t
+  { spool              : Message_spool.t
+  ; active_send_jobs   : int Message_id.Table.t
+  ; messages           : Message.t Message_id.Table.t
+  ; event_stream       : (Event.t -> unit) Bus.Read_write.t
+  ; client_cache       : Client_cache.t
+  ; log                : Log.t
+  ; mutable is_killed  : bool
+  ; killed_and_flushed : unit Ivar.t
   } [@@deriving fields]
 ;;
 
@@ -208,6 +210,7 @@ let create ~config ~log : t Deferred.Or_error.t =
                               ~component:["spool";"event-stream"]
                               "ping"));
        Bus.write event_stream (Time.now (), `Ping));
+  let active_send_jobs = Message_id.Table.create () in
   let messages = Message_id.Table.create () in
   let cache_config =
     Client_cache.Config.create
@@ -224,68 +227,130 @@ let create ~config ~log : t Deferred.Or_error.t =
       ~client_config:config.Config.client
       ()
   in
+  let killed_and_flushed = Ivar.create () in
   Fields.create
     ~spool
-    ~is_killed:false
+    ~active_send_jobs
     ~messages
     ~event_stream
     ~client_cache
     ~log
+    ~is_killed:false
+    ~killed_and_flushed
 ;;
 
-(* Using the Async queue to store the messages waiting for retry. *)
-let rec enqueue ?at t spooled_msg =
-  let msgid = Message.id spooled_msg in
-  don't_wait_for (
-    begin match at with
-    | None      -> Deferred.unit
-    | Some time -> Clock.at time
-    end
-    >>= fun () ->
-    if t.is_killed then return ()
-    else begin
-      Log.debug t.log (lazy (Log.Message.create
+let add_active_send_job t msgid =
+  Hashtbl.update t.active_send_jobs msgid ~f:(function
+    | None -> 1
+    | Some x -> x + 1)
+;;
+
+let remove_active_send_job ~flows t msgid =
+  Hashtbl.change t.active_send_jobs msgid ~f:(function
+    | None ->
+      Log.error t.log (lazy (Log.Message.create
                                ~here:[%here]
-                               ~flows:(Message.flows spooled_msg)
-                               ~component:["spool";"throttle"]
+                               ~flows
+                               ~component:["spool";"remove_active_send_job"]
                                ~spool_id:(Message_id.to_string msgid)
-                               "enqueuing message"));
-      match Message.status spooled_msg with
-      | `Delivered  | `Sending | `Frozen | `Removed | `Quarantined _ ->
-        (* Only actually call [send] if the status is [`Send_now]. Between the time an
-           async job was scheduled and the time it gets run, the status of the message
-           can change. We make sure not to try to send if we have manually intervened,
-           causing a permanent status change. *)
-        return ()
-      | `Send_now  | `Send_at _ ->
-        Message_spool.send spooled_msg ~log:t.log ~client_cache:t.client_cache
-        >>| function
-        | Error e ->
-          Log.error t.log
-            (lazy (Log.Message.of_error
-                     ~here:[%here]
-                     ~flows:(Message.flows spooled_msg)
-                     ~component:["spool";"send"]
-                     ~spool_id:(Message_id.to_string msgid)
-                     e))
-        | Ok () ->
+                               "No active job to remove"));
+      None
+    | Some x ->
+      let res = x - 1 in
+      if res = 0 then None else Some res);
+  if t.is_killed && Hashtbl.length t.active_send_jobs = 0
+  then Ivar.fill_if_empty t.killed_and_flushed ()
+;;
+
+let spool_is_killed_error = Error.createf "Spool is killed."
+
+let with_spooled_message' t message ~f =
+  if t.is_killed
+  then return `Spool_is_killed
+  else begin
+    let msgid = Message.id message in
+    let flows = Message.flows message in
+    add_active_send_job t msgid;
+    let%bind result = f () in
+    remove_active_send_job ~flows t msgid;
+    return (`Ok result)
+  end
+;;
+
+let with_spooled_message t message ~f =
+  match%bind with_spooled_message' t message ~f with
+  | `Spool_is_killed -> return (Error spool_is_killed_error)
+  | `Ok result -> return result
+;;
+
+let rec enqueue ?don't_retry ?at t spooled_msg =
+  let msgid = Message.id spooled_msg in
+  begin match at with
+  | None      -> Deferred.unit
+  | Some time -> Clock.at time
+  end
+  >>= fun () ->
+  Log.debug t.log (lazy (Log.Message.create
+                           ~here:[%here]
+                           ~flows:(Message.flows spooled_msg)
+                           ~component:["spool";"throttle"]
+                           ~spool_id:(Message_id.to_string msgid)
+                           "enqueuing message"));
+  let status = Message.status spooled_msg in
+  match status with
+  | `Delivered  | `Sending | `Frozen | `Removed | `Quarantined _ ->
+    (* Only actually call [send] if the status is [`Send_now]. Between the time an
+       async job was scheduled and the time it gets run, the status of the message
+       can change. We make sure not to try to send if we have manually intervened,
+       causing a permanent status change. *)
+    Or_error.errorf !"Not attempting delivery for status %{sexp: Message.Status.t}"
+      status
+    |> return
+  | `Send_now  | `Send_at _ ->
+    with_spooled_message' t spooled_msg ~f:(fun () ->
+      Message_spool.send spooled_msg ~log:t.log ~client_cache:t.client_cache)
+    >>= function
+    | `Spool_is_killed ->
+      return (Error spool_is_killed_error)
+    | `Ok spool_send_result ->
+      match spool_send_result with
+      | Error e ->
+        Log.error t.log
+          (lazy (Log.Message.of_error
+                   ~here:[%here]
+                   ~flows:(Message.flows spooled_msg)
+                   ~component:["spool";"send"]
+                   ~spool_id:(Message_id.to_string msgid)
+                   e));
+        return (Error e)
+      | Ok `Delivered ->
+        remove_message t spooled_msg;
+        delivered_event t ~here:[%here] spooled_msg;
+        return (Ok ())
+      | Ok (`Failed relay_attempt) ->
+        match don't_retry with
+        | Some () ->
+          return (Error relay_attempt)
+        | None ->
+          (* Use the Async queue to store the messages waiting for retry. *)
           match Message.status spooled_msg with
-          | `Delivered ->
-            remove_message t spooled_msg;
-            delivered_event t ~here:[%here] spooled_msg
           | `Send_now ->
             enqueue t spooled_msg
           | `Send_at at ->
             enqueue ~at t spooled_msg
-          | `Sending ->
-            failwithf !"Message has status Sending after returning from \
-                        Message.send: %{Message_id}"
-              (Message.id spooled_msg) ()
           | `Frozen ->
-            frozen_event t ~here:[%here] spooled_msg
-          | `Removed | `Quarantined _ ->
-            ()
-    end)
+            frozen_event t ~here:[%here] spooled_msg;
+            return (Error relay_attempt)
+          | `Delivered | `Sending | `Removed | `Quarantined _  ->
+            Log.error t.log
+              (lazy (Log.Message.create
+                       ~here:[%here]
+                       ~flows:(Message.flows spooled_msg)
+                       ~component:["spool";"send"]
+                       ~spool_id:(Message_id.to_string msgid)
+                       ~tags:["status", sprintf !"%{sexp:Message.Status.t}" status]
+                       "Unexpected status after [Message_spool.send]"));
+            return (Error relay_attempt)
 ;;
 
 let schedule t msg =
@@ -303,7 +368,7 @@ let schedule t msg =
                             ~spool_id:(Message_id.to_string (Message.id msg))
                             ~tags:["time", sprintf !"%{sexp:Time.t}" at]
                             "send later"));
-    enqueue ~at t msg
+    don't_wait_for (enqueue ~at t msg >>| (ignore : unit Or_error.t -> unit))
   | `Send_now ->
     Log.info t.log (lazy (Log.Message.create
                             ~here:[%here]
@@ -311,7 +376,7 @@ let schedule t msg =
                             ~component:["spool";"queue"]
                             ~spool_id:(Message_id.to_string (Message.id msg))
                             "send now"));
-    enqueue t msg
+    don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit))
 
 let load t =
   Message_spool.ls t.spool [Message_queue.Active; Message_queue.Frozen]
@@ -367,7 +432,7 @@ let add t ?(initial_status = `Send_now) ~flows ~original_msg envelope_batches =
     >>|? fun spooled_msgs ->
     List.iter spooled_msgs ~f:(fun msg ->
       add_message t msg;
-      enqueue t msg;
+      don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit));
       spooled_event t ~here:[%here] msg))
   >>|? fun () ->
   Smtp_envelope.id original_msg
@@ -387,16 +452,17 @@ let quarantine t ~reason ~flows ~original_msg envelope_batches =
       quarantined_event ~here:[%here] t (`Reason reason) msg))
 ;;
 
-let kill_and_flush ?(timeout = Deferred.never ()) t =
+let kill_and_flush t =
   t.is_killed <- true;
-  Deferred.choose
-    [ Deferred.choice timeout
-        (fun () -> `Timeout)
-    ; Deferred.choice (Client_cache.close_and_flush t.client_cache)
-        (fun () -> `Finished) ]
+  if Hashtbl.length t.active_send_jobs = 0
+  then Ivar.fill_if_empty t.killed_and_flushed ();
+  Deferred.all_unit
+    [ Client_cache.close_and_flush t.client_cache
+    ; Ivar.read t.killed_and_flushed
+    ]
 ;;
 
-let with_outstanding_msg t id ~f =
+let get_msg t id ~f =
   match Hashtbl.find t.messages id with
   | None ->
     return (Or_error.error_string "Not found")
@@ -405,8 +471,9 @@ let with_outstanding_msg t id ~f =
 
 let freeze t ids =
   Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
-    with_outstanding_msg t id ~f:(fun spooled_msg ->
-      Message_spool.freeze spooled_msg ~log:t.log
+    get_msg t id ~f:(fun spooled_msg ->
+      with_spooled_message t spooled_msg ~f:(fun () ->
+        Message_spool.freeze spooled_msg ~log:t.log)
       >>=? fun () ->
       frozen_event t ~here:[%here] spooled_msg;
       Deferred.Or_error.ok_unit))
@@ -421,14 +488,14 @@ end
 
 let send_msgs ?(retry_intervals = []) t ids =
   let do_send ?event msg =
-    Message_spool.mark_for_send_now ~retry_intervals msg ~log:t.log
+    with_spooled_message t msg ~f:(fun () ->
+      Message_spool.mark_for_send_now ~retry_intervals msg ~log:t.log)
     >>=? fun () ->
     Option.iter event ~f:(fun event -> event t msg);
-    enqueue t msg;
-    Deferred.Or_error.ok_unit
+    enqueue ~don't_retry:() t msg
   in
-  Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
-    with_outstanding_msg t id ~f:(fun msg ->
+  Deferred.List.map ids ~how:`Parallel ~f:(fun id ->
+    get_msg t id ~f:(fun msg ->
       match Message.status msg with
       | `Frozen ->
         do_send ~event:(unfrozen_event ~here:[%here]) msg
@@ -439,16 +506,18 @@ let send_msgs ?(retry_intervals = []) t ids =
         do_send msg
       | `Sending | `Delivered | `Send_now | `Removed | `Quarantined _ -> return (Ok ())
     )
-  )
+    >>| Or_error.tag ~tag:(Message_id.to_string id))
+  >>| Or_error.combine_errors_unit
 ;;
 
 let remove t ids =
   Deferred.Or_error.List.iter ids ~how:`Parallel ~f:(fun id ->
-    with_outstanding_msg t id ~f:(fun spooled_msg ->
+    get_msg t id ~f:(fun spooled_msg ->
       begin
         match Message.status spooled_msg with
         | `Frozen ->
-          Message_spool.remove spooled_msg ~log:t.log
+          with_spooled_message t spooled_msg ~f:(fun () ->
+            Message_spool.remove spooled_msg ~log:t.log)
         | `Send_at _ | `Send_now | `Sending | `Delivered | `Removed | `Quarantined _ ->
           Error (Error.of_string "Cannot remove a message that is not currently frozen")
           |> return
@@ -491,10 +560,12 @@ let recover t (info : Recover_info.t) =
       return (Error e)
     | Ok msg ->
       Option.value_map info.wrapper ~default:Deferred.Or_error.ok_unit ~f:(fun wrapper ->
-        Message_spool.map_email msg ~f:(fun email ->
-          Email_wrapper.add wrapper email))
+        with_spooled_message t msg ~f:(fun () ->
+          Message_spool.map_email msg ~f:(fun email ->
+            Email_wrapper.add wrapper email)))
       >>=? fun () ->
-      Message_spool.freeze msg ~log:t.log
+      with_spooled_message t msg ~f:(fun () ->
+        Message_spool.freeze msg ~log:t.log)
       >>=? fun () ->
       add_message t msg;
       recovered_event t ~here:[%here] from_queue' msg;

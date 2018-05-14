@@ -75,8 +75,8 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
 
 let with_file t
       (f : On_disk_spool.Data_file.t ->
-       [`Sync_meta | `Sync_email of Email.t | `Unlink] Or_error.t Deferred.t)
-  : unit Or_error.t Deferred.t =
+       ([`Sync_meta | `Sync_email of Email.t | `Unlink] * 'a) Or_error.t Deferred.t)
+  : 'a Or_error.t Deferred.t =
   entry t
   >>=? fun entry ->
   return (Message.Queue.of_status' (Message.status t))
@@ -96,13 +96,14 @@ let with_file t
         f data_file
         >>= function
         | Error _ as e -> return (`Save (meta, original_queue), e)
-        | Ok (`Unlink) -> return (`Remove, Ok ())
-        | Ok (`Sync_email email) ->
+        | Ok (`Unlink, res) -> return (`Remove, Ok res)
+        | Ok (`Sync_email email, res) ->
           let data = Message.Data.of_email email in
           On_disk_spool.Data_file.save data_file ~contents:data
-          >>| fun result ->
-          (`Save (meta, original_queue), result)
-        | Ok `Sync_meta ->
+          >>| fun save_data_result ->
+          let res = Or_error.map save_data_result ~f:(fun () -> res) in
+          (`Save (meta, original_queue), res)
+        | Ok (`Sync_meta, res) ->
           (* Derive queue from mutable [Message.status t] as it may have changed in [~f] *)
           Message.Queue.of_status' (Message.status t)
           |> Or_error.tag ~tag:(Sexp.to_string (Message.sexp_of_t t))
@@ -110,7 +111,7 @@ let with_file t
           >>= function
           | Error _ as e -> return (`Save (meta, original_queue), e)
           | Ok new_queue ->
-            return (`Save (t, new_queue), Ok ())
+            return (`Save (t, new_queue), Ok res)
     )
   >>| Or_error.join
 ;;
@@ -120,7 +121,7 @@ let map_email t ~f =
     On_disk_spool.Data_file.load data_file
     >>=? fun data ->
     let email = f (Message.Data.to_email data) in
-    return (Ok (`Sync_email email)))
+    return (Ok (`Sync_email email, ())))
 ;;
 
 let freeze t ~log =
@@ -132,7 +133,7 @@ let freeze t ~log =
                           ~spool_id:(Message.Id.to_string (Message.id t))
                           "frozen"));
     Message.set_status t `Frozen;
-    return (Ok `Sync_meta))
+    return (Ok (`Sync_meta, ())))
 ;;
 
 let mark_for_send_now ~retry_intervals t ~log =
@@ -146,7 +147,7 @@ let mark_for_send_now ~retry_intervals t ~log =
     Message.set_status t `Send_now;
     Message.add_retry_intervals t retry_intervals;
     Message.move_failed_recipients_to_remaining_recipients t;
-    return (Ok `Sync_meta))
+    return (Ok (`Sync_meta, ())))
 ;;
 
 let remove t ~log =
@@ -158,7 +159,7 @@ let remove t ~log =
                           ~spool_id:(Message.Id.to_string (Message.id t))
                           "removing"));
     Message.set_status t `Removed;
-    return (Ok `Sync_meta))
+    return (Ok (`Sync_meta, ())))
 ;;
 
 let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_file =
@@ -281,23 +282,30 @@ let send_to_hops t ~log ~client_cache data_file =
 ;;
 
 let do_send t ~log ~client_cache =
+  let last_relay_error t =
+    match Message.last_relay_attempt t with
+    | None -> Error.of_string "No relay attempt"
+    | Some (_, e) -> e
+  in
   with_file t (fun get_envelope ->
     Message.set_status t `Sending;
     send_to_hops t ~log ~client_cache get_envelope
     >>| function
     | `Done ->
       Message.set_status t `Delivered;
-      Ok `Unlink
+      Ok (`Unlink, `Delivered)
     | (`Fail_permanently | `Try_later) as fail ->
       match fail, Message.retry_intervals t with
       | `Fail_permanently, _ | `Try_later, [] ->
+        let delivery_failure = last_relay_error t in
         Message.set_status t `Frozen;
-        Ok `Sync_meta
+        Ok (`Sync_meta, `Failed delivery_failure)
       | `Try_later, r :: rs ->
+        let delivery_failure = last_relay_error t in
         Message.set_status t
           (`Send_at (Time.add (Time.now ()) (Smtp_envelope.Retry_interval.to_span r)));
         Message.set_retry_intervals t rs;
-        Ok `Sync_meta)
+        Ok (`Sync_meta, `Failed delivery_failure))
 ;;
 
 let send t ~log ~client_cache =

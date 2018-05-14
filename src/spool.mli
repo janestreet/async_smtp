@@ -83,15 +83,12 @@ val quarantine
   -> Smtp_envelope.Routed.Batch.t list
   -> unit Deferred.Or_error.t
 
-(** [kill_and_flush ~timeout t] makes sure no new delivery sessions are being
-    started and waits until all the currently running sessions have finished
-    (returning when this is successful or when [timeout] becomes determined). It
-    will not affect frozen messages or those waiting for retry intervals to
-    elapse. *)
+(** [kill_and_flush t] makes sure no new delivery sessions are being started and waits
+    until all the currently running sessions have finished. It will not affect frozen
+    messages or those waiting for retry intervals to elapse. *)
 val kill_and_flush
-  :  ?timeout:unit Deferred.t
-  -> t
-  -> [`Finished | `Timeout ] Deferred.t
+  :  t
+  -> unit Deferred.t
 
 val freeze
   :  t

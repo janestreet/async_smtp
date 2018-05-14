@@ -31,12 +31,16 @@ val enqueue
   -> original_msg : Smtp_envelope.t
   -> Message.t list Or_error.t Deferred.t
 
-(** It is an error to call [send] on a message that is currently being sent. *)
+(** [send message ~log ~client_cache] attempts delivery of [message] using the supplied
+    [client_cache] for connections.
+
+    The outer [Error.t] in the result is used for unexpected errors.
+    [`Delivered | `Failed of Error.t] describes the delivery attempt. *)
 val send
   :  Message.t
   -> log:Mail_log.t
   -> client_cache:Client_cache.t
-  -> unit Or_error.t Deferred.t
+  -> [ `Delivered | `Failed of Error.t ] Or_error.t Deferred.t
 
 (** Map an email that is saved on disk. *)
 val map_email : Message.t -> f:(Email.t -> Email.t) -> unit Or_error.t Deferred.t
