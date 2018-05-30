@@ -44,6 +44,7 @@ let command =
         anon ("BODY" %: string)
       in
       fun () ->
+        let open Deferred.Let_syntax in
         Deferred.List.map attachments ~f:(fun file ->
           Simplemail.Content.of_file file
           >>| fun content ->

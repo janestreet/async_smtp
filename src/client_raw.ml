@@ -377,6 +377,10 @@ let do_start_tls t ~log ~component tls_options =
       ?name:tls_options.Config.Tls.name
       ?ca_file:tls_options.Config.Tls.ca_file
       ?ca_path:tls_options.Config.Tls.ca_path
+      (* This is set to [Verify_none] to allow [check_tls_security] to do its job below,
+         which (depending on configuration) may allow the connection to succeed in spite
+         of a certificate that OpenSSL would consider invalid. *)
+      ~verify_modes:[ Verify_none ]
       ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
       (* Closing ssl connection will close the pipes which will in turn close
          the readers. *)

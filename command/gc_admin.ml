@@ -9,6 +9,7 @@ let gc_command summary rpc =
     [%map_open
       let () = return () in
       fun client ->
+        let open Deferred.Let_syntax in
         Rpc.Rpc.dispatch_exn rpc client ()
         >>| fun () ->
         printf "OK\n"
@@ -21,6 +22,7 @@ let gc_stat_command summary rpc =
     [%map_open
       let () = return () in
       fun client ->
+        let open Deferred.Let_syntax in
         Rpc.Rpc.dispatch_exn rpc client ()
         >>| fun stat ->
         printf !"%{sexp:Gc.Stat.t}\n" stat

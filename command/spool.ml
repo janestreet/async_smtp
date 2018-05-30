@@ -44,6 +44,7 @@ module Status = struct
         let format = Format.param in
         function
         | `Config config ->
+          let open Deferred.Let_syntax in
           Smtp_spool.status_from_disk config |> Deferred.Or_error.ok_exn
           >>| fun status ->
           printf "%s\n" (Smtp_spool.Status.to_formatted_string ~format status)
@@ -97,10 +98,12 @@ module Count = struct
         let which = which in
         function
         | `Config config ->
+          let open Deferred.Let_syntax in
           Smtp_spool.count_from_disk config
           >>| Or_error.ok_exn
           >>| printf "%d\n"
         | `Rpc client ->
+          let open Deferred.Let_syntax in
           dispatch ~which client
           >>| printf "%d\n"
       ]
