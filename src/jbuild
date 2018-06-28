@@ -2,13 +2,13 @@
  ((name async_smtp)
   (public_name async_smtp)
   (libraries
-   (async
+   (ascii_table
+    async
     async_inotify
     async_ssl
     async_sendfile
     core_extended.base64
     core
-    textutils
     email_message
     re2
     async_smtp_types

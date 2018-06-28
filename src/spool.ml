@@ -678,7 +678,6 @@ module Status = struct
   ;;
 
   let to_formatted_string t ~format =
-    let open Textutils in
     let format : [ `Sexp | `Exim | `Ascii_table_with_max_width of int ] =
       match format with
       | `Ascii_table -> `Ascii_table_with_max_width 180
