@@ -10,7 +10,8 @@ module Stable = struct
 
   module Id = struct
     module V1 = struct
-      type t = string [@@deriving sexp, bin_io]
+      include String.V1
+
       let to_string t = t
       let of_string t = t
     end

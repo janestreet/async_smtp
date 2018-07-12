@@ -117,7 +117,9 @@ module On_disk_spool : Multispool_intf.S
 module Stable : sig
   module Id : sig
     module V1 : sig
-      type t = Id.t [@@deriving sexp, bin_io]
+      include Stable_comparable.V1
+        with type t = Id.t
+        with type comparator_witness = Id.comparator_witness
       include Stringable.S with type t:=t
     end
   end

@@ -2,7 +2,7 @@
  ((name async_smtp)
   (public_name async_smtp)
   (libraries
-   (ascii_table
+   (textutils.ascii_table
     async
     async_inotify
     async_ssl

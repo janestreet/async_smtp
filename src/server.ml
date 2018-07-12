@@ -895,7 +895,7 @@ module Make(Cb : Plugin.S) = struct
            let remote_address = make_remote_address address_in in
            let send_envelope ~flows ~original_msg envelopes_with_next_hops =
              Spool.add spool ~flows ~original_msg envelopes_with_next_hops
-             >>|? Smtp_envelope.Id.to_string
+             >>|? fun id -> Smtp_envelope.Id.to_string id
            in
            let quarantine ~flows ~reason ~original_msg messages =
              Spool.quarantine spool ~flows ~reason ~original_msg messages
