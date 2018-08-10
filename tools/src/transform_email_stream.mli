@@ -18,9 +18,7 @@ end
 module Bodies : sig
   module Rewrite : sig
     type t =
-      { if_contains : Re2.t
-      ; rewrite_to  : string
-      }
+      Re2.t * [ `Rewrite_entire_body_to of string | `Rewrite_all_matches_to of string ]
   end
 
   type t =

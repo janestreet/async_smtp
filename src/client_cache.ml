@@ -1,6 +1,5 @@
 open Core
 open Async
-open Resource_cache
 open Async_smtp_types
 
 module Address : sig
@@ -14,7 +13,7 @@ end = struct
 end
 
 module Log    = Mail_log
-module Config = Cache.Address_config
+module Config = Resource_cache.Address_config
 
 module Tcp_options = struct
   type t =
@@ -123,7 +122,7 @@ module Resource = struct
 
   let close_finished t = Ivar.read t.close_finished
 
-  let is_closed t = Ivar.is_full t.close_started
+  let has_close_started t = Ivar.is_full t.close_started
 
   let close t =
     Ivar.fill_if_empty t.close_started ();
@@ -133,7 +132,7 @@ module Resource = struct
   ;;
 end
 
-module Client_cache = Cache.Make(Resource)
+module Client_cache = Resource_cache.Make(Resource)
 module Status       = Client_cache.Status
 
 type t = Client_cache.t

@@ -30,9 +30,8 @@ end
 module Bodies = struct
   module Rewrite = struct
     type t =
-      { if_contains : Re2.t
-      ; rewrite_to  : string
-      } [@@deriving sexp]
+      Re2.t * [ `Rewrite_entire_body_to of string | `Rewrite_all_matches_to of string ]
+    [@@deriving sexp]
   end
 
   type t =
@@ -47,21 +46,26 @@ module Bodies = struct
     | [] -> ident
     | _ ->
       Envelope.modify_email ~f:(fun email ->
-        let rewrite = List.find t.rewrites ~f:(fun (rewrite : Rewrite.t) ->
-          Re2.matches rewrite.if_contains (Email.to_string email))
+        let content_str =
+          Email.raw_content email
+          |> Email.Raw_content.to_bigstring_shared
+          |> Bigstring_shared.to_string
+        in
+        let rewrite = List.find_map t.rewrites ~f:(fun (re, rewrite_to) ->
+          if Re2.matches re content_str
+          then (
+            match rewrite_to with
+            | `Rewrite_entire_body_to content -> Some content
+            | `Rewrite_all_matches_to template ->
+              Re2.rewrite re ~template content_str |> Result.ok)
+          else None)
         in
         match rewrite with
         | None -> email
-        | Some (rewrite : Rewrite.t) ->
+        | Some rewrite ->
           let headers = Email.headers email in
-          let email =
-            Email.Simple.Expert.content ~whitespace:`Raw
-              ~extra_headers:[] ~encoding:`Quoted_printable rewrite.rewrite_to
-          in
-          Email.set_headers
-            email
-            (List.fold ~init:headers (Email.headers email |> Email_headers.to_list ~whitespace:`Raw)
-               ~f:(fun headers (name, value) -> Email_headers.set ~whitespace:`Raw headers ~name ~value)))
+          let raw_content = Email.Raw_content.of_string rewrite in
+          Email.create ~headers ~raw_content)
 
   let hash_fun data =
     data

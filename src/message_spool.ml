@@ -31,6 +31,14 @@ module Entry = struct
     let email = Message.Data.to_email data in
     return (meta, Smtp_envelope.create' ~info:(Message.envelope_info meta) ~email)
   ;;
+
+  let size entry =
+    let open Deferred.Or_error.Let_syntax in
+    let data_file = On_disk_spool.Entry.Direct.data_file entry in
+    let%bind stats = On_disk_spool.Data_file.stat data_file in
+    let size = Unix.Stats.size stats |> Float.of_int64 in
+    return (Byte_units.create `Bytes size)
+  ;;
 end
 
 let entry t =
@@ -326,15 +334,6 @@ let send t ~log ~client_cache =
   | `Delivered ->
     return (Or_error.error_string
               "Message.send: message is delivered")
-;;
-
-let size_of_file t =
-  let open Deferred.Or_error.Let_syntax in
-  let%bind entry = entry t in
-  let data_file = On_disk_spool.Entry.Direct.data_file entry in
-  let%bind stats = On_disk_spool.Data_file.stat data_file in
-  let size = Unix.Stats.size stats |> Float.of_int64 in
-  return (Byte_units.create `Bytes size)
 ;;
 
 module On_disk_monitor = struct

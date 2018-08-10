@@ -1,9 +1,8 @@
 open! Core
 open Async
-open Resource_cache
 open Async_smtp_types
 
-module Config = Cache.Address_config
+module Config = Resource_cache.Address_config
 
 module Address_and_route : sig
   type t =
@@ -13,7 +12,7 @@ module Address_and_route : sig
   include Identifiable.S with type t := t
 end
 
-module Status : Cache.Status_intf with type Key.t = Address_and_route.t
+module Status : Resource_cache.Status.S with type Key.t = Address_and_route.t
 
 type t
 

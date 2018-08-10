@@ -759,10 +759,10 @@ let status_from_disk config =
   Message_spool.ls spool [Message_queue.Active; Message_queue.Frozen]
   >>=? fun entries ->
   Deferred.List.map entries ~f:(fun entry ->
+    Message_spool.Entry.size entry
+    >>=? fun file_size ->
     Message_spool.Entry.to_message_with_envelope entry
     >>=? fun (message, envelope) ->
-    Message_spool.size_of_file message
-    >>=? fun file_size ->
     return (Ok { Spooled_message_info. message
                ; envelope = Some envelope
                ; file_size = Some file_size }))

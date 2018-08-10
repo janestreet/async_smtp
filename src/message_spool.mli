@@ -15,11 +15,11 @@ module Entry : sig
 
   val to_message : t -> Message.t Or_error.t Deferred.t
   val to_message_with_envelope : t -> (Message.t * Smtp_envelope.t) Or_error.t Deferred.t
+
+  val size : t -> Byte_units.t Or_error.t Deferred.t
 end
 
 val ls : t -> Message.Queue.t list -> Entry.t list Or_error.t Deferred.t
-
-val size_of_file : Message.t -> Byte_units.t Or_error.t Deferred.t
 
 (** The Deferred becomes determined once the messages have been synced to disk. *)
 val enqueue
