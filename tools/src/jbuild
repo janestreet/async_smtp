@@ -2,13 +2,14 @@
  ((name async_smtp_tools)
   (public_name async_smtp.tools)
   (libraries (async
-              core
-              email_message
-              cryptokit ; for hashing email bodies
-              re2
-              async_smtp
               async_shell
-              async_smtp_command))
+              async_smtp
+              async_smtp_command
+              core
+              cryptokit ; for hashing email bodies
+              email_message
+              re2
+              core_kernel.uuid))
   (preprocess (pps (ppx_jane ppxlib.runner)))))
 
 
