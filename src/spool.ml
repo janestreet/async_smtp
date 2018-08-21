@@ -377,6 +377,29 @@ let schedule t msg =
                             ~spool_id:(Message_id.to_string (Message.id msg))
                             "send now"));
     don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit))
+;;
+
+let uncheckout_all_entries t =
+  let%map (`Recovered recovered, `Errors error) =
+    Message_spool.uncheckout_all_entries t.spool
+  in
+  List.iter recovered ~f:(fun spool_id ->
+    Log.info t.log (lazy (Log.Message.create
+                            ~here:[%here]
+                            ~flows:Log.Flows.none
+                            ~component:["spool";"init"]
+                            ~spool_id
+                            "recovered from checkout")));
+  match error with
+  | None -> ()
+  | Some e ->
+    Log.error t.log
+      (lazy (Log.Message.of_error
+               ~here:[%here]
+               ~flows:Log.Flows.none
+               ~component:["spool";"init"]
+               e))
+;;
 
 let load t =
   Message_spool.ls t.spool [Message_queue.Active; Message_queue.Frozen]
@@ -415,6 +438,8 @@ let load t =
 let create ~config ~log () =
   create ~config ~log
   >>=? fun t ->
+  uncheckout_all_entries t
+  >>= fun () ->
   load t
   >>=? fun () ->
   return (Ok t)

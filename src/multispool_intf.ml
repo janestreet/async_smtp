@@ -259,6 +259,8 @@ module type S = sig
     module Checked_out_entry : sig
       type t
 
+      val name : t -> string
+      val queue : t -> Spoolable.Queue.t
       val contents : t -> Spoolable.Metadata.t
       val update : t -> f:(Spoolable.Metadata.t -> Spoolable.Metadata.t) -> t
       val data_file : t -> Data_file.t
@@ -282,6 +284,15 @@ module type S = sig
     val checkout'
       :  Entry.t
       -> [ `Not_found | `Ok of Checked_out_entry.t ] Deferred.Or_error.t
+
+    (** Get a hold of all currently checked out entries in the given [queue].
+        This operation breaks the invariant that each [t] has a single owner. It should
+        only be used in cases where it is easy to reason about what processes are
+        potentially manipulating the spool. *)
+    val list_checkouts_unsafe
+      :  spool
+      -> Spoolable.Queue.t
+      -> Checked_out_entry.t list Deferred.Or_error.t
 
     module Queue_reader : sig
       (** Wait for and dequeue the next entry that appears. *)
@@ -318,9 +329,9 @@ module Monitor = struct
       type t =
         | Registry
         | Tmp
-        | Checkout
         | Data
         | Queue of Spoolable.Queue.t
+        | Queue_checkout of Spoolable.Queue.t
 
       val name_on_disk : t -> string
     end

@@ -19,6 +19,13 @@ module Entry : sig
   val size : t -> Byte_units.t Or_error.t Deferred.t
 end
 
+(** Move all checked out entries back to their original queues.
+    This command is useful to run on startup to recover from an unclean shutdown.
+    Returns the list of entries that were recovered along with any errors that occurred. *)
+val uncheckout_all_entries
+  :  t
+  -> ([`Recovered of string list] * [`Errors of Error.t option]) Deferred.t
+
 val ls : t -> Message.Queue.t list -> Entry.t list Or_error.t Deferred.t
 
 (** The Deferred becomes determined once the messages have been synced to disk. *)

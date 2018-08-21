@@ -16,6 +16,31 @@ let ls t queues =
   Deferred.Or_error.List.concat_map queues ~f:(fun queue -> On_disk_spool.list t queue)
 ;;
 
+let uncheckout_from_queue t queue =
+  let module Checked_out_entry = On_disk_spool.Expert.Checked_out_entry in
+  match%bind On_disk_spool.Expert.list_checkouts_unsafe t queue with
+  | Error e -> return ([], [e])
+  | Ok checked_out_entries ->
+    List.map checked_out_entries ~f:(fun checked_out_entry ->
+      Checked_out_entry.save checked_out_entry (Checked_out_entry.queue checked_out_entry)
+      >>| Result.map ~f:(fun () -> Checked_out_entry.name checked_out_entry))
+    |> Deferred.List.all
+    >>| List.partition_result
+;;
+
+let uncheckout_all_entries t =
+  let%bind recovered, errors =
+    Deferred.List.map Message.Queue.all ~f:(uncheckout_from_queue t) >>| List.unzip
+  in
+  let recovered, errors = List.concat recovered, List.concat errors in
+  let errors =
+    match errors with
+    | [] -> None
+    | _ -> Some (Error.of_list errors)
+  in
+  return (`Recovered recovered, `Errors errors)
+;;
+
 module Entry = struct
   include On_disk_spool.Entry
 

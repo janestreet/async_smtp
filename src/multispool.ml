@@ -69,22 +69,24 @@ module Shared = struct
   let checkout = ".checkout"
   let data     = ".data"
 
-  let reg_dir_of  dir = dir ^/ registry
-  let co_dir_of   dir = dir ^/ checkout
-  let tmp_dir_of  dir = dir ^/ tmp
-  let data_dir_of dir = dir ^/ data
+  let reg_dir_of  dir       = dir ^/ registry
+  let co_dir_of   dir queue = dir ^/ queue ^/ checkout
+  let tmp_dir_of  dir       = dir ^/ tmp
+  let data_dir_of dir       = dir ^/ data
 
   let dir_looks_like_a_spool dir =
     let%bind reg_dir_exists  = Utils.is_dir (reg_dir_of dir)  in
-    let%bind co_dir_exists   = Utils.is_dir (co_dir_of dir)   in
     let%bind tmp_dir_exists  = Utils.is_dir (tmp_dir_of dir)  in
-    return (reg_dir_exists && co_dir_exists && tmp_dir_exists)
+    return (reg_dir_exists && tmp_dir_exists)
   ;;
 
   let visit_queues ?create_if_missing dir queue_dirnames =
+    let open Deferred.Or_error.Let_syntax in
     Deferred.Or_error.List.iter queue_dirnames ~f:(fun queue_dirname ->
       let queue_dir = dir ^/ queue_dirname in
-      is_accessible_directory ?create_if_missing queue_dir)
+      let%bind () = is_accessible_directory ?create_if_missing queue_dir in
+      let%bind () = is_accessible_directory ?create_if_missing (queue_dir ^/ checkout) in
+      return ())
   ;;
 
   let visit_spool_directories ?create_if_missing dir =
@@ -99,11 +101,9 @@ module Shared = struct
                       (dir : string)]
     in
     let reg_dir  = reg_dir_of  dir in
-    let co_dir   = co_dir_of   dir in
     let tmp_dir  = tmp_dir_of  dir in
     let data_dir = data_dir_of dir in
     let%bind () = is_accessible_directory ?create_if_missing    reg_dir  in
-    let%bind () = is_accessible_directory ?create_if_missing    co_dir   in
     let%bind () = is_accessible_directory ?create_if_missing    tmp_dir  in
     let%bind () = is_accessible_directory ~create_if_missing:() data_dir in
     Deferred.Or_error.ok_unit
@@ -281,7 +281,12 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     let queue_dir = t ^/ S.Queue.to_dirname queue in
     S.Throttle.enqueue (fun () -> Utils.ls_sorted queue_dir)
     >>|? fun entries ->
-    List.map entries ~f:(fun name -> Entry.create t queue ~name)
+    List.filter_map entries ~f:(fun name ->
+      (* Checkout directories live within queue directories. We want to skip
+         over these. *)
+      if String.equal name checkout
+      then None
+      else Some (Entry.create t queue ~name))
   ;;
 
   module Unique_name = struct
@@ -341,9 +346,14 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
   module Checked_out_entry = struct
     type t =
       { spool    : spool
+      ; queue    : S.Queue.t
       ; name     : string
       ; contents : S.Metadata.t }
 
+    let create spool queue contents ~name = { spool; queue; name; contents }
+
+    let name t = t.name
+    let queue t = t.queue
     let contents t = t.contents
 
     let update t ~f = { t with contents = f t.contents }
@@ -352,38 +362,39 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       Data_file.create t.spool t.name
     ;;
 
+    let co_dir t = co_dir_of t.spool (S.Queue.to_dirname t.queue)
+
     let save t queue =
       let open Deferred.Or_error.Let_syntax in
-      let path = co_dir_of t.spool ^/ t.name in
+      let path = co_dir t ^/ t.name in
       let temp_file = tmp_dir_of t.spool ^/ t.name in
       let contents = S.Metadata.to_string t.contents in
       let%bind () = save_metadata ~temp_file ~contents path in
       With_touch.rename t.spool
-        ~src_dir:(co_dir_of t.spool)
+        ~src_dir:(co_dir t)
         ~dst_dir:(t.spool ^/ S.Queue.to_dirname queue)
         ~filename:t.name
     ;;
 
     let remove t =
-      With_touch.unlink t.spool ~dir:(co_dir_of t.spool) ~filename:t.name
+      With_touch.unlink t.spool ~dir:(co_dir t) ~filename:t.name
     ;;
-
-    let create spool contents ~name = { spool; name; contents }
   end
 
   let checkout' (entry : Entry.t) =
     let open Deferred.Or_error.Let_syntax in
+    let checkout_dir = co_dir_of entry.spool (S.Queue.to_dirname entry.queue) in
     match%bind
       With_touch.rename' entry.spool
         ~src_dir:(entry.spool ^/ S.Queue.to_dirname entry.queue)
-        ~dst_dir:(co_dir_of entry.spool)
+        ~dst_dir:checkout_dir
         ~filename:entry.name
     with
     | `Not_found as x -> return x
     | `Ok () ->
-      let path = co_dir_of entry.spool ^/ entry.name in
+      let path = checkout_dir ^/ entry.name in
       let%bind contents = load_metadata path in
-      return (`Ok (Checked_out_entry.create entry.spool ~name:entry.name contents))
+      return (`Ok (Checked_out_entry.create entry.spool entry.queue ~name:entry.name contents))
   ;;
 
   (* Common handler for user-supplied callback functionality.  The low-level user-facing
@@ -427,6 +438,15 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     let open Deferred.Or_error.Let_syntax in
     let%bind checkout = checkout entry in
     with_checkout ~f checkout
+  ;;
+
+  let list_checkouts_unsafe spool queue =
+    let open Deferred.Or_error.Let_syntax in
+    let checkout_dir = co_dir_of spool (S.Queue.to_dirname queue) in
+    let%bind entries = S.Throttle.enqueue (fun () -> Utils.ls_sorted checkout_dir) in
+    Deferred.Or_error.List.map entries ~f:(fun name ->
+      let%map metadata = load_metadata (checkout_dir ^/ name) in
+      Checked_out_entry.create spool queue metadata ~name)
   ;;
 
   module Queue_reader_raw = struct
@@ -643,6 +663,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     module Checked_out_entry = Checked_out_entry
     let checkout = checkout
     let checkout' = checkout'
+    let list_checkouts_unsafe = list_checkouts_unsafe
     module Queue_reader = struct
       let dequeue = Queue_reader_raw.dequeue
       let dequeue_available = Queue_reader_raw.dequeue_available
@@ -671,6 +692,12 @@ module Monitor = struct
           { filename : string
           ; mtime    : Time.t
           } [@@deriving sexp_of, compare]
+
+        let sexp_of_t t =
+          if am_running_inline_test
+          then [%sexp { filename = (t.filename : string); mtime = "<omitted>" }]
+          else sexp_of_t t
+        ;;
       end
 
       include T
@@ -682,9 +709,9 @@ module Monitor = struct
         type t =
           | Registry
           | Tmp
-          | Checkout
           | Data
           | Queue of S.Queue.t
+          | Queue_checkout of S.Queue.t
         [@@deriving sexp_of, enumerate, compare]
       end
 
@@ -694,9 +721,9 @@ module Monitor = struct
       let name_on_disk = function
         | Registry -> registry
         | Tmp      -> tmp
-        | Checkout -> checkout
         | Data     -> data
         | Queue q  -> S.Queue.to_dirname q
+        | Queue_checkout q -> S.Queue.to_dirname q ^/ checkout
       ;;
     end
 
@@ -836,9 +863,14 @@ module Monitor = struct
               match%map Utils.stat_or_notfound (path ^/ filename) with
               | `Not_found -> None
               | `Ok stats  ->
-                let mtime = Unix.Stats.mtime stats in
-                let fwm = { File_with_mtime. filename; mtime } in
-                Some (filename, fwm))
+                (* Checkout directories live within queue directories. We want to skip
+                   over these. *)
+                if String.equal filename checkout
+                then None
+                else (
+                  let mtime = Unix.Stats.mtime stats in
+                  let fwm = { File_with_mtime. filename; mtime } in
+                  Some (filename, fwm)))
           in
           let filename_map = String.Map.of_alist_exn filename_alist in
           return (dir, filename_map))
@@ -883,7 +915,7 @@ module Monitor = struct
       in
       let find_orphaned_registry_file_and_duplicates =
         let dupe_dirs =
-          Dir.Checkout :: List.map S.Queue.all ~f:(fun q -> Dir.Queue q)
+          List.concat_map S.Queue.all ~f:(fun q -> [Dir.Queue q; Dir.Queue_checkout q])
         in
         filter_fold_over_dir Dir.Registry
           ~f:(fun fwm ->
@@ -897,16 +929,16 @@ module Monitor = struct
             | _ -> Some (Problem.Duplicated (fwm, dupes)))
       in
       []
-      |> find_file_too_old               Dir.Checkout ~age:t.limits.max_checked_out_age
       |> find_file_too_old               Dir.Tmp      ~age:t.limits.max_tmp_file_age
-      |> find_file_without_registry_file Dir.Checkout
       |> find_file_without_registry_file Dir.Tmp
       |> find_file_without_registry_file Dir.Data
       |> fun init ->
       List.fold S.Queue.all ~init ~f:(fun problems queue ->
         problems
         |> find_queue_file_too_old queue
-        |> find_file_without_registry_file (Dir.Queue queue))
+        |> find_file_too_old (Dir.Queue_checkout queue) ~age:t.limits.max_checked_out_age
+        |> find_file_without_registry_file (Dir.Queue queue)
+        |> find_file_without_registry_file (Dir.Queue_checkout queue))
       |> find_orphaned_registry_file_and_duplicates
       |> return
     ;;
