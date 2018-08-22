@@ -215,7 +215,7 @@ let create ~config ~log : t Deferred.Or_error.t =
   let cache_config =
     Client_cache.Config.create
       ~max_open_connections:500
-      ~cleanup_idle_connection_after:(sec 5.)
+      ~cleanup_idle_connection_after:(Time_ns.Span.of_sec 5.)
       ~max_connections_per_address:10
       ~max_connection_reuse:10
   in

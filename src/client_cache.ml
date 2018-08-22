@@ -132,7 +132,11 @@ module Resource = struct
   ;;
 end
 
-module Client_cache = Resource_cache.Make(Resource)
+module Client_cache = struct
+  include Resource_cache.Make(Resource)
+
+  let init ~config k = init ~config ~log_error:(Async.Log.Global.string ~level:`Error) k
+end
 module Status       = Client_cache.Status
 
 type t = Client_cache.t
@@ -170,7 +174,7 @@ module Tcp = struct
     let addresses =
       List.map addresses ~f:(fun address -> { Address_and_route.address; route })
     in
-    Client_cache.with_any_loop ~open_timeout:(Time.Span.of_sec 10.)
+    Client_cache.with_any_loop ~open_timeout:(Time_ns.Span.of_sec 10.)
       ?give_up cache addresses ~f
     >>| function
     | `Ok (key, res) ->
