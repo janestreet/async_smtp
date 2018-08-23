@@ -4,6 +4,7 @@ open Async_smtp_types
 
 module type Start_tls = sig
   type session
+
   (** [upgrade_to_tls] is called when initiating an upgrade to TLS.
       [Session.greeting] will be called to send a suitable greeting after the upgrade. *)
   val upgrade_to_tls

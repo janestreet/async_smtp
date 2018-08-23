@@ -168,6 +168,7 @@ module Status : sig
 end
 
 val status : t -> Status.t
+
 (** This is not necessarily a snapshot of the spool at any given point in time. The only
     way to obtain such a snapshot would be to pause the server and we don't want to do
     that. However, this status will include emails that are stuck on the spool, and those

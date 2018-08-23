@@ -5,6 +5,7 @@ open! Async_smtp_types
 module type Server = sig
   type session
   val mechanism : string
+
   (** perform the server side authentication negotiation.
 
       [send_challenge_and_expect_response] should be used to perform a challenge/response
@@ -34,6 +35,7 @@ module type Client = sig
       custom mechanisms. *)
   val require_tls : bool
   val mechanism : string
+
   (** perform the client side authentication negotiation.
 
       [send_response_and_expect_challenge] should be used to perform a
