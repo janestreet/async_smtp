@@ -32,10 +32,11 @@ let command =
         flag "attachment" ~doc:"FILE to include as an attachment"
           (listed file)
       and content_type =
-        flag "content-type"
-          ~doc:(sprintf "STRING content-type of the message (default: %s)"
-                  Simplemail.Mimetype.text)
-          (optional_with_default Simplemail.Mimetype.text string)
+        Simplemail.(
+          flag "content-type"
+            ~doc:(sprintf "STRING content-type of the message (default: %s)"
+                    (Mimetype.text :> string))
+            (optional_with_default Mimetype.text Mimetype.arg))
       and extra_headers =
         flag "extra-header"
           ~doc:"NAME:VALUE Additional headers to include"
