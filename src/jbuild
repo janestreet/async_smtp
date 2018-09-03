@@ -1,7 +1,6 @@
 (library
  ((name async_smtp)
   (public_name async_smtp)
-  (preprocess (pps (ppx_jane -dont-check-doc-comments-attachment ppxlib.runner)))
   (libraries
    (textutils.ascii_table
     async
@@ -16,7 +15,7 @@
     resource_cache
     core.uuid
     ))
+  (preprocess (pps (ppx_jane ppxlib.runner)))
   ))
-
 
 (jbuild_version 1)

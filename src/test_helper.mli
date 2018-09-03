@@ -7,43 +7,43 @@ open Async_smtp_types
 *)
 
 type 'a smtp_flags
-(** [tls] pretends that START_TLS was negotiated successfully (default: false) *)
   =  ?tls:bool
+  (** [tls] pretends that START_TLS was negotiated successfully (default: false) *)
   -> 'a
 
 type 'a server_flags
-(** [max_message_size] limits the size of messages accepted by the server.
-    (default: no practical limit) *)
   =  ?max_message_size:Byte_units.t
+  (** [max_message_size] limits the size of messages accepted by the server.
+      (default: no practical limit) *)
+  -> ?malformed_emails:[ `Reject | `Wrap ]
   (** [malformed_emails] indicates how a malformed email should be handled.
       (default: [`Reject]) *)
-  -> ?malformed_emails:[ `Reject | `Wrap ]
+  -> ?echo_delivery:bool
   (** [echo_delivery] will print details of envelopes that are spooled by the plugin.
       This can be very noisy so is generally only of interest if you are testing
       sending behavior.
       (default: false) *)
-  -> ?echo_delivery:bool
+  -> ?server_log:[Log.Level.t | `None]
   (** [server_log] controls the amount of detail logged from the server logic, excluding
       the plugins. This is usually not relevant to tests and generates a lot of noise.
       (default: `None) *)
-  -> ?server_log:[Log.Level.t | `None]
+  -> ?plugin:(module Server.Plugin.S)
   (** Provide a custom [Server.Plugin.S] with custom logic.
       (default: Server.Plugin.Simple) *)
-  -> ?plugin:(module Server.Plugin.S)
-  (** [plugin_log] controls the log level from the plugin logic. (default: `Debug) *)
   -> ?plugin_log:[Log.Level.t | `None]
+  (** [plugin_log] controls the log level from the plugin logic. (default: `Debug) *)
   -> 'a
 
 type 'a client_flags
-(** Client authentication [credentials] (default: None - no authentication) *)
   =  ?credentials:Credentials.t
+  (** Client authentication [credentials] (default: None - no authentication) *)
+  -> ?client_greeting:string
   (** [client_greeting] specifies the HELO/EHLO greeting to send.
       (default: "[SMTP TEST CLIENT]") *)
-  -> ?client_greeting:string
+  -> ?client_log:[Log.Level.t | `None]
   (** [client_log] controls the log level from the client logic.
       This is usually not relevant to tests and a lot of noise.
       (default: `None) *)
-  -> ?client_log:[Log.Level.t | `None]
   -> 'a
 
 (** Helper for creating SMTP Envelopes *)

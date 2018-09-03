@@ -31,8 +31,8 @@ val read_mbox
 
 module type For_test = sig
   val session
-    (** [send] and [quarantine] default to raising an exception *)
     :  ?send:(Smtp_envelope.Routed.Batch.t list -> string Deferred.Or_error.t)
+    (** [send] and [quarantine] default to raising an exception *)
     -> ?quarantine:(
       reason:Quarantine_reason.t
       -> Smtp_envelope.Routed.Batch.t list
