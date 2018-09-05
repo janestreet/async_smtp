@@ -30,7 +30,7 @@ let command =
           (listed email_address)
       and attachments =
         flag "attachment" ~doc:"FILE to include as an attachment"
-          (listed file)
+          (listed Filename.arg_type)
       and content_type =
         Simplemail.(
           flag "content-type"

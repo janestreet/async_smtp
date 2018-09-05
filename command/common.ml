@@ -32,7 +32,7 @@ end = struct
         flag "rpc-server" (optional host_and_port)
           ~doc:"HOST:PORT mailcore instance to query"
       and config_path =
-        flag "config" (optional file) ~doc:"CONFIG Async_smtp config file"
+        flag "config" (optional Filename.arg_type) ~doc:"CONFIG Async_smtp config file"
       in
       let config =
         Option.map config_path

@@ -781,19 +781,19 @@ module Monitor = struct
         [%map_open
           let max_checked_out_age =
             flag_optional_with_default_doc "-max-checked-out-age"
-              time_span Time.Span.sexp_of_t
+              Time.Span.arg_type Time.Span.sexp_of_t
               ~default:Defaults.max_checked_out_age
               ~doc:"SPAN alert once idle checkout reaches age SPAN"
           and max_tmp_file_age =
             flag_optional_with_default_doc "-max-tmp-file-age"
-              time_span Time.Span.sexp_of_t
+              Time.Span.arg_type Time.Span.sexp_of_t
               ~default:Defaults.max_tmp_file_age
               ~doc:"SPAN alert once temporary file reaches age SPAN"
           and max_queue_ages =
             all (List.map S.Queue.all ~f:(fun queue ->
               let dirname = S.Queue.to_dirname queue in
               let name = sprintf "-max-%s-age" dirname in
-              flag name (optional time_span)
+              flag name (optional Time.Span.arg_type)
                 ~doc:(sprintf "SPAN alert if file in queue `%s' reaches age SPAN \
                                (default: No limit)" dirname)
               |> map ~f:(fun span -> (queue, span))))
@@ -1004,7 +1004,7 @@ module Monitor = struct
         let open Command.Let_syntax in
         [%map_open
           let check_every =
-            flag_optional_with_default_doc "-check-every" time_span Time.Span.sexp_of_t
+            flag_optional_with_default_doc "-check-every" Time.Span.arg_type Time.Span.sexp_of_t
               ~default:Defaults.check_every
               ~doc:"SPAN run fsck at intervals of SPAN"
           and alert_after_cycles =

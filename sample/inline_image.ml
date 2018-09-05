@@ -33,7 +33,7 @@ let command =
   Command.async_or_error ~summary:"send an email with an inline picture (png)"
     [%map_open
       let png_file =
-        flag "png" (required file) ~doc:"FILE png file"
+        flag "png" (required Filename.arg_type) ~doc:"FILE png file"
       and to_ =
         flag "to" (required string) ~doc:"EMAIL who to send it to"
         |> map ~f:Email_address.of_string_exn

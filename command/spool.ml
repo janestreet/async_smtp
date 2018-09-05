@@ -147,7 +147,7 @@ end
 module Send = struct
   let retry_intervals =
     Command.Param.(
-      flag "retry-interval" (listed time_span)
+      flag "retry-interval" (listed Time.Span.arg_type)
         ~doc:"SPAN additional retry intervals (order matters)"
       |> map ~f:(List.map ~f:(Smtp_envelope.Retry_interval.create)))
 
