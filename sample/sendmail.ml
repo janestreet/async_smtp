@@ -36,7 +36,7 @@ let command =
           flag "content-type"
             ~doc:(sprintf "STRING content-type of the message (default: %s)"
                     (Mimetype.text :> string))
-            (optional_with_default Mimetype.text Mimetype.arg))
+            (optional_with_default Mimetype.text Mimetype.arg_type))
       and extra_headers =
         flag "extra-header"
           ~doc:"NAME:VALUE Additional headers to include"
