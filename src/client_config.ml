@@ -50,7 +50,7 @@ let default =
   }
 
 let load_exn file =
-  Reader.load_sexp file t_of_sexp ~expand_macros:true
+  Sexp_macro.load_sexp file t_of_sexp
   >>| Or_error.ok_exn
 ;;
 

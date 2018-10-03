@@ -20,6 +20,7 @@ depends: [
   "ppx_jane"
   "re2"
   "resource_cache"
+  "sexp_macro"
   "textutils"
   "cryptokit"
   "jbuilder"                {build & >= "1.0+beta18.1"}
