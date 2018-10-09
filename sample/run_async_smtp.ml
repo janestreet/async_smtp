@@ -9,6 +9,7 @@ let config =
   ; where_to_listen = [`Port 2200; `Port 2201 ]
   ; max_concurrent_send_jobs = 1
   ; max_concurrent_receive_jobs_per_port = 1
+  ; timeouts = Smtp_server.Config.default.timeouts
   ; rpc_port = 2210
   ; malformed_emails = `Reject
   ; max_message_size = Byte_units.create `Megabytes 1.
@@ -49,7 +50,14 @@ module Server = Smtp_server.Make(struct
     let rpcs () = []
   end)
 
+let handle_signals () =
+  Signal.handle [Signal.term; Signal.int] ~f:(fun signal ->
+    Log.Global.info !"shutting down upon receiving signal %{Signal}" signal;
+    shutdown 0)
+;;
+
 let main () =
+  handle_signals ();
   Server.start ~log:(Lazy.force Log.Global.log) ~config
   >>| Or_error.ok_exn
   >>= fun server ->

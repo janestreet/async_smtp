@@ -39,6 +39,8 @@ val ok_completed_250 : string -> t
 val start_authentication_input_334 : string -> t
 val start_mail_input_354 : t
 val service_unavailable_421 : t
+val data_timeout_421 : t
+val command_timeout_421 : t
 val local_error_451 : string -> t
 val message_rate_exceeded_452 : t
 val unable_to_accommodate_455 : string -> t

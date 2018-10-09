@@ -26,12 +26,26 @@ module Where_to_listen = struct
   type t = [ `Port of int | `File of string ] [@@deriving sexp]
 end
 
+module Timeouts = struct
+  type t =
+    { receive : Time.Span.t
+    ; receive_after_close : Time.Span.t
+    } [@@deriving sexp]
+
+  let default =
+    (* Recommendation from RFC 5321 section 4.5.3.2.7 *)
+    { receive = Time.Span.of_min 5.
+    ; receive_after_close = Time.Span.of_sec 10.
+    }
+end
+
 type t =
   { spool_dir                            : string
   ; tmp_dir                              : string option
   ; where_to_listen                      : Where_to_listen.t list
   ; max_concurrent_send_jobs             : int
   ; max_concurrent_receive_jobs_per_port : int
+  ; timeouts                             : Timeouts.t
   ; rpc_port                             : int
   ; malformed_emails                     : [ `Reject | `Wrap ]
   ; max_message_size                     : Byte_units.t
@@ -53,6 +67,7 @@ let default =
   ; where_to_listen = []
   ; max_concurrent_send_jobs = 0
   ; max_concurrent_receive_jobs_per_port = 0
+  ; timeouts = Timeouts.default
   ; rpc_port = 0
   ; malformed_emails = `Reject
   ; max_message_size = Byte_units.create `Megabytes 24.

@@ -39,8 +39,36 @@ module type For_test = sig
 end
 
 
+let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reader =
+  let start = Time.now () in
+  let read_result =
+    Reader.read_line reader
+    >>| function
+    | `Eof -> `Eof
+    | `Ok line -> `Ok line
+  in
+  let line_or_close_started =
+    Deferred.choose
+      [ choice read_result (fun result -> `Read_result result)
+      ; choice close_started (fun () -> `Close_started)
+      ]
+  in
+  match%bind Clock.with_timeout timeouts.receive line_or_close_started with
+  | `Result (`Read_result result) -> return result
+  | `Timeout -> return `Timeout
+  | `Result `Close_started ->
+    let idle_for = Time.(diff (now ()) start) in
+    let remaining_timeout = Time.Span.(timeouts.receive_after_close - idle_for) in
+    if Time.Span.(remaining_timeout > zero)
+    then (
+      match%map Clock.with_timeout remaining_timeout read_result with
+      | `Result result -> result
+      | `Timeout -> `Timeout)
+    else return `Timeout
+;;
+
 (* Utility to read all data up to and including a '\n.' discarding the '\n.'. *)
-let read_data ~max_size reader =
+let read_data ~max_size ~close_started ~timeouts reader =
   let max_size = max_size |> Byte_units.bytes |> Float.to_int in
   let rec loop ~is_first accum =
     let add_string s =
@@ -51,8 +79,9 @@ let read_data ~max_size reader =
       | Some accum -> return (`Ok accum)
       | None -> return `Too_much_data
     in
-    Reader.read_line reader
+    read_line_with_timeouts ~close_started ~timeouts reader
     >>= function
+    | `Timeout -> Deferred.return `Timeout
     | `Eof ->
       if not is_first then add_string "\n";
       Deferred.return `Eof
@@ -169,6 +198,8 @@ module Make(Cb : Plugin.S) = struct
             ~max_message_size
             ~malformed_emails
             ~server_events
+            ~close_started
+            ~timeouts
             ~send_envelope
             ~quarantine
             ~session_flows
@@ -220,7 +251,7 @@ module Make(Cb : Plugin.S) = struct
     let loop ~flows ~component ~next =
       let component = component @ ["read-loop"] in
       let rec loop () =
-        Reader.read_line reader
+        read_line_with_timeouts ~close_started ~timeouts reader
         >>= function
         | `Eof ->
           Log.info log (lazy (Log.Message.create
@@ -228,6 +259,15 @@ module Make(Cb : Plugin.S) = struct
                                 ~flows
                                 ~component
                                 "DISCONNECTED"));
+          return ()
+        | `Timeout ->
+          Log.info log (lazy (Log.Message.create
+                                ~here:[%here]
+                                ~flows
+                                ~component
+                                "Timeout while reading command"));
+          write_reply ~here:[%here] ~flows ~component Smtp_reply.command_timeout_421
+          >>= fun () ->
           return ()
         | `Ok "" ->
           (*_ .Net System.Net.Mail.SmtpClient sends an unexpected empty line.
@@ -408,6 +448,8 @@ module Make(Cb : Plugin.S) = struct
               ~max_message_size
               ~malformed_emails
               ~server_events
+              ~close_started
+              ~timeouts
               ~send_envelope
               ~quarantine
               ~session_flows
@@ -592,7 +634,7 @@ module Make(Cb : Plugin.S) = struct
       | Ok data ->
         start_mail_input ~here:[%here] ~flows ~component ()
         >>= fun () ->
-        read_data ~max_size:max_message_size reader
+        read_data ~max_size:max_message_size ~close_started ~timeouts reader
         >>= function
         | `Eof ->
           Log.info log (lazy (Log.Message.create
@@ -600,6 +642,15 @@ module Make(Cb : Plugin.S) = struct
                                 ~flows
                                 ~component
                                 "MESSAGE_ABORTED"));
+          return ()
+        | `Timeout ->
+          Log.info log (lazy (Log.Message.create
+                                ~here:[%here]
+                                ~flows
+                                ~component
+                                "Timeout while reading data"));
+          write_reply ~here:[%here] ~flows ~component Smtp_reply.data_timeout_421
+          >>= fun () ->
           return ()
         | `Too_much_data ->
           write_reply ~here:[%here] ~flows ~component Smtp_reply.exceeded_storage_allocation_552
@@ -771,6 +822,8 @@ module Make(Cb : Plugin.S) = struct
         ~max_message_size
         ~reader
         ~server_events
+        ~close_started
+        ~timeouts
         ?raw_writer
         ?write_reply
         ~send_envelope
@@ -838,6 +891,8 @@ module Make(Cb : Plugin.S) = struct
             ~max_message_size
             ~malformed_emails
             ~server_events
+            ~close_started
+            ~timeouts
             ~reader
             ?raw_writer
             ?write_reply
@@ -858,14 +913,15 @@ module Make(Cb : Plugin.S) = struct
   type server = Inet of Tcp.Server.inet | Unix of Tcp.Server.unix
 
   type t =
-    { config       : Config.t;
+    { config        : Config.t;
       (* One server per port *)
-      servers      : server list;
-      spool        : Spool.t
+      servers       : server list;
+      spool         : Spool.t;
+      close_started : unit Ivar.t
     }
   ;;
 
-  let tcp_servers ~spool ~config ~log ~server_events =
+  let tcp_servers ~spool ~config ~log ~server_events ~close_started =
     let start_servers where ~make_local_address ~make_tcp_where_to_listen
           ~make_remote_address ~to_server =
       let local_address = make_local_address where in
@@ -912,6 +968,8 @@ module Make(Cb : Plugin.S) = struct
                ~reader ~raw_writer:writer ~send_envelope ~quarantine
                ~local_address
                ~remote_address
+               ~close_started
+               ~timeouts:config.timeouts
                ()
            )
            >>| Result.iter_error ~f:(fun err ->
@@ -945,14 +1003,15 @@ module Make(Cb : Plugin.S) = struct
   ;;
 
   let start ~config ~log =
+    let close_started = Ivar.create () in
     let server_events = Smtp_events.create () in
     Spool.create ~config ~log ()
     >>=? fun spool ->
-    tcp_servers ~spool ~config ~log ~server_events
+    tcp_servers ~spool ~config ~log ~server_events ~close_started:(Ivar.read close_started)
     >>| fun servers ->
     don't_wait_for
       (Rpc_server.start (config, spool, server_events) ~log ~plugin_rpcs:(Cb.rpcs ()));
-    Ok { config; servers; spool }
+    Ok { config; servers; spool; close_started }
   ;;
 
   let config t = t.config
@@ -963,6 +1022,7 @@ module Make(Cb : Plugin.S) = struct
     | Unix _server -> None)
 
   let close ?(timeout = Deferred.never ()) t =
+    Ivar.fill_if_empty t.close_started ();
     Deferred.List.iter ~how:`Parallel t.servers ~f:(function
       | Inet server -> Tcp.Server.close server
       | Unix server -> Tcp.Server.close server)
@@ -1006,6 +1066,8 @@ module For_test(P : Plugin.S) = struct
       ~max_message_size
       ~reader
       ~server_events:(Smtp_events.create ())
+      ~close_started:(Deferred.never ())
+      ~timeouts:Config.Timeouts.default
       ~raw_writer:writer
       ~send_envelope:(fun ~flows:_ ~original_msg:_ msgs -> send msgs)
       ~quarantine:(fun ~flows:_ ~reason ~original_msg:_ msgs -> quarantine ~reason msgs)
@@ -1045,6 +1107,8 @@ let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
       ~malformed_emails:Config.default.malformed_emails
       ~reader
       ~server_events
+      ~close_started:(Deferred.never ())
+      ~timeouts:Config.Timeouts.default
       ~session_flows
       ?raw_writer:None
       ~write_reply:(fun reply ->

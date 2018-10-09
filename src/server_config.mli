@@ -26,12 +26,30 @@ module Where_to_listen : sig
   type t = [ `Port of int | `File of string ] [@@deriving sexp]
 end
 
+module Timeouts : sig
+  (** Server timeouts while reading SMTP input.
+
+      If a line of input (either an SMTP command or a data line) is not received within
+      [receive], the SMTP connection is dropped and the message is abandoned.
+
+      If [Smtp_server.close] has been called, [receive_after_close] is used for the read
+      timeout. This can be set to a time span smaller than [receive] to speed up server
+      shutdown. *)
+  type t =
+    { receive : Time.Span.t
+    ; receive_after_close : Time.Span.t
+    } [@@deriving sexp]
+
+  val default : t
+end
+
 type t =
   { spool_dir                            : string
   ; tmp_dir                              : string option
   ; where_to_listen                      : Where_to_listen.t list
   ; max_concurrent_send_jobs             : int
   ; max_concurrent_receive_jobs_per_port : int
+  ; timeouts                             : Timeouts.t
   ; rpc_port                             : int
   ; malformed_emails                     : [ `Reject | `Wrap ]
   ; max_message_size                     : Byte_units.t

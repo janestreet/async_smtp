@@ -153,6 +153,15 @@ let service_unavailable_421 =
   create `Service_unavailable_421 "Service not available, closing transmission channel"
 ;;
 
+let data_timeout_421 =
+  create `Service_unavailable_421
+    "SMTP incoming data timeout, closing transmission channel"
+;;
+
+let command_timeout_421 =
+  create `Service_unavailable_421 "SMTP command timeout, closing transmission channel"
+;;
+
 let local_error_451 msg =
   create `Local_error_451 "Local error: %s" msg
 ;;
