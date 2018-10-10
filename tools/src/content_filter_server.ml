@@ -59,7 +59,7 @@ let start_exn config ~log =
 let send_receive log ?(timeout=sec 10.) address envelope =
   let component = ["content_filter_server";"send_receive"] in
   (* Give each message a unique ID so we know when we get it back *)
-  let id = Uuid.create () in
+  let id = Uuid_unix.create () in
   Hashtbl.add_exn messages ~key:id ~data:(Ivar.create ());
   Smtp_client.Tcp.with_ ~log ~config:Smtp_client.Config.default
     address

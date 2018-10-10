@@ -88,7 +88,7 @@ module Flows = struct
         | `Outbound_envelope -> "out#"
         | `Cached_connection -> "conn#"
       let create kind =
-        sprintf !"%s#%{Uuid}" (tag kind) (Uuid.create ())
+        sprintf !"%s#%{Uuid}" (tag kind) (Uuid_unix.create ())
       let is t kind =
         String.is_prefix t ~prefix:(tag kind)
     end

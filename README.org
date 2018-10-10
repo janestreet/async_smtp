@@ -1,0 +1,28 @@
+~async_smtp~ is a library that implements SMTP (Simple Mail Transport Protocol), with
+functionality for acting as a client or server. In combination with the ~email_message~
+library, it is used as the core of Jane Street's internal MTA (Message Transfer Agent, aka
+"email server") ~mailcore~.
+
+The library provides a namespace overlay and is intended to be used by starting your
+program with
+
+
+#+BEGIN_SRC ocaml
+open Async_smtp
+#+END_SRC
+
+Users wishing to act as SMTP clients (i.e. to send an email) should look at the
+~Simplemail~ module. E.g.:
+
+#+BEGIN_SRC ocaml
+  Simplemail.send
+    ~to_:[Email_address.of_string_exn "example@example.com"]
+    ~subject:"Example message"
+    (Simplemail.Content.text "This is an example message.")
+#+END_SRC
+
+~async_smtp~ supports more advanced features including TLS and various modes of
+SMTP authentication. See the ~sample~ directory for some examples.
+
+If you need help, run into bugs, or have a feature request, you can contact the
+developers at <app-mailcore-dev@janestreet.com>.
