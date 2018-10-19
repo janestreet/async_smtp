@@ -4,11 +4,10 @@ library, it is used as the core of Jane Street's internal MTA (Message Transfer 
 "email server") ~mailcore~.
 
 The library provides a namespace overlay and is intended to be used by starting your
-program with
-
+program with. 
 
 #+BEGIN_SRC ocaml
-open Async_smtp
+open Async_smtp_extra
 #+END_SRC
 
 Users wishing to act as SMTP clients (i.e. to send an email) should look at the
