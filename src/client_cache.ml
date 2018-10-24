@@ -1,19 +1,19 @@
 open Core
 open Async
-open Async_smtp_types
-
-module Address : sig
-  type t = Smtp_socket_address.t [@@deriving sexp, bin_io]
-  include module type of Smtp_socket_address with type t:=t
-end = struct
-  include Smtp_socket_address
-  include (Smtp_socket_address.Stable.V1 : sig
-             type t [@@deriving sexp, bin_io]
-           end with type t:=t)
-end
 
 module Log    = Mail_log
-module Config = Resource_cache.Address_config
+module Config = struct
+  include Resource_cache.Address_config
+
+  module Unstable = struct
+    type nonrec t = t =
+      { max_open_connections          : int
+      ; cleanup_idle_connection_after : Time_ns.Span.t
+      ; max_connections_per_address   : int
+      ; max_connection_reuse          : int
+      } [@@deriving bin_io]
+  end
+end
 
 module Tcp_options = struct
   type t =
@@ -38,14 +38,20 @@ end
 module Address_and_route = struct
   module T = struct
     type t =
-      { address : Address.t
+      { address : Host_and_port.t
       ; route   : string option
-      } [@@deriving bin_io, compare, hash, sexp, fields]
-    include Sexpable.To_stringable (struct type nonrec t = t [@@deriving sexp] end)
-    let module_name = "Async_smtp.Private.Client_cache.Address_and_route"
+      } [@@deriving compare, hash, sexp_of, fields]
   end
   include T
-  include Identifiable.Make (T)
+  include Comparable.Make_plain (T)
+  include Hashable.Make_plain (T)
+
+  module Unstable = struct
+    type nonrec t = t =
+      { address : Host_and_port.t
+      ; route   : string option
+      } [@@deriving bin_io]
+  end
 end
 
 module Resource = struct
@@ -137,7 +143,28 @@ module Client_cache = struct
 
   let init ~config k = init ~config ~log_error:(Async.Log.Global.string ~level:`Error) k
 end
-module Status       = Client_cache.Status
+module Status = struct
+  include Client_cache.Status
+
+  module Unstable = struct
+    type resource = Resource.t =
+      { state : [ `Busy|`Closing|`Idle ]
+      ; since : Time_ns.Span.t
+      } [@@deriving bin_io]
+
+    type resource_list = Resource_list.t =
+      { key               : Address_and_route.Unstable.t
+      ; resources         : resource list
+      ; queue_length      : int
+      ; max_time_on_queue : Time_ns.Span.Stable.V2.t option
+      } [@@deriving bin_io]
+
+    type t = Client_cache.Status.t =
+      { resource_lists    : resource_list sexp_list
+      ; num_jobs_in_cache : int;
+      } [@@deriving bin_io]
+  end
+end
 
 type t = Client_cache.t
 

@@ -24,7 +24,6 @@ module Smtp_quarantine_reason  = Quarantine_reason
 module Smtp_reply              = Smtp_reply
 module Smtp_rpc_intf           = Rpc_intf
 module Smtp_session            = Session
-module Smtp_socket_address     = Async_smtp_types.Smtp_socket_address
 module Smtp_spool_monitor      = Message_spool.On_disk_monitor
 module Smtp_spool_queue        = Message.Queue
 module Smtp_spool              = Spool

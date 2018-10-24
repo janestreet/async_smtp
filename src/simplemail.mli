@@ -9,7 +9,7 @@ module Expert : sig
   val send'
     :  ?log:Mail_log.t
     -> ?credentials:Credentials.t
-    -> ?server:Smtp_socket_address.t
+    -> ?server:Host_and_port.t
     -> sender:Smtp_envelope.Sender.t
     -> ?sender_args:Smtp_envelope.Sender_argument.t list
     -> recipients:Email_address.t list
@@ -19,7 +19,7 @@ module Expert : sig
   val send
     :  ?log:Mail_log.t
     -> ?credentials:Credentials.t
-    -> ?server:Smtp_socket_address.t
+    -> ?server:Host_and_port.t
     -> sender:Smtp_envelope.Sender.t
     -> ?sender_args:Smtp_envelope.Sender_argument.t list
     -> recipients:Email_address.t list

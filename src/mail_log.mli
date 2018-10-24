@@ -128,8 +128,9 @@ module Message : sig
     =  flows:Flows.t
     -> component:Component.t
     -> here:Source_code_position.t
-    -> ?local_address:Smtp_socket_address.t
-    -> ?remote_address:Smtp_socket_address.t
+    -> ?local_ip_address:Socket.Address.Inet.t
+    -> ?remote_address:Host_and_port.t
+    -> ?remote_ip_address:Socket.Address.Inet.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
               | `Envelope of Smtp_envelope.t
@@ -140,7 +141,6 @@ module Message : sig
     -> ?sender:[ `Sender of Smtp_envelope.Sender.t | `String of string ]
     -> ?recipients:[ `Email of Email_address.t | `String of string ] list
     -> ?spool_id:string
-    -> ?dest:Smtp_socket_address.t
     -> ?command:Smtp_command.t
     -> ?reply:Smtp_reply.t
     -> ?session_marker:Session_marker.t
@@ -185,8 +185,6 @@ module Message : sig
   val local_id : t -> Smtp_envelope.Id.t option
   (* tag 'spool-id' *)
   val spool_id : t -> string option
-  (* tag 'dest' *)
-  val dest : t -> Smtp_socket_address.t option
   (* tag 'sender'. [`String _] if the value doesn't parse *)
   val sender : t -> [ `Sender of Smtp_envelope.Sender.t | `String of string ] option
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
@@ -195,10 +193,12 @@ module Message : sig
   val recipients : t -> [ `Email of Email_address.t | `String of string ] list option
   (* tag 'email-fingerprint' *)
   val email : t -> Mail_fingerprint.t option
-  (* tag 'local-address' *)
-  val local_address : t -> Smtp_socket_address.t option
+  (* tag 'local-ip-address' *)
+  val local_ip_address : t -> Socket.Address.Inet.t option
   (* tag 'remote-address' *)
-  val remote_address : t -> Smtp_socket_address.t option
+  val remote_address : t -> Host_and_port.t option
+  (* tag 'remote-ip-address' *)
+  val remote_ip_address : t -> Socket.Address.Inet.t option
   (* tag 'command' *)
   val command : t -> Smtp_command.t option
   (* tag 'reply' *)

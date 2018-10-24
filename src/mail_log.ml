@@ -150,6 +150,14 @@ module Session_marker = struct
   let to_string t = Sexp.to_string (sexp_of_t t)
 end
 
+module Socket_inet_address = struct
+  include Socket.Address.Inet
+  let to_string t = sprintf !"%{Unix.Inet_addr}:%d" (addr t) (port t)
+  let of_string str =
+    let ip, port = String.rsplit2_exn str ~on:':' in
+    create (Unix.Inet_addr.of_string ip) ~port:(Int.of_string port)
+end
+
 module Message = struct
   module Action = (String : Identifiable.S with type t = string)
   module Sender = struct
@@ -180,8 +188,9 @@ module Message = struct
     =  flows:Flows.t
     -> component:Component.t
     -> here:Source_code_position.t
-    -> ?local_address:Smtp_socket_address.t
-    -> ?remote_address:Smtp_socket_address.t
+    -> ?local_ip_address:Socket.Address.Inet.t
+    -> ?remote_address:Host_and_port.t
+    -> ?remote_ip_address:Socket.Address.Inet.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
               | `Envelope of Smtp_envelope.t
@@ -192,7 +201,6 @@ module Message = struct
     -> ?sender:Sender.t
     -> ?recipients:Recipient.t list
     -> ?spool_id:string
-    -> ?dest:Smtp_socket_address.t
     -> ?command:Smtp_command.t
     -> ?reply:Smtp_reply.t
     -> ?session_marker:Session_marker.t
@@ -200,19 +208,16 @@ module Message = struct
     -> 'a
   ;;
 
-  let with_info ~f ~flows ~component ~here ?local_address ?remote_address
+  let with_info ~f ~flows ~component ~here
+        ?local_ip_address ?remote_address ?remote_ip_address
         ?email ?message_size ?rfc822_id ?local_id ?sender ?recipients ?spool_id
-        ?dest ?command ?reply ?session_marker ?(tags=[]) =
+        ?command ?reply ?session_marker ?(tags=[]) =
     let tags = match reply with
       | Some reply -> (Tag.reply, Smtp_reply.to_string reply) :: tags
       | None -> tags
     in
     let tags = match command with
       | Some command -> (Tag.command, Smtp_command.to_string command) :: tags
-      | None -> tags
-    in
-    let tags = match dest with
-      | Some dest -> (Tag.dest, Smtp_socket_address.Stable.V1.to_string dest) :: tags
       | None -> tags
     in
     let tags = match spool_id with
@@ -301,11 +306,18 @@ module Message = struct
       | None -> tags
     in
     let tags = match remote_address with
-      | Some remote_address -> (Tag.remote_address, Smtp_socket_address.Stable.V1.to_string remote_address) :: tags
+      | Some remote_address ->
+        (Tag.remote_address, Host_and_port.to_string remote_address) :: tags
       | None -> tags
     in
-    let tags = match local_address with
-      | Some local_address -> (Tag.local_address, Smtp_socket_address.Stable.V1.to_string local_address) :: tags
+    let tags = match remote_ip_address with
+      | Some remote_ip_address ->
+        (Tag.remote_ip_address, Socket_inet_address.to_string remote_ip_address) :: tags
+      | None -> tags
+    in
+    let tags = match local_ip_address with
+      | Some local_ip_address ->
+        (Tag.local_ip_address, Socket_inet_address.to_string local_ip_address) :: tags
       | None -> tags
     in
     let tags = match session_marker with
@@ -426,8 +438,6 @@ module Message = struct
 
   let spool_id = find_tag ~tag:Tag.spool_id
 
-  let dest = find_tag' ~tag:Tag.dest ~f:Smtp_socket_address.Stable.V1.of_string
-
   let of_string str ~of_sexp =
     Sexp.of_string_conv_exn str of_sexp
 
@@ -449,9 +459,10 @@ module Message = struct
 
   let email = find_tag' ~tag:Tag.email_fingerprint ~f:(of_string ~of_sexp:Mail_fingerprint.t_of_sexp)
 
-  let local_address = find_tag' ~tag:Tag.local_address ~f:Smtp_socket_address.Stable.V1.of_string
+  let local_ip_address = find_tag' ~tag:Tag.local_ip_address ~f:Socket_inet_address.of_string
 
-  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Smtp_socket_address.Stable.V1.of_string
+  let remote_address = find_tag' ~tag:Tag.remote_address ~f:Host_and_port.of_string
+  let remote_ip_address = find_tag' ~tag:Tag.remote_ip_address ~f:Socket_inet_address.of_string
 
   let command = find_tag' ~tag:Tag.command ~f:Smtp_command.of_string
 

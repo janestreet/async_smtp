@@ -9,7 +9,7 @@ include Envelope_container.With_info    with type t := t
 include Comparable.S_plain with type t := t
 include Hashable.S_plain   with type t := t
 
-val next_hop_choices : t -> Socket_address.t list
+val next_hop_choices : t -> Host_and_port.t list
 val retry_intervals  : t -> Retry_interval.t list
 val envelope         : t -> Envelope.t
 val email            : t -> Email.t

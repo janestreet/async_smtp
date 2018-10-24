@@ -30,9 +30,9 @@ module Stable = struct
   end
 
   module Spooled_message_info = struct
-    module V1 = struct
+    module V2 = struct
       type t =
-        { message : Message.V2.t
+        { message : Message.V3.t
         ; file_size : Byte_units.V1.t option
         ; envelope : Smtp_envelope.V2.t option
         } [@@deriving bin_io]
@@ -40,8 +40,8 @@ module Stable = struct
   end
 
   module Status = struct
-    module V1 = struct
-      type t = Spooled_message_info.V1.t list [@@deriving bin_io]
+    module V2 = struct
+      type t = Spooled_message_info.V2.t list [@@deriving bin_io]
     end
   end
 
@@ -615,7 +615,7 @@ let send ?retry_intervals t send_info =
   | `Some_messages msgids -> send_msgs ?retry_intervals t msgids
 
 module Spooled_message_info = struct
-  type t = Stable.Spooled_message_info.V1.t =
+  type t = Stable.Spooled_message_info.V2.t =
     { message   : Message.t
     ; file_size : Byte_units.t option
     ; envelope  : Smtp_envelope.t option
@@ -758,7 +758,7 @@ module Status = struct
           let next_hop =
             Column.create "next hop" (fun a ->
               S.next_hop_choices a
-              |> List.map ~f:Smtp_socket_address.to_string
+              |> List.map ~f:Host_and_port.to_string
               |> String.concat ~sep:", ")
           in
           let time_on_spool =

@@ -34,8 +34,8 @@ module type Session = sig
   *)
   val connect
     :  log:Mail_log.t
-    -> local:Smtp_socket_address.t
-    -> remote:Smtp_socket_address.t
+    -> local:Socket.Address.Inet.t
+    -> remote:Socket.Address.Inet.t
     -> t Smtp_monad.t
 
   (** [greeting] to send to clients after the connection has been accepted. *)
@@ -143,8 +143,8 @@ end
 module Simple : sig
   module Session : sig
     type t =
-      { local         : Smtp_socket_address.t
-      ; remote        : Smtp_socket_address.t
+      { local         : Socket.Address.Inet.t
+      ; remote        : Socket.Address.Inet.t
       ; helo          : string option
       ; tls           : bool
       ; authenticated : string option
@@ -207,16 +207,18 @@ end = struct
 
   module Session = struct
     type t =
-      { local         : Smtp_socket_address.t
-      ; remote        : Smtp_socket_address.t
+      { local         : Socket.Address.Inet.t
+      ; remote        : Socket.Address.Inet.t
       ; helo          : string option
       ; tls           : bool
       ; authenticated : string option
       } [@@deriving fields, sexp_of]
 
+
     let empty =
-      { local = `Unix "/dev/null"
-      ; remote = `Unix "/dev/null"
+      let null_inet_addr = Socket.Address.Inet.create_bind_any ~port:0 in
+      { local = null_inet_addr
+      ; remote = null_inet_addr
       ; helo = None
       ; tls = false
       ; authenticated = None

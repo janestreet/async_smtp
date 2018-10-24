@@ -9,15 +9,19 @@ module Config = Client_config
 
 module Peer_info = struct
   type t =
-    { dest : Smtp_socket_address.t
+    { remote_address : Host_and_port.t
+    ; local_ip_address : Socket.Address.Inet.t option
+    ; remote_ip_address : Socket.Address.Inet.t option
     ; greeting : string Set_once.Stable.V1.t
     ; hello : [ `Simple of string
               | `Extended of string * (Smtp_extension.t list)
               ] Set_once.Stable.V1.t
     } [@@deriving sexp_of, fields]
 
-  let create ~dest () =
-    { dest
+  let create ~remote_address ~remote_ip_address ~local_ip_address () =
+    { remote_address
+    ; local_ip_address
+    ; remote_ip_address
     ; greeting = Set_once.create ()
     ; hello = Set_once.create ()
     }
@@ -97,17 +101,34 @@ let remote_address t =
   | `Bsmtp _ -> None
   | `Plain { Plain.info; _ }
   | `Emulate_tls_for_test { Plain.info; _ }
-  | `Tls { Tls.info; _ } -> Some info.Peer_info.dest
+  | `Tls { Tls.info; _ } -> Some info.Peer_info.remote_address
+;;
+
+let local_ip_address t =
+  match t.mode with
+  | `Bsmtp _ -> None
+  | `Plain { Plain.info; _ }
+  | `Emulate_tls_for_test { Plain.info; _ }
+  | `Tls { Tls.info; _ } -> info.Peer_info.local_ip_address
+;;
+let remote_ip_address t =
+  match t.mode with
+  | `Bsmtp _ -> None
+  | `Plain { Plain.info; _ }
+  | `Emulate_tls_for_test { Plain.info; _ }
+  | `Tls { Tls.info; _ } -> info.Peer_info.remote_ip_address
 ;;
 
 let create
       ?flows
       ~emulate_tls_for_test
-      ~dest
+      ~remote_address
+      ?local_ip_address
+      ?remote_ip_address
       reader
       writer
       config =
-  let info = Peer_info.create ~dest () in
+  let info = Peer_info.create ~remote_address ~local_ip_address ~remote_ip_address () in
   let flows = match flows with
     | Some flows -> flows
     | None -> Log.Flows.create `Client_session
@@ -265,6 +286,8 @@ let do_quit t ~log ~component =
                          ~flows:t.flows
                          ~component
                          ?remote_address:(remote_address t)
+                         ?local_ip_address:(local_ip_address t)
+                         ?remote_ip_address:(remote_ip_address t)
                          "INFO"));
   if Writer.is_closed (writer t) then return (Ok ())
   else begin
@@ -315,6 +338,8 @@ let do_greeting t ~log ~component =
                          ~flows:t.flows
                          ~component
                          ?remote_address:(remote_address t)
+                         ?local_ip_address:(local_ip_address t)
+                         ?remote_ip_address:(remote_ip_address t)
                          "INFO"));
   receive t ~log ~component ~here:[%here]
   >>=? function
@@ -401,8 +426,10 @@ let do_start_tls t ~log ~component tls_options =
                            "finished tls negotiation"));
     (* Make sure we forget all of the peer info except the host and port we talk
        to. *)
-    let dest = Peer_info.dest (Plain.info plain) in
-    let info = Peer_info.create ~dest () in
+    let remote_address = Peer_info.remote_address (Plain.info plain) in
+    let local_ip_address = Peer_info.local_ip_address (Plain.info plain) in
+    let remote_ip_address = Peer_info.remote_ip_address (Plain.info plain) in
+    let info = Peer_info.create ~remote_address ~local_ip_address ~remote_ip_address () in
     t.mode <- `Tls (Tls.create ~reader:new_reader ~writer:new_writer ~tls ~info);
     do_ehlo t ~log ~component
 
@@ -416,9 +443,8 @@ let check_tls_security t =
     if not (Config.has_tls config) then Ok ()
     else Or_error.errorf "No TLS allowed in Bsmtp mode."
   | `Plain plain ->
-    begin match Peer_info.dest (Plain.info plain) with
-    | `Unix _file -> Ok ()
-    | `Inet hp ->
+    begin
+      let hp =  Peer_info.remote_address (Plain.info plain) in
       let host, port = Host_and_port.tuple hp in
       match Config.match_tls_domain config host with
       | None -> Ok ()
@@ -431,42 +457,38 @@ let check_tls_security t =
   | `Emulate_tls_for_test _emulate_tls ->
     Ok ()
   | `Tls tls ->
-    match Peer_info.dest (Tls.info tls) with
-    | `Unix file ->
-      Or_error.errorf "TLS forbidden for unix socket %s but still negotiated" file
-    | `Inet hp ->
-      let host, port = Host_and_port.tuple hp in
-      match Config.match_tls_domain config host with
-      | None ->
-        Or_error.errorf "TLS forbidden for %s:%d but still negotiated" host port
-      | Some tls_config ->
-        let certificate_mode = Config.Tls.certificate_mode tls_config in
-        let certificate = Ssl.Connection.peer_certificate (Tls.tls tls) in
-        let check_domain cert =
-          Ssl.Certificate.subject cert
-          |> List.find ~f:(fun (sn, _) -> sn = "CN")
-          |> function
-          | None -> Or_error.errorf "No CN in certificate for %s:%d" host port
-          | Some (_, cn) ->
-            if cn = host then Ok ()
-            else Or_error.errorf "Certificate for '%s:%d' has CN = '%s'" host port cn
-        in
-        let no_cert_error () =
-          Or_error.errorf "Certificate required, but not sent by peer: %s:%d" host port
-        in
-        match certificate_mode, certificate with
-        | `Ignore, _                -> Ok ()
-        | `Verify, None             -> no_cert_error ()
-        | `Verify, (Some (Error e)) -> Error e
-        | `Verify, (Some (Ok cert)) -> check_domain cert
+    let hp = Peer_info.remote_address (Tls.info tls) in
+    let host, port = Host_and_port.tuple hp in
+    match Config.match_tls_domain config host with
+    | None ->
+      Or_error.errorf "TLS forbidden for %s:%d but still negotiated" host port
+    | Some tls_config ->
+      let certificate_mode = Config.Tls.certificate_mode tls_config in
+      let certificate = Ssl.Connection.peer_certificate (Tls.tls tls) in
+      let check_domain cert =
+        Ssl.Certificate.subject cert
+        |> List.find ~f:(fun (sn, _) -> sn = "CN")
+        |> function
+        | None -> Or_error.errorf "No CN in certificate for %s:%d" host port
+        | Some (_, cn) ->
+          if cn = host then Ok ()
+          else Or_error.errorf "Certificate for '%s:%d' has CN = '%s'" host port cn
+      in
+      let no_cert_error () =
+        Or_error.errorf "Certificate required, but not sent by peer: %s:%d" host port
+      in
+      match certificate_mode, certificate with
+      | `Ignore, _                -> Ok ()
+      | `Verify, None             -> no_cert_error ()
+      | `Verify, (Some (Error e)) -> Error e
+      | `Verify, (Some (Ok cert)) -> check_domain cert
 
 let should_try_tls t : Config.Tls.t option =
   match t.mode with
   | `Bsmtp _ | `Tls _ | `Emulate_tls_for_test _ -> None
   | `Plain plain ->
-    match Peer_info.dest (Plain.info plain) with
-    | `Unix _file -> None
-    | `Inet hp ->
+    begin
+      let hp = Peer_info.remote_address (Plain.info plain) in
       match Config.match_tls_domain (config t) (Host_and_port.host hp) with
       | None -> None
       | Some tls ->
@@ -476,6 +498,7 @@ let should_try_tls t : Config.Tls.t option =
           if supports_extension t Smtp_extension.Start_tls
           then Some tls
           else None
+    end
 
 (* Will fail if negotiated security level is lower than that required by the
    config. *)
@@ -601,7 +624,9 @@ let with_quit t ~log ~component ~f =
 let with_session t ~log ~component ~credentials ~f =
   let component = component @ [ "session" ] in
   Log.debug log (lazy (Log.Message.info ~component ~here:[%here]  ~flows:t.flows
-                         ?remote_address:(remote_address t) ()));
+                         ?remote_address:(remote_address t)
+                         ?remote_ip_address:(remote_ip_address t)
+                         ?local_ip_address:(local_ip_address t) ()));
   (* The RFC prescribes that we send QUIT if we are not happy with the reached
      level of TLS security. *)
   with_quit t ~log ~component ~f:(fun () ->

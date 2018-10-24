@@ -42,8 +42,8 @@ module type For_test = sig
     -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
     -> ?malformed_emails:[`Reject|`Wrap]
-    -> ?local:Smtp_socket_address.t
-    -> remote:Smtp_socket_address.t
+    -> ?local_ip_address:Socket.Address.Inet.t
+    -> ?remote_ip_address:Socket.Address.Inet.t
     -> Reader.t
     -> Writer.t
     -> unit Deferred.t

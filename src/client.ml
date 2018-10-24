@@ -122,7 +122,9 @@ module Expert = struct
                             ~here:[%here]
                             ~flows
                             ~component
-                            ?dest:(remote_address t)
+                            ?remote_address:(remote_address t)
+                            ?remote_ip_address:(remote_ip_address t)
+                            ?local_ip_address:(local_ip_address t)
                             ~session_marker:`Sending
                             "sending"));
       send_receive t ~log ~flows ~component:(component @ ["sender"]) ~here:[%here]
@@ -220,7 +222,9 @@ module Expert = struct
                                 ~component
                                 ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
                                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
-                                ?dest:(remote_address t)
+                                ?remote_address:(remote_address t)
+                                ?remote_ip_address:(remote_ip_address t)
+                                ?local_ip_address:(local_ip_address t)
                                 ~tags:[ "remote-id",remote_id ]
                                 "sent"));
           Ok (remote_id, rejected_recipients)
@@ -276,54 +280,111 @@ module For_test = struct
         ?(flows=Log.Flows.none)
         ?(component=[])
         ?(emulate_tls=false)
-        ~dest
+        ?local_ip_address
+        ?remote_ip_address
+        ~remote_address
         reader writer
         ~f =
-    create ~dest ~flows ~emulate_tls_for_test:emulate_tls reader writer config
+    create ~remote_address ?local_ip_address ?remote_ip_address
+      ~flows ~emulate_tls_for_test:emulate_tls reader writer config
     (* Flow already attatched to the session *)
-    |> with_session ~log ~component ~credentials ~f
+    |>
+    with_session ~log ~component ~credentials ~f
 end
 
 module Tcp = struct
-  let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?writer_buffer_size ?timeout
+  let with_address ?buffer_age_limit ?interrupt ?reader_buffer_size ?writer_buffer_size
+        ?timeout
         ?(config = Config.default)
         ?(credentials = Credentials.anon)
         ~log
         ?(flows=Log.Flows.none)
         ?(component=[])
-        dest
+        ?remote_address
+        socket_address
         ~f =
+    let remote_address = match remote_address with
+      | None -> Socket.Address.Inet.to_host_and_port socket_address
+      | Some remote_address -> remote_address
+    in
     let flows = Log.Flows.extend flows `Client_session in
     let component = component @ ["smtp-client"] in
-    let with_connection address f =
-      Deferred.Or_error.try_with_join (fun () ->
-        Tcp.with_connection
-          ?buffer_age_limit
-          ?interrupt
-          ?reader_buffer_size
-          ?writer_buffer_size
-          ?timeout
-          address
-          f)
-    in
-    let f _socket reader writer =
+    let f socket reader writer =
+      let inet_address = function
+        | `Unix _ -> None
+        | (`Inet _) as i -> Some i
+      in
+      let local_ip_address = inet_address (Socket.getsockname socket) in
+      let remote_ip_address = inet_address (Socket.getpeername socket) in
       Log.debug log
         (lazy (Log.Message.create
                  ~here:[%here]
                  ~flows
                  ~component:(component @ ["tcp"])
-                 ~remote_address:dest
+                 ~remote_address
+                 ?local_ip_address
+                 ?remote_ip_address
                  "connection established"));
-      create ~dest ~flows ~emulate_tls_for_test:false reader writer config
+      create ~remote_address ?local_ip_address ?remote_ip_address
+        ~flows ~emulate_tls_for_test:false reader writer config
       (* Flow already attatched to the session *)
       |> with_session ~log ~component ~credentials ~f
     in
-    match dest with
-    | `Inet hp ->
-      let address = Tcp.Where_to_connect.of_host_and_port hp in
-      with_connection address f
-    | `Unix file ->
-      with_connection (Tcp.Where_to_connect.of_file file) f
+    Deferred.Or_error.try_with (fun () ->
+      Tcp.with_connection
+        ?buffer_age_limit
+        ?interrupt
+        ?reader_buffer_size
+        ?writer_buffer_size
+        ?timeout
+        (Tcp.Where_to_connect.of_inet_address socket_address)
+        f)
+  ;;
+
+  let resolve_addresses smtp_server =
+    match Unix.Inet_addr.of_string smtp_server with
+    | inet -> Deferred.Or_error.return [ inet ]
+    | exception _not_an_ip ->
+      match%bind
+        Deferred.Or_error.try_with (fun () -> Unix.Host.getbyname smtp_server)
+      with
+      | Error error ->
+        Deferred.Or_error.error_s [%message
+          "Failed to resolve hostname" (smtp_server : string) (error : Error.t)]
+      | Ok None ->
+        Deferred.Or_error.error_s [%message
+          "Failed to resolve hostname" (smtp_server : string) "Not Found"]
+      | Ok (Some host_info) ->
+        Array.to_list host_info.addresses
+        |> List.permute
+        |> Deferred.Or_error.return
+  ;;
+
+  let with_ ?buffer_age_limit ?interrupt ?reader_buffer_size ?writer_buffer_size ?timeout
+        ?config ?credentials ~log ?flows ?component smtp_server ~f =
+    let remote_address = smtp_server in
+    let host, port = Host_and_port.tuple smtp_server in
+    match%bind resolve_addresses host with
+    | Error _ as error -> return error
+    | Ok addrs ->
+      let rec loop ~errors = function
+        | [] ->
+          Deferred.Or_error.error_s [%message
+            "Failed to connect"
+              (smtp_server : Host_and_port.t)
+              (errors : (Unix.Inet_addr.t * Error.t) list)]
+        | inet::more_addrs ->
+          match%bind
+            with_address ?buffer_age_limit ?interrupt ?reader_buffer_size
+              ?writer_buffer_size ?timeout ?config ?credentials ~log ?flows ?component
+              ~remote_address (Socket.Address.Inet.create inet ~port) ~f
+          with
+          | Ok res -> return res
+          | Error error ->
+            loop ~errors:((inet,error)::errors) more_addrs
+      in
+      loop  ~errors:[] addrs
+  ;;
 end
 
 (* BSMTP writing *)

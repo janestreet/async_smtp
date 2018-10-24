@@ -208,7 +208,7 @@ let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_
 
 let send_to_hops t ~log ~client_cache data_file =
   let hops_tag =
-    Sexp.to_string ([%sexp_of: Smtp_socket_address.t list] (Message.next_hop_choices t))
+    Sexp.to_string ([%sexp_of: Host_and_port.t list] (Message.next_hop_choices t))
   in
   Log.debug log (lazy (Log.Message.create
                          ~here:[%here]

@@ -206,7 +206,7 @@ val event_stream
 module Stable : sig
   module Message_id = Message.Stable.Id
   module Status : sig
-    module V1 : sig
+    module V2 : sig
       type t = Status.t [@@deriving bin_io]
     end
   end

@@ -43,7 +43,7 @@ val id               : t -> Id.t
 val flows            : t -> Mail_log.Flows.t
 val parent_id        : t -> Smtp_envelope.Id.t
 val spool_date       : t -> Time.t
-val next_hop_choices : t -> Smtp_socket_address.t list
+val next_hop_choices : t -> Host_and_port.t list
 val envelope_info    : t -> Smtp_envelope.Info.t
 val time_on_spool    : t -> Time.Span.t
 
@@ -125,7 +125,11 @@ module Stable : sig
   end
   module V1 : sig type t [@@deriving sexp, bin_io] end
   module V2 : sig
+    type t [@@deriving sexp, bin_io]
+  end
+  module V3 : sig
     type nonrec t = t [@@deriving sexp, bin_io]
     val of_v1 : V1.t -> t
+    val of_v2 : V2.t -> t
   end
 end

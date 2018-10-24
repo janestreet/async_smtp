@@ -72,7 +72,7 @@ let error          = binable (module Error.Stable.V2)
 let smtp_event = binable (module Smtp_events.Event)
 
 let id           = binable (module Spool.Stable.Message_id.V1)
-let spool_status = binable (module Spool.Stable.Status.V1)
+let spool_status = binable (module Spool.Stable.Status.V2)
 let spool_event  = binable (module Spool.Stable.Event.V1)
 let send_info    = binable (module Spool.Stable.Send_info.V1)
 let recover_info = binable (module Spool.Stable.Recover_info.V1)
@@ -80,8 +80,8 @@ let recover_info = binable (module Spool.Stable.Recover_info.V1)
 let gc_stat      = binable (module Gc.Stat)
 let pid          = binable (module Pid.Stable.V1)
 
-let cache_status = binable (module Client_cache.Status)
-let cache_config = binable (module Client_cache.Config)
+let cache_status = binable (module Client_cache.Status.Unstable)
+let cache_config = binable (module Client_cache.Config.Unstable)
 
 module Monitor = struct
   (* Including a sequence number. We broadcast a heartbeat message (with error =
@@ -99,6 +99,7 @@ module Spool = struct
   let prefix = "spool"
 
   let status     = rpc ~name:(prefix ^- "status") unit spool_status
+                     ~version:2
 
   let freeze     = rpc ~name:(prefix ^- "freeze") (list id) (or_error unit)
                      ~version:1

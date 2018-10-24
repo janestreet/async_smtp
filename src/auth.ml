@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open Async_smtp_types
 
 module type Server = sig
   type session
@@ -17,7 +16,7 @@ module type Client = sig
   val mechanism : string
   val negotiate
     :  log:Mail_log.t
-    -> remote:Smtp_socket_address.t option
+    -> remote:Host_and_port.t option
     -> send_response_and_expect_challenge:
          ([`Start_auth | `Response of string]
           -> [ `Challenge of string | `Auth_completed] Deferred.t)

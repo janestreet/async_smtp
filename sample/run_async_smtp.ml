@@ -36,7 +36,7 @@ module Server = Smtp_server.Make(struct
       include Smtp_server.Plugin.Simple.Envelope
 
       let destination =
-        `Inet (Host_and_port.create ~host:"localhost" ~port:25)
+        (Host_and_port.create ~host:"localhost" ~port:25)
 
       let process ~log:_ _session t email =
         let envelope =

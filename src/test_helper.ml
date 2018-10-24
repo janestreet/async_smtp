@@ -261,8 +261,6 @@ let server_impl
           List.iter msgs ~f:(printf !"QUARANTINE: %{sexp:Smtp_envelope.Routed.Batch.t}\n");
         end;
         Deferred.Or_error.ok_unit)
-      ~local:(`Inet (Host_and_port.create ~host:"server" ~port:0))
-      ~remote:(`Inet (Host_and_port.create ~host:"client" ~port:0))
       r w)
 ;;
 
@@ -284,7 +282,7 @@ let client_impl
       ?credentials
       ~log
       ~emulate_tls:tls
-      ~dest:(`Inet (Host_and_port.create ~host:"server" ~port:0))
+      ~remote_address:(Host_and_port.create ~host:"server" ~port:0)
       r
       w
       ~f:(fun client ->

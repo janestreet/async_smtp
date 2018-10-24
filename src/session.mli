@@ -4,8 +4,8 @@ open Async_ssl.Std
 open Async_smtp_types
 
 type t =
-  { remote                : Smtp_socket_address.t
-  ; local                 : Smtp_socket_address.t
+  { remote                : Socket.Address.Inet.t
+  ; local                 : Socket.Address.Inet.t
   ; helo                  : string option
   ; tls                   : Ssl.Connection.t option
   ; authenticated         : string option
@@ -13,8 +13,8 @@ type t =
   } [@@deriving sexp_of, fields]
 
 val create
-  :  remote : Smtp_socket_address.t
-  -> local : Smtp_socket_address.t
+  :  remote : Socket.Address.Inet.t
+  -> local : Socket.Address.Inet.t
   -> ?helo : string
   -> ?tls : Ssl.Connection.t
   -> ?authenticated : string

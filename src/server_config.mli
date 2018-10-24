@@ -23,7 +23,7 @@ module Tcp_options : sig
 end
 
 module Where_to_listen : sig
-  type t = [ `Port of int | `File of string ] [@@deriving sexp]
+  type t = [`Port of int ] [@@deriving sexp]
 end
 
 module Timeouts : sig

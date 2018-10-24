@@ -72,7 +72,7 @@ let%test_module _ =
             Client.Tcp.with_
               ~log
               ~config:client_config
-              (`Inet (Host_and_port.create ~host:"localhost" ~port))
+              (Host_and_port.create ~host:"localhost" ~port)
               ~f:(fun client ->
                 [%test_result: bool] (Client.is_using_tls client) ~expect:expect_tls;
                 Client.send_envelope ~log client envelope

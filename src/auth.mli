@@ -55,7 +55,7 @@ module type Client = sig
       it is an error to call it after the exchange has been completed. *)
   val negotiate
     :  log:Mail_log.t
-    -> remote:Smtp_socket_address.t option
+    -> remote:Host_and_port.t option
     -> send_response_and_expect_challenge:
          ([`Start_auth | `Response of string]
           -> [ `Challenge of string | `Auth_completed] Deferred.t)

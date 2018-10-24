@@ -31,8 +31,8 @@ module type For_test = sig
     -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
     -> ?malformed_emails:[`Reject|`Wrap]
-    -> ?local:Smtp_socket_address.t
-    -> remote:Smtp_socket_address.t
+    -> ?local_ip_address:Socket.Address.Inet.t
+    -> ?remote_ip_address:Socket.Address.Inet.t
     -> Reader.t
     -> Writer.t
     -> unit Deferred.t
@@ -737,7 +737,7 @@ module Make(Cb : Plugin.S) = struct
                                ~component
                                ~email:(`Envelope (Smtp_envelope.Routed.envelope envelope_routed))
                                ~tags:(List.map (Smtp_envelope.Routed.next_hop_choices envelope_routed)
-                                        ~f:(fun c -> "next-hop",Smtp_socket_address.to_string c))
+                                        ~f:(fun c -> "next-hop",Host_and_port.to_string c))
                                (Error.tag err ~tag:"quarantining"))));
                   transaction_failed ~here:[%here] ~flows ~component "error spooling"
                   >>= fun () ->
@@ -775,7 +775,7 @@ module Make(Cb : Plugin.S) = struct
                              ~component
                              ~email:(`Envelope (Smtp_envelope.Routed.envelope envelope_routed))
                              ~tags:(List.map (Smtp_envelope.Routed.next_hop_choices envelope_routed)
-                                      ~f:(fun c -> "next-hop",Smtp_socket_address.to_string c))
+                                      ~f:(fun c -> "next-hop",Host_and_port.to_string c))
                              (Error.tag err ~tag:"spooling"))));
                 transaction_failed ~here:[%here] ~flows ~component "error spooling"
                 >>= fun () ->
@@ -805,7 +805,7 @@ module Make(Cb : Plugin.S) = struct
                              ~recipients
                              ~message_size
                              ~tags:(List.map (Smtp_envelope.Routed.next_hop_choices envelope_routed)
-                                      ~f:(fun c -> "next-hop",Smtp_socket_address.to_string c))
+                                      ~f:(fun c -> "next-hop",Host_and_port.to_string c))
                              "SPOOLED")));
                 ok_completed ~here:[%here] ~flows ~component (sprintf "id=%s" id)
                 >>= fun () ->
@@ -829,8 +829,8 @@ module Make(Cb : Plugin.S) = struct
         ~send_envelope
         ~quarantine
         ~session_flows
-        ~local_address
-        ~remote_address
+        ~local_ip_address
+        ~remote_ip_address
         () =
     let write_reply' = Staged.unstage (write_reply_impl ~log ?raw_writer ?write_reply ()) in
     let component = [ "smtp-server"; "session"; "init" ] in
@@ -840,12 +840,12 @@ module Make(Cb : Plugin.S) = struct
                           ~here:[%here]
                           ~flows
                           ~component
-                          ~local_address
-                          ~remote_address
+                          ~local_ip_address
+                          ~remote_ip_address
                           ~session_marker:`Connected
                           "CONNECTED"));
     protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
-      Cb.Session.connect ~log ~local:local_address ~remote:remote_address)
+      Cb.Session.connect ~log ~local:local_ip_address ~remote:remote_ip_address)
     >>= function
     | Error err ->
       on_plugin_error
@@ -910,21 +910,18 @@ module Make(Cb : Plugin.S) = struct
               on_plugin_error_no_reply ~log ~here:[%here] ~flows ~component ~plugin err)
   ;;
 
-  type server = Inet of Tcp.Server.inet | Unix of Tcp.Server.unix
-
   type t =
     { config        : Config.t;
       (* One server per port *)
-      servers       : server list;
+      servers       : Tcp.Server.inet list;
       spool         : Spool.t;
       close_started : unit Ivar.t
     }
   ;;
 
   let tcp_servers ~spool ~config ~log ~server_events ~close_started =
-    let start_servers where ~make_local_address ~make_tcp_where_to_listen
-          ~make_remote_address ~to_server =
-      let local_address = make_local_address where in
+    let start_servers port =
+      let local_ip_address = Socket.Address.Inet.create_bind_any ~port in
       let tcp_options = Config.tcp_options config in
       let max_accepts_per_batch =
         Option.bind tcp_options ~f:Config.Tcp_options.max_accepts_per_batch
@@ -932,23 +929,28 @@ module Make(Cb : Plugin.S) = struct
       let backlog =
         Option.bind tcp_options ~f:Config.Tcp_options.backlog
       in
-      Tcp.Server.create (make_tcp_where_to_listen where)
+      Tcp.Server.create (Tcp.Where_to_listen.of_port port)
         ?max_accepts_per_batch ?backlog
-        ~on_handler_error:(`Call (fun remote_address exn ->
-          let remote_address = make_remote_address remote_address in
+        ~on_handler_error:(`Call (fun remote_ip_address exn ->
           (* Silence the [inner_monitor] errors *)
           Log.error log ~dont_send_to_monitor:()
             (lazy (Log.Message.of_error
                      ~here:[%here]
                      ~flows:Log.Flows.none
                      ~component:["smtp-server";"tcp"]
-                     ~local_address
-                     ~remote_address
+                     ~local_ip_address
+                     ~remote_ip_address
                      (Error.of_exn ~backtrace:`Get exn)))))
         ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
-        (fun address_in reader writer ->
+        (fun remote_ip_address reader writer ->
+           let local_ip_address =
+             Option.try_with (fun () ->
+               match Writer.fd writer |> Fd.file_descr_exn |> Core.Unix.getsockname with
+               | Core.Unix.ADDR_UNIX _ -> assert false
+               | Core.Unix.ADDR_INET (host,port) -> Socket.Address.Inet.create host ~port)
+             |> Option.value ~default:local_ip_address
+           in
            let session_flows = Log.Flows.create `Server_session in
-           let remote_address = make_remote_address address_in in
            let send_envelope ~flows ~original_msg envelopes_with_next_hops =
              Spool.add spool ~flows ~original_msg envelopes_with_next_hops
              >>|? fun id -> Smtp_envelope.Id.to_string id
@@ -966,8 +968,8 @@ module Make(Cb : Plugin.S) = struct
                ~max_message_size:config.Config.max_message_size
                ~session_flows
                ~reader ~raw_writer:writer ~send_envelope ~quarantine
-               ~local_address
-               ~remote_address
+               ~local_ip_address
+               ~remote_ip_address
                ~close_started
                ~timeouts:config.timeouts
                ()
@@ -978,28 +980,12 @@ module Make(Cb : Plugin.S) = struct
                         ~here:[%here]
                         ~flows:session_flows
                         ~component:["smtp-server"; "tcp"]
-                        ~local_address
-                        ~remote_address
+                        ~local_ip_address
+                        ~remote_ip_address
                         err))))
-      >>| to_server
     in
-    Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:(function
-      | `Port port ->
-        let make_local_address port = `Inet (Host_and_port.create ~host:"0.0.0.0" ~port) in
-        let make_tcp_where_to_listen = Tcp.Where_to_listen.of_port in
-        let make_remote_address (`Inet (inet_in, port_in)) =
-          `Inet (Host_and_port.create ~host:(Unix.Inet_addr.to_string inet_in) ~port:port_in)
-        in
-        let to_server s = Inet s in
-        start_servers port ~make_local_address ~make_tcp_where_to_listen
-          ~make_remote_address ~to_server
-      | `File file ->
-        let make_local_address socket = `Unix socket in
-        let make_tcp_where_to_listen = Tcp.Where_to_listen.of_file in
-        let make_remote_address (`Unix socket_in) = `Unix socket_in in
-        let to_server s = Unix s in
-        start_servers file ~make_local_address ~make_tcp_where_to_listen
-          ~make_remote_address ~to_server)
+    Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:(fun (`Port port) ->
+      start_servers port )
   ;;
 
   let start ~config ~log =
@@ -1017,21 +1003,16 @@ module Make(Cb : Plugin.S) = struct
   let config t = t.config
   ;;
 
-  let ports t = List.filter_map t.servers ~f:(function
-    | Inet server -> Some (Tcp.Server.listening_on server)
-    | Unix _server -> None)
+  let ports t = List.map t.servers ~f:(fun server ->
+    (Tcp.Server.listening_on server))
 
   let close ?(timeout = Deferred.never ()) t =
     Ivar.fill_if_empty t.close_started ();
-    Deferred.List.iter ~how:`Parallel t.servers ~f:(function
-      | Inet server -> Tcp.Server.close server
-      | Unix server -> Tcp.Server.close server)
+    Deferred.List.iter ~how:`Parallel t.servers ~f:Tcp.Server.close
     >>= fun () ->
     let finished =
       [ Spool.kill_and_flush t.spool ]
-      @ (List.map t.servers ~f:(function
-        | Inet server -> Tcp.Server.close_finished_and_handlers_determined server
-        | Unix server -> Tcp.Server.close_finished_and_handlers_determined server))
+      @ (List.map t.servers ~f:Tcp.Server.close_finished_and_handlers_determined)
       |> Deferred.all_unit
     in
     Deferred.choose
@@ -1054,8 +1035,8 @@ module For_test(P : Plugin.S) = struct
         ?tls_options
         ?(emulate_tls=false)
         ?(malformed_emails=`Reject)
-        ?(local=(`Inet (Host_and_port.create ~host:"0.0.0.0" ~port:0)))
-        ~remote
+        ?(local_ip_address=Socket.Address.Inet.create_bind_any ~port:0)
+        ?(remote_ip_address=Socket.Address.Inet.create_bind_any ~port:0)
         reader
         writer =
     start_session
@@ -1072,8 +1053,8 @@ module For_test(P : Plugin.S) = struct
       ~send_envelope:(fun ~flows:_ ~original_msg:_ msgs -> send msgs)
       ~quarantine:(fun ~flows:_ ~reason ~original_msg:_ msgs -> quarantine ~reason msgs)
       ~session_flows:(Mail_log.Flows.create `Server_session)
-      ~local_address:local
-      ~remote_address:remote
+      ~local_ip_address
+      ~remote_ip_address
       ()
 end
 
@@ -1120,8 +1101,8 @@ let read_bsmtp ?(log=Lazy.force bsmtp_log) reader =
         Deferred.Or_error.error_string "Not implemented")
       ~quarantine:(fun ~flows:_ ~reason:_ ~original_msg:_ _ ->
         Deferred.Or_error.error_string "Not implemented")
-      ~local_address:(`Unix "*pipe*")
-      ~remote_address:(`Unix "*pipe*")
+      ~local_ip_address:(Socket.Address.Inet.create_bind_any ~port:0)
+      ~remote_ip_address:(Socket.Address.Inet.create_bind_any ~port:0)
       ())
 ;;
 

@@ -23,7 +23,7 @@ module Tcp_options = struct
 end
 
 module Where_to_listen = struct
-  type t = [ `Port of int | `File of string ] [@@deriving sexp]
+  type t = [ `Port of int ] [@@deriving sexp]
 end
 
 module Timeouts = struct

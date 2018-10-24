@@ -1,6 +1,5 @@
 include Email_message
 
-module Smtp_socket_address = Socket_address
 module Smtp_extension      = Smtp_extension
 
 module Smtp_envelope = struct
@@ -23,8 +22,6 @@ module Smtp_envelope = struct
 end
 
 module Async_smtp_types_stable = struct
-  module Smtp_socket_address = Socket_address.Stable
-
   module Smtp_envelope = struct
     include Envelope.Stable
     module Sender          = Sender.Stable

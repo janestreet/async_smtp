@@ -76,7 +76,7 @@ module Tcp : sig
        -> log:Mail_log.t
        -> ?flows:Mail_log.Flows.t
        -> ?component:Mail_log.Component.t
-       -> Smtp_socket_address.t
+       -> Host_and_port.t
        -> f:(t -> 'a Deferred.Or_error.t)
        -> 'a Deferred.Or_error.t
       ) Tcp.with_connect_options
@@ -107,7 +107,9 @@ module For_test : sig
     -> ?flows:Mail_log.Flows.t
     -> ?component:Mail_log.Component.t
     -> ?emulate_tls:bool
-    -> dest:Smtp_socket_address.t
+    -> ?local_ip_address:Socket.Address.Inet.t
+    -> ?remote_ip_address:Socket.Address.Inet.t
+    -> remote_address:Host_and_port.t
     -> Reader.t
     -> Writer.t
     -> f:(t -> 'a Deferred.Or_error.t)

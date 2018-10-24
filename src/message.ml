@@ -38,7 +38,7 @@ module Stable = struct
       ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
       ; parent_id                    : Smtp_envelope.Id.V1.t
       ; spool_date                   : Time.V1.t
-      ; next_hop_choices             : Smtp_socket_address.V1.t list
+      ; next_hop_choices             : [`Inet of Host_and_port.V1.t] list
       ; mutable retry_intervals      : Retry_interval.V2.t list
       ; mutable remaining_recipients : Email_address.V1.t list
       ; mutable failed_recipients    : Email_address.V1.t list
@@ -55,7 +55,7 @@ module Stable = struct
       ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
       ; parent_id                    : Smtp_envelope.Id.V1.t
       ; spool_date                   : Time.V1.t
-      ; next_hop_choices             : Smtp_socket_address.V1.t list
+      ; next_hop_choices             : [`Inet of Host_and_port.V1.t] list
       ; mutable retry_intervals      : Retry_interval.V2.t list
       ; mutable remaining_recipients : Email_address.V1.t list
       ; mutable failed_recipients    : Email_address.V1.t list
@@ -79,6 +79,41 @@ module Stable = struct
       ; envelope_info        = Smtp_envelope.Info.V2.of_v1 v1.envelope_info
       }
     ;;
+  end
+
+  module V3 = struct
+    type t =
+      { spool_dir                    : string
+      ; id                           : Id.V1.t
+      ; flows                        : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
+      ; parent_id                    : Smtp_envelope.Id.V1.t
+      ; spool_date                   : Time.V1.t
+      ; next_hop_choices             : Host_and_port.V1.t list
+      ; mutable retry_intervals      : Retry_interval.V2.t list
+      ; mutable remaining_recipients : Email_address.V1.t list
+      ; mutable failed_recipients    : Email_address.V1.t list
+      ; mutable relay_attempts       : (Time.V1.t * Error.V1.t) list
+      ; mutable status               : Status.V1.t
+      ; mutable envelope_info        : Smtp_envelope.Info.V2.t
+      } [@@deriving sexp, bin_io]
+
+    let of_v2 (v2 : V2.t) =
+      { spool_dir            = v2.spool_dir
+      ; id                   = v2.id
+      ; flows                = v2.flows
+      ; parent_id            = v2.parent_id
+      ; spool_date           = v2.spool_date
+      ; next_hop_choices     = Core.List.map v2.next_hop_choices ~f:(fun (`Inet i) -> i)
+      ; retry_intervals      = v2.retry_intervals
+      ; remaining_recipients = v2.remaining_recipients
+      ; failed_recipients    = v2.failed_recipients
+      ; relay_attempts       = v2.relay_attempts
+      ; status               = v2.status
+      ; envelope_info        = v2.envelope_info
+      }
+    ;;
+
+    let of_v1 v1 = of_v2 (V2.of_v1 v1)
   end
 end
 
@@ -215,13 +250,13 @@ end
 
 (* A value of type t should only be modified via [On_disk_spool].  This guarantees
    that all changes are properly flushed to disk. *)
-type t = Stable.V2.t =
+type t = Stable.V3.t =
   { spool_dir                    : string
   ; id                           : Id.t
   ; flows                        : Mail_log.Flows.t
   ; parent_id                    : Smtp_envelope.Id.t
   ; spool_date                   : Time.t
-  ; next_hop_choices             : Smtp_socket_address.t list
+  ; next_hop_choices             : Host_and_port.t list
   ; mutable retry_intervals      : Smtp_envelope.Retry_interval.t list
   ; mutable remaining_recipients : Email_address.Stable.V1.t list
   ; mutable failed_recipients    : Email_address.Stable.V1.t list
@@ -295,18 +330,20 @@ let of_envelope_batch envelope_batch
 module On_disk = struct
   module Metadata = struct
     module T = struct
-      include Stable.V2
+      include Stable.V3
       let t_of_sexp sexp =
         try t_of_sexp sexp
+        with error_from_v3 ->
+        try (Stable.V2.t_of_sexp sexp |> Stable.V3.of_v2)
         with error_from_v2 ->
-        try (Stable.V1.t_of_sexp sexp |> Stable.V2.of_v1)
-        with error_from_v1 -> begin
-            raise_s
-              [%message "[On_disk.Metadata.t_of_sexp]"
-                          (error_from_v2 : exn)
-                          (error_from_v1 : exn)
-              ]
-          end
+        try (Stable.V1.t_of_sexp sexp |> Stable.V3.of_v1)
+        with error_from_v1 ->
+          raise_s
+            [%message "[On_disk.Metadata.t_of_sexp]"
+                        (error_from_v3 : exn)
+                        (error_from_v2 : exn)
+                        (error_from_v1 : exn)
+            ]
     end
     include T
     include Sexpable.To_stringable(T)

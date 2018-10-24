@@ -22,31 +22,19 @@ module Address = struct
   let param dest =
     let open Command.Let_syntax in
     [%map_open
-      let inet =
-        flag "-inet" no_arg
-          ~doc:" Intepret the address as a HOST[:PORT]"
-      and unix =
-        flag "-unix" no_arg
-          ~doc:" Intepret the address as a FILE"
-      and dest = dest
-      in
-      if inet && unix then
-        failwithf "can't sepecify both -inet and -unix" ()
-      else if unix then `Unix dest
-      else if inet then `Inet (Host_and_port.of_string ~port:25 dest)
-      else if String.mem dest '/' then `Unix dest
-      else `Inet (Host_and_port.of_string ~port:25 dest)
+      let dest = dest in
+      (Host_and_port.of_string ~port:25 dest)
     ]
 
   let param_anon =
     param
-      Command.Param.(anon ("HOST[:PORT]|FILE" %: string))
+      Command.Param.(anon ("HOST[:PORT]" %: string))
 
   let param_server =
     param
       Command.Param.(
         flag "-server" (required string)
-          ~doc:"HOST[:PORT]|FILE  Address of SMTP server to connect to")
+          ~doc:"HOST[:PORT]  Address of SMTP server to connect to")
 end
 
 module Smtp_client_config = struct

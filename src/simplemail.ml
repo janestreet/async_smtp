@@ -6,7 +6,7 @@ module Envelope_status = Client.Envelope_status
 
 include (Email.Simple : module type of Email.Simple with module Expert := Email.Simple.Expert)
 
-let default_server = `Inet (Host_and_port.create ~host:"localhost" ~port:25)
+let default_server = (Host_and_port.create ~host:"localhost" ~port:25)
 
 let client_log = Lazy.map Async.Log.Global.log ~f:(fun log ->
   Mail_log.adjust_log_levels ~remap_info_to:`Debug log)
@@ -61,7 +61,6 @@ let send'
       content in
   let recipients = to_ @ cc @ bcc in
   let sender = `Email (Option.value ~default:from bounce_to) in
-  let server = Option.map server ~f:(fun hp -> `Inet hp) in
   Expert.send' ?log ?credentials ?server ~sender ?sender_args ~recipients email
 
 let send

@@ -167,7 +167,7 @@ let send ~config ~client_config envelope =
       Deferred.Or_error.try_with_join (fun () ->
         Smtp_client.Tcp.with_
           ~log:(Lazy.force Log.Global.log)
-          (`Inet (Host_and_port.create ~host ~port))
+          ((Host_and_port.create ~host ~port))
           ~config:client_config
           ~f:(fun client ->
             Smtp_client.send_envelope client ~log envelope
