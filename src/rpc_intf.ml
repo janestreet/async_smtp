@@ -80,8 +80,8 @@ let recover_info = binable (module Spool.Stable.Recover_info.V1)
 let gc_stat      = binable (module Gc.Stat)
 let pid          = binable (module Pid.Stable.V1)
 
-let cache_status = binable (module Client_cache.Status.Unstable)
-let cache_config = binable (module Client_cache.Config.Unstable)
+let cache_status = binable (module Client_cache.Status.Stable.V1)
+let cache_config = binable (module Client_cache.Config.Stable.V1)
 
 module Monitor = struct
   (* Including a sequence number. We broadcast a heartbeat message (with error =

@@ -1,19 +1,20 @@
+module Stable = struct
+  open Core.Core_stable
+  module Address_and_route = struct
+    module V1 = struct
+      type t =
+        { address : Host_and_port.V1.t
+        ; route   : string option
+        } [@@deriving sexp, bin_io]
+    end
+  end
+end
+
 open Core
 open Async
 
 module Log    = Mail_log
-module Config = struct
-  include Resource_cache.Address_config
-
-  module Unstable = struct
-    type nonrec t = t =
-      { max_open_connections          : int
-      ; cleanup_idle_connection_after : Time_ns.Span.t
-      ; max_connections_per_address   : int
-      ; max_connection_reuse          : int
-      } [@@deriving bin_io]
-  end
-end
+module Config = Resource_cache.Address_config
 
 module Tcp_options = struct
   type t =
@@ -36,8 +37,9 @@ module Tcp_options = struct
 end
 
 module Address_and_route = struct
+  module Stable = Stable.Address_and_route
   module T = struct
-    type t =
+    type t = Stable.V1.t =
       { address : Host_and_port.t
       ; route   : string option
       } [@@deriving compare, hash, sexp_of, fields]
@@ -45,13 +47,6 @@ module Address_and_route = struct
   include T
   include Comparable.Make_plain (T)
   include Hashable.Make_plain (T)
-
-  module Unstable = struct
-    type nonrec t = t =
-      { address : Host_and_port.t
-      ; route   : string option
-      } [@@deriving bin_io]
-  end
 end
 
 module Resource = struct
@@ -146,23 +141,8 @@ end
 module Status = struct
   include Client_cache.Status
 
-  module Unstable = struct
-    type resource = Resource.t =
-      { state : [ `Busy|`Closing|`Idle ]
-      ; since : Time_ns.Span.t
-      } [@@deriving bin_io]
-
-    type resource_list = Resource_list.t =
-      { key               : Address_and_route.Unstable.t
-      ; resources         : resource list
-      ; queue_length      : int
-      ; max_time_on_queue : Time_ns.Span.Stable.V2.t option
-      } [@@deriving bin_io]
-
-    type t = Client_cache.Status.t =
-      { resource_lists    : resource_list sexp_list
-      ; num_jobs_in_cache : int;
-      } [@@deriving bin_io]
+  module Stable = struct
+    module V1 = Make_stable.V1(Address_and_route.Stable.V1)
   end
 end
 

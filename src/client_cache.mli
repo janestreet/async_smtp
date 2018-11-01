@@ -1,13 +1,7 @@
 open! Core
 open Async
 
-module Config : sig
-  include module type of (struct include Resource_cache.Address_config end)
-
-  module Unstable : sig
-    type nonrec t = t [@@deriving bin_io]
-  end
-end
+module Config = Resource_cache.Address_config
 
 module Address_and_route : sig
   type t =
@@ -17,13 +11,21 @@ module Address_and_route : sig
 
   include Comparable.S_plain with type t:=t
   include Hashable.S_plain with type t:=t
+
+  module Stable  : sig
+    module V1 : sig
+      type nonrec t = t [@@deriving sexp, bin_io]
+    end
+  end
 end
 
 module Status : sig
   include Resource_cache.Status.S with type Key.t = Address_and_route.t
 
-  module Unstable : sig
-    type nonrec t = t [@@deriving bin_io]
+  module Stable  : sig
+    module V1 : sig
+      type nonrec t = t [@@deriving sexp, bin_io]
+    end
   end
 end
 
