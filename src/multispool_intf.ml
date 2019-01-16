@@ -1,6 +1,7 @@
 open Core
 open Async
 
+
 (** {0 Multispool}
 
     Multispool allows multiple, separate processes to cooperate via a filesystem-based
@@ -50,6 +51,7 @@ module Name_generator = struct
     end
 
     type t
+
     val next : t -> attempt:int -> Unique_name.t
   end
 end
@@ -70,15 +72,8 @@ module Spoolable = struct
     module Data : sig
       type t
 
-      val load
-        :  string
-        -> t Deferred.Or_error.t
-
-      val save
-        :  ?temp_file:string
-        -> t
-        -> string
-        -> unit Deferred.Or_error.t
+      val load : string -> t Deferred.Or_error.t
+      val save : ?temp_file:string -> t -> string -> unit Deferred.Or_error.t
     end
 
     (** [Queue.t] is an enumerable type that represents the available queues and the
@@ -113,10 +108,7 @@ module type S = sig
 
       Note that, even if [~create_if_missing:()] is specified, this function will still
       fail if the supplied directory is non-empty and not already a spool. *)
-  val load
-    :  ?create_if_missing:unit
-    -> string
-    -> t Deferred.Or_error.t
+  val load : ?create_if_missing:unit -> string -> t Deferred.Or_error.t
 
   (** Open a [Multispool.t] with no spool directory validation. *)
   val load_unsafe : string -> t
@@ -131,19 +123,9 @@ module type S = sig
     type t
 
     val path : t -> string
-
-    val load
-      :  t
-      -> Spoolable.Data.t Deferred.Or_error.t
-
-    val save
-      :  t
-      -> contents:Spoolable.Data.t
-      -> unit Deferred.Or_error.t
-
-    val stat
-      :  t
-      -> Unix.Stats.t Deferred.Or_error.t
+    val load : t -> Spoolable.Data.t Deferred.Or_error.t
+    val save : t -> contents:Spoolable.Data.t -> unit Deferred.Or_error.t
+    val stat : t -> Unix.Stats.t Deferred.Or_error.t
   end
 
   (** An [Entry] is associated with a particular queue *)
@@ -151,10 +133,9 @@ module type S = sig
     type t [@@deriving sexp_of]
 
     val stat : t -> Unix.Stats.t Deferred.Or_error.t
-
     val spool : t -> spool
     val queue : t -> Spoolable.Queue.t
-    val name  : t -> string
+    val name : t -> string
 
     (** create an [Entry.t] from a file name on disk. There is no validation done to
         ensure that the corresponding entry exists in the spool. The validation is
@@ -200,8 +181,7 @@ module type S = sig
     -> Spoolable.Metadata.t
     -> Spoolable.Data.t
     -> [ `Reserve of Spoolable.Name_generator.t
-       | `Use of Spoolable.Name_generator.Unique_name.t
-       ]
+       | `Use of Spoolable.Name_generator.Unique_name.t ]
     -> Entry.t Deferred.Or_error.t
 
   (** Do something with the contents of an entry within [f].  Use [with_entry] if you
@@ -209,8 +189,10 @@ module type S = sig
       grabbed by another process (or otherwise disappears).  See [checkout] for a
       lower-level interface. *)
   val with_entry
-    :  f:(Spoolable.Metadata.t -> Data_file.t ->
-          ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a) Deferred.t)
+    :  f:(Spoolable.Metadata.t
+          -> Data_file.t
+          -> ([`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] * 'a)
+               Deferred.t)
     -> Entry.t
     -> 'a Deferred.Or_error.t
 
@@ -218,35 +200,36 @@ module type S = sig
       race to grab an [Entry.t] and want straightforward handling.  See [checkout'] for a
       lower-level interface.*)
   val with_entry'
-    :  f:(Spoolable.Metadata.t -> Data_file.t ->
-          ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a) Deferred.t)
+    :  f:(Spoolable.Metadata.t
+          -> Data_file.t
+          -> ([`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] * 'a)
+               Deferred.t)
     -> Entry.t
-    -> [ `Ok of 'a | `Not_found ] Deferred.Or_error.t
+    -> [`Ok of 'a | `Not_found] Deferred.Or_error.t
 
   (** Interface for iteration and waiting on queue activity.  Multiple processes will not
       interfere with one another. *)
   module Queue_reader : sig
     type t
 
-    val create
-      :  spool
-      -> Spoolable.Queue.t
-      -> t Deferred.Or_error.t
+    val create : spool -> Spoolable.Queue.t -> t Deferred.Or_error.t
 
     (** Iterate over entries in a queue and call [f] on each, and wait for a new entry if
         the list is exhausted. *)
     val iter
       :  ?stop:unit Deferred.t
-      -> f:(Spoolable.Metadata.t -> Data_file.t ->
-            [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
+      -> f:(Spoolable.Metadata.t
+            -> Data_file.t
+            -> [`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
 
     (** Iterate over entries in a queue and call [f] on each, if any are available.  Do
         not wait. *)
     val iter_available
-      :  f:(Spoolable.Metadata.t -> Data_file.t ->
-            [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
+      :  f:(Spoolable.Metadata.t
+            -> Data_file.t
+            -> [`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
   end
@@ -283,7 +266,7 @@ module type S = sig
         race to grab an [Entry.t].  See [with_entry'] for a higher-level interface. *)
     val checkout'
       :  Entry.t
-      -> [ `Not_found | `Ok of Checked_out_entry.t ] Deferred.Or_error.t
+      -> [`Not_found | `Ok of Checked_out_entry.t] Deferred.Or_error.t
 
     (** Get a hold of all currently checked out entries in the given [queue].
         This operation breaks the invariant that each [t] has a single owner. It should
@@ -299,14 +282,14 @@ module type S = sig
       val dequeue
         :  ?stop:unit Deferred.t
         -> Queue_reader.t
-        -> [ `Stopped | `Checked_out of (Checked_out_entry.t * Queue_reader.t)]
+        -> [`Stopped | `Checked_out of Checked_out_entry.t * Queue_reader.t]
              Deferred.Or_error.t
 
       (** Dequeue the next entry that that is available, if any.  Do not wait. *)
       val dequeue_available
         :  Queue_reader.t
-        -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ]
-            * Queue_reader.t) Deferred.Or_error.t
+        -> ([`Nothing_available | `Checked_out of Checked_out_entry.t] * Queue_reader.t)
+             Deferred.Or_error.t
     end
   end
 end
@@ -321,8 +304,9 @@ module Monitor = struct
     module File_with_mtime : sig
       type t =
         { filename : string
-        ; mtime    : Time.t
-        } [@@deriving sexp_of]
+        ; mtime : Time.t
+        }
+      [@@deriving sexp_of]
     end
 
     module Dir : sig
@@ -338,8 +322,8 @@ module Monitor = struct
 
     module Problem : sig
       type t =
-        | Too_old    of File_with_mtime.t * Dir.t
-        | Orphaned   of File_with_mtime.t * Dir.t
+        | Too_old of File_with_mtime.t * Dir.t
+        | Orphaned of File_with_mtime.t * Dir.t
         | Duplicated of File_with_mtime.t * Dir.t list
       [@@deriving sexp_of, compare]
 
@@ -349,7 +333,7 @@ module Monitor = struct
     module Event : sig
       type t =
         | Start of Time.t * Problem.t
-        | End   of Time.t * Problem.t
+        | End of Time.t * Problem.t
       [@@deriving sexp_of, compare]
 
       include Comparable.S_plain with type t := t
@@ -357,10 +341,11 @@ module Monitor = struct
 
     module Limits : sig
       type t =
-        { max_checked_out_age : Time.Span.t        (* default: 10 minutes *)
-        ; max_tmp_file_age    : Time.Span.t        (* default: 10 minutes *)
-        ; max_queue_ages      : (Spoolable.Queue.t * Time.Span.t) list
-        } [@@deriving sexp]
+        { max_checked_out_age : Time.Span.t (* default: 10 minutes *)
+        ; max_tmp_file_age : Time.Span.t (* default: 10 minutes *)
+        ; max_queue_ages : (Spoolable.Queue.t * Time.Span.t) list
+        }
+      [@@deriving sexp]
 
       val create
         :  ?max_checked_out_age:Time.Span.t
@@ -373,14 +358,11 @@ module Monitor = struct
     module Spec : sig
       type t =
         { spool_dir : string
-        ; limits    : Limits.t
-        } [@@deriving sexp]
+        ; limits : Limits.t
+        }
+      [@@deriving sexp]
 
-      val create
-        :  spool_dir:string
-        -> limits:Limits.t
-        -> t
-
+      val create : spool_dir:string -> limits:Limits.t -> t
       val param : t Command.Param.t
     end
 
@@ -391,19 +373,15 @@ module Monitor = struct
 
     module Daemon : sig
       type monitor = t
+
       type t =
-        { check_every        : Time.Span.t         (* default: 15 seconds *)
-        ; alert_after_cycles : int                 (* default: 2 cycles   *)
+        { check_every : Time.Span.t (* default: 15 seconds *)
+        ; alert_after_cycles : int
+        (* default: 2 cycles   *)
         }
 
-      val create
-        :  ?check_every:Time.Span.t
-        -> ?alert_after_cycles:int
-        -> unit
-        -> t
-
+      val create : ?check_every:Time.Span.t -> ?alert_after_cycles:int -> unit -> t
       val param : t Command.Param.t
-
       val start : t -> monitor:monitor -> f:(Event.t -> unit Deferred.t) -> unit
     end
   end

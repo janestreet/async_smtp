@@ -12,26 +12,22 @@ open! Core
 
    MAIL FROM:<>
 *)
+
 type t =
   [ `Null
-  | `Email of Email_address.t
-  ] [@@deriving compare, hash, sexp_of]
+  | `Email of Email_address.t ]
+[@@deriving compare, hash, sexp_of]
 
-val of_string
-  :  ?default_domain:string
-  -> string
-  -> t Or_error.t
+val of_string : ?default_domain:string -> string -> t Or_error.t
 
 val of_string_with_arguments
   :  ?default_domain:string
-  -> allowed_extensions : Smtp_extension.t list  (* default: [] *)
+  -> allowed_extensions:Smtp_extension.t list (* default: [] *)
   -> string
   -> (t * Sender_argument.t list) Or_error.t
 
 val to_string : t -> string
-
 val to_string_with_arguments : t * Sender_argument.t list -> string
-
 val map : t -> f:(Email_address.t -> Email_address.t) -> t
 
 include Comparable.S_plain with type t := t
@@ -39,6 +35,7 @@ include Hashable.S_plain with type t := t
 
 module Caseless : sig
   type nonrec t = t
+
   include Comparable.S_plain with type t := t
   include Hashable.S_plain with type t := t
 end

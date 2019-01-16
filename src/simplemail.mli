@@ -1,9 +1,7 @@
 open! Core
 open! Async
 open Async_smtp_types
-
 module Envelope_status = Client.Envelope_status
-
 
 module Expert : sig
   val send'
@@ -26,10 +24,10 @@ module Expert : sig
     -> Email.t
     -> unit Deferred.Or_error.t
 
-  include (module type of Email.Simple.Expert)
+  include module type of Email.Simple.Expert
 end
 
-include (module type of Email.Simple with module Expert := Email.Simple.Expert)
+include module type of Email.Simple with module Expert := Email.Simple.Expert
 
 val send'
   :  ?log:Mail_log.t
@@ -41,7 +39,7 @@ val send'
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
   -> ?reply_to:Email_address.t list
-  -> ?bounce_to:Email_address.t  (* defaults to [from] *)
+  -> ?bounce_to:Email_address.t (* defaults to [from] *)
   -> subject:string
   -> ?id:string
   -> ?in_reply_to:string

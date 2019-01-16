@@ -25,13 +25,12 @@ type t = private
       | `Exceeded_storage_allocation_552
       | `Transaction_failed_554
       | `From_to_parameters_bad_555
-      | `Other of int
-      ]
+      | `Other of int ]
   ; raw_message : string list
-  } [@@deriving bin_io, sexp]
+  }
+[@@deriving bin_io, sexp]
 
 val code : t -> int
-
 val service_ready_220 : string -> t
 val closing_connection_221 : t
 val authentication_successful_235 : t
@@ -54,14 +53,16 @@ val mailbox_unavailable_550 : string -> t
 val exceeded_storage_allocation_552 : t
 val transaction_failed_554 : string -> t
 val from_to_parameters_bad_555 : string -> t
-
 val is_ok : t -> bool
 val is_permanent_error : t -> bool
+val decorate : t -> additional_lines:string list -> t
 
 (* No roundtrip. *)
-val to_string    : t -> string
-val of_string    : string -> t
+
+val to_string : t -> string
+val of_string : string -> t
 val of_bigstring : Bigstring.t -> t
 
 type partial
+
 val parse : ?partial:partial -> string -> [`Done of t | `Partial of partial]

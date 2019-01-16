@@ -8,23 +8,18 @@ let envelope_batch_and_envelope email_str =
   let envelope =
     Smtp_envelope.create
       ~sender:`Null
-      ~recipients:[Email_address.of_string "foo@bar.com" |> ok_exn]
+      ~recipients:[ Email_address.of_string "foo@bar.com" |> ok_exn ]
       ~email:(Email.of_string email_str)
       ()
   in
   let envelope_routed =
-    Smtp_envelope.Routed.create
-      ~envelope
-      ~next_hop_choices:[]
-      ~retry_intervals:[]
+    Smtp_envelope.Routed.create ~envelope ~next_hop_choices:[] ~retry_intervals:[]
   in
   Smtp_envelope.Routed.Batch.single_envelope envelope_routed, envelope
 ;;
 
 let get_entry spool queue =
-  Message.On_disk_spool.list spool queue
-  >>| ok_exn
-  >>| List.hd_exn
+  Message.On_disk_spool.list spool queue >>| ok_exn >>| List.hd_exn
 ;;
 
 let escape str =
@@ -39,24 +34,16 @@ let escape str =
 let print_on_disk_contents data_file =
   let path = Message.On_disk_spool.Data_file.path data_file in
   let%bind contents = Reader.file_contents path in
-  print_endline
-    "On disk contents:\n\
-     -----------------";
+  print_endline "On disk contents:\n-----------------";
   printf "%s" (escape contents);
   Deferred.unit
 ;;
 
 let print_loaded_contents data_file =
   let%bind email =
-    Message.On_disk_spool.Data_file.load data_file
-    >>| ok_exn
-    >>| Message.Data.to_email
+    Message.On_disk_spool.Data_file.load data_file >>| ok_exn >>| Message.Data.to_email
   in
-  print_endline
-    "\n\
-     \n\
-     Loaded contents:\n\
-     ----------------";
+  print_endline "\n\nLoaded contents:\n----------------";
   printf "%s" (escape (Email.to_string email));
   Deferred.unit
 ;;
@@ -65,8 +52,9 @@ let test email_str =
   let envelope_batch, original_msg = envelope_batch_and_envelope email_str in
   with_temp_dir (fun tmpdir ->
     let%bind spool = Message_spool.create (tmpdir ^/ "spool") >>| ok_exn in
-    let%bind (_ : Message.t list) =
-      Message_spool.enqueue spool
+    let%bind (_ : (Message.t * Smtp_envelope.Routed.t) list) =
+      Message_spool.enqueue
+        spool
         ~log:(Lazy.force Log.Global.log)
         ~initial_status:`Frozen
         envelope_batch
@@ -82,15 +70,9 @@ let test email_str =
 ;;
 
 let%expect_test "Dot encoded headers and body" =
-  let%bind () =
-    test
-      "A: B\n\
-       .C: D\n\
-       \n\
-       Line1\n\
-       .Line2"
-  in
-  [%expect {|
+  let%bind () = test "A: B\n.C: D\n\nLine1\n.Line2" in
+  [%expect
+    {|
     On disk contents:
     -----------------
     A: B\r\n
@@ -109,13 +91,9 @@ let%expect_test "Dot encoded headers and body" =
 ;;
 
 let%expect_test "Last body line ends in a new line" =
-  let%bind () =
-    test
-      "A: B\n\
-       \n\
-       Line1\n"
-  in
-  [%expect {|
+  let%bind () = test "A: B\n\nLine1\n" in
+  [%expect
+    {|
     On disk contents:
     -----------------
     A: B\r\n
@@ -131,11 +109,9 @@ let%expect_test "Last body line ends in a new line" =
 ;;
 
 let%expect_test "Empty body" =
-  let%bind () =
-    test
-      "A: B\n"
-  in
-  [%expect {|
+  let%bind () = test "A: B\n" in
+  [%expect
+    {|
     On disk contents:
     -----------------
     A: B\r\n
@@ -147,11 +123,9 @@ let%expect_test "Empty body" =
 ;;
 
 let%expect_test "No body" =
-  let%bind () =
-    test
-      "A: B"
-  in
-  [%expect {|
+  let%bind () = test "A: B" in
+  [%expect
+    {|
     On disk contents:
     -----------------
     A: B\r\n

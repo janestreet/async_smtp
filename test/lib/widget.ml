@@ -10,27 +10,24 @@ module Metadata = struct
   end
 
   include T
-  include Sexpable.To_stringable(T)
+  include Sexpable.To_stringable (T)
 end
 
 module Data = struct
   type t =
     { serial_number : int
-    ; customer      : string
-    } [@@deriving sexp, fields]
+    ; customer : string
+    }
+  [@@deriving sexp, fields]
 
-  let load path =
-    Reader.load_sexp path t_of_sexp
-  ;;
+  let load path = Reader.load_sexp path t_of_sexp
 
   let save ?temp_file t path =
     Deferred.Or_error.try_with (fun () ->
       Writer.save_sexp ?temp_file ~hum:true path (sexp_of_t t))
   ;;
 
-  let to_string t =
-    Sexp.to_string_hum (sexp_of_t t)
-  ;;
+  let to_string t = Sexp.to_string_hum (sexp_of_t t)
 end
 
 module Queue = struct
@@ -48,5 +45,7 @@ module Queue = struct
 end
 
 module Throttle = struct
-  let enqueue f = f ()  (* No throttle *)
+  let enqueue f = f ()
+
+  (* No throttle *)
 end

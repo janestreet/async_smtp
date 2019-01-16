@@ -8,8 +8,8 @@ module Base : sig
     | `recipient of Re2.t
     | `subject of Re2.t
     | `rfc822_id of Re2.t
-    | `flows of Smtp_mail_log.Flows.t
-    ] [@@deriving sexp]
+    | `flows of Smtp_mail_log.Flows.t ]
+  [@@deriving sexp]
 
   val regex : t -> Re2.t
 end
@@ -28,7 +28,5 @@ type t = Base.t Blang.t [@@deriving sexp]
 val permissive_cnf : t -> Base.t list list
 
 val readme : string
-
 val arg : t Command.Arg_type.t
-
 val matches_message : t -> Smtp_mail_log.Message.t -> bool

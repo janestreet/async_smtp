@@ -23,10 +23,12 @@ val compare : t -> t -> int
 
 (** build up a [t] *)
 val create : Smtp_mail_log.Flows.Id.t -> t
+
 val update : t -> Smtp_mail_log.Message.t -> unit
 
 (** get information from a [t] *)
 val inbound_envelopes : t -> Inbound_envelope.t list
+
 val session_connect : t -> Time.t option
 val raw_messages : t -> Smtp_mail_log.Message.t list
 

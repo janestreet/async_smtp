@@ -9,22 +9,36 @@ module T = struct
   ;;
 
   let next_hop_choices = Routed.next_hop_choices
-  let retry_intervals  = Routed.retry_intervals
-  let envelope         = Routed.envelope
-  let email t          = Envelope.email (envelope t)
-  let info t           = Envelope.info t.Routed.envelope
-  let headers t        = Email.headers (email t)
+  let retry_intervals = Routed.retry_intervals
+  let envelope = Routed.envelope
+  let email t = Envelope.email (envelope t)
+  let info t = Envelope.info t.Routed.envelope
+  let headers t = Email.headers (email t)
 
-  let set ?sender ?sender_args ?recipients ?rejected_recipients ?route
-        ?next_hop_choices ?retry_intervals ?email t () =
-    { Routed.
-      envelope =
-        Envelope.set (envelope t) ?sender ?sender_args ?recipients
-          ?rejected_recipients ?route ?email ()
-    ; retry_intervals =
-        Option.value retry_intervals ~default:t.Routed.retry_intervals
-    ; next_hop_choices =
-        Option.value next_hop_choices ~default:t.Routed.next_hop_choices
+  let set
+        ?sender
+        ?sender_args
+        ?recipients
+        ?rejected_recipients
+        ?route
+        ?next_hop_choices
+        ?retry_intervals
+        ?email
+        t
+        ()
+    =
+    { Routed.envelope =
+        Envelope.set
+          (envelope t)
+          ?sender
+          ?sender_args
+          ?recipients
+          ?rejected_recipients
+          ?route
+          ?email
+          ()
+    ; retry_intervals = Option.value retry_intervals ~default:t.Routed.retry_intervals
+    ; next_hop_choices = Option.value next_hop_choices ~default:t.Routed.next_hop_choices
     }
   ;;
 
@@ -35,9 +49,7 @@ module T = struct
 
   let of_bodiless bodiless body =
     let envelope =
-      Envelope.of_bodiless
-        (Envelope_bodiless_routed.envelope_bodiless bodiless)
-        body
+      Envelope.of_bodiless (Envelope_bodiless_routed.envelope_bodiless bodiless) body
     in
     create
       ~envelope
@@ -63,7 +75,7 @@ module T = struct
 end
 
 include T
-include Envelope_container.Make_with_headers(T)
-include Envelope_container.Make_with_info(T)
-include Comparable.Make_plain(T)
-include Hashable.Make_plain(T)
+include Envelope_container.Make_with_headers (T)
+include Envelope_container.Make_with_info (T)
+include Comparable.Make_plain (T)
+include Hashable.Make_plain (T)

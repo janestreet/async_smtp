@@ -1,71 +1,62 @@
 open Core
-open Async
+open! Async
 open Async_ssl.Std
 
 module Tls_options = struct
   type t =
-    { version:Ssl.Version.t option
-    ; options:Ssl.Opt.t list option
-    ; name:string option
-    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
-    ; crt_file:string
-    ; key_file:string
-    ; ca_file:string option
+    { version : Ssl.Version.t option
+    ; options : Ssl.Opt.t list option
+    ; name : string option
+    ; allowed_ciphers : [`Secure | `Openssl_default | `Only of string list]
+    ; crt_file : string
+    ; key_file : string
+    ; ca_file : string option
     ; ca_path : string option
-    } [@@deriving fields, sexp]
+    }
+  [@@deriving fields, sexp]
 end
 
 module Tcp_options = struct
   type t =
     { max_accepts_per_batch : int sexp_option
-    ; backlog               : int sexp_option
-    } [@@deriving fields, sexp]
+    ; backlog : int sexp_option
+    }
+  [@@deriving fields, sexp]
 end
 
 module Where_to_listen = struct
-  type t = [ `Port of int ] [@@deriving sexp]
+  type t = [`Port of int] [@@deriving sexp]
 end
 
 module Timeouts = struct
   type t =
     { receive : Time.Span.t
     ; receive_after_close : Time.Span.t
-    } [@@deriving sexp]
+    }
+  [@@deriving sexp]
 
   let default =
     (* Recommendation from RFC 5321 section 4.5.3.2.7 *)
-    { receive = Time.Span.of_min 5.
-    ; receive_after_close = Time.Span.of_sec 10.
-    }
+    { receive = Time.Span.of_min 5.; receive_after_close = Time.Span.of_sec 10. }
+  ;;
 end
 
 type t =
-  { spool_dir                            : string
-  ; tmp_dir                              : string option
-  ; where_to_listen                      : Where_to_listen.t list
-  ; max_concurrent_send_jobs             : int
+  { where_to_listen : Where_to_listen.t list
   ; max_concurrent_receive_jobs_per_port : int
-  ; timeouts                             : Timeouts.t
-  ; rpc_port                             : int
-  ; malformed_emails                     : [ `Reject | `Wrap ]
-  ; max_message_size                     : Byte_units.t
-  ; tls_options                          : Tls_options.t sexp_option
-  ; tcp_options                          : Tcp_options.t sexp_option
-  ; client                               : Client_config.t
-  } [@@deriving fields, sexp]
+  ; timeouts : Timeouts.t
+  ; rpc_port : int
+  ; malformed_emails : [`Reject | `Wrap]
+  ; max_message_size : Byte_units.t
+  ; tls_options : Tls_options.t sexp_option
+  ; tcp_options : Tcp_options.t sexp_option
+  }
+[@@deriving fields, sexp]
 
-let load_exn file =
-  Sexp_macro.load_sexp file t_of_sexp
-  >>| Or_error.ok_exn
-;;
-
-let tmp_dir t = Option.value ~default:(spool_dir t ^/ "temp") (tmp_dir t)
+let load_exn file = Sexp_macro.load_sexp file t_of_sexp >>| Or_error.ok_exn
 
 let default =
-  { spool_dir = "."
-  ; tmp_dir = None
-  ; where_to_listen = []
-  ; max_concurrent_send_jobs = 0
+  { where_to_listen = []
   ; max_concurrent_receive_jobs_per_port = 0
   ; timeouts = Timeouts.default
   ; rpc_port = 0
@@ -73,5 +64,5 @@ let default =
   ; max_message_size = Byte_units.create `Megabytes 24.
   ; tls_options = None
   ; tcp_options = None
-  ; client = Client_config.default
   }
+;;

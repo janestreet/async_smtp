@@ -9,7 +9,9 @@ let main ~tmp_dir ~iterations ~msg_size =
   let%bind spool_dir = Message_spool.create tmp_dir >>| ok_exn in
   let log = Lazy.force Log.Global.log in
   let email =
-    Email.Simple.create ~to_:[] ~subject:""
+    Email.Simple.create
+      ~to_:[]
+      ~subject:""
       (Email.Simple.Content.text (String.init msg_size ~f:(fun _ -> '0')))
   in
   let envelope = Smtp_envelope.create ~sender:`Null ~recipients:[] ~email () in
@@ -33,13 +35,18 @@ let main ~tmp_dir ~iterations ~msg_size =
 
 let command =
   let open Command.Let_syntax in
-  Command.async ~summary:""
+  Command.async
+    ~summary:""
     [%map_open
       let iterations =
-        flag "-iterations" (optional_with_default 100 int)
+        flag
+          "-iterations"
+          (optional_with_default 100 int)
           ~doc:"NUM number of emails to send (default 100)"
       and msg_size =
-        flag "-msg-size" (optional_with_default 1_048_576 int)
+        flag
+          "-msg-size"
+          (optional_with_default 1_048_576 int)
           ~doc:"SIZE message body size in bytes (default 1_048_576)"
       in
       fun () ->
@@ -52,7 +59,9 @@ let command =
         let () = ok_exn result in
         let gc_stat' = Gc.stat () in
         let get f = f gc_stat' -. f gc_stat in
-        print_s [%message "" ~minor_words:(get Gc.Stat.minor_words : float)
-                            ~major_words:(get Gc.Stat.major_words : float)]
-    ]
+        print_s
+          [%message
+            ""
+              ~minor_words:(get Gc.Stat.minor_words : float)
+              ~major_words:(get Gc.Stat.major_words : float)]]
 ;;

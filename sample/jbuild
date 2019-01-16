@@ -1,9 +1,0 @@
-(executables
- ((names (run_async_smtp sendmail inline_image))
-  (libraries (async
-              core
-              async_smtp))
-  (preprocess (pps (ppx_jane ppxlib.runner)))))
-
-
-(jbuild_version 1)

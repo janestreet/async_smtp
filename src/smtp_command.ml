@@ -15,26 +15,36 @@ type t =
 [@@deriving variants, sexp]
 
 let of_string = function
-  | str when String.Caseless.is_prefix str ~prefix:"HELO " ->
+  | str
+    when String.Caseless.is_prefix str ~prefix:"HELO " ->
     Hello (String.drop_prefix str 5 |> String.lstrip)
-  | str when String.Caseless.is_prefix str ~prefix:"EHLO " ->
+  | str
+    when String.Caseless.is_prefix str ~prefix:"EHLO " ->
     Extended_hello (String.drop_prefix str 5 |> String.lstrip)
-  | str when String.Caseless.is_prefix str ~prefix:"MAIL FROM:" ->
+  | str
+    when String.Caseless.is_prefix str ~prefix:"MAIL FROM:" ->
     Sender (String.drop_prefix str 10 |> String.lstrip)
-  | str when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
+  | str
+    when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
     Recipient (String.drop_prefix str 8 |> String.lstrip)
-  | str when String.Caseless.is_prefix str ~prefix:"AUTH " -> begin
-      let str = String.chop_prefix_exn str ~prefix:"AUTH " in
-      match String.lsplit2 str ~on:' ' with
-      | None -> Auth (str, None)
-      | Some (method_,first_response) -> Auth (method_, Some first_response)
-    end
-  | str when String.Caseless.equal str "DATA"     -> Data
-  | str when String.Caseless.equal str "RSET"     -> Reset
-  | str when String.Caseless.equal str "QUIT"     -> Quit
-  | str when String.Caseless.equal str "HELP"     -> Help
-  | str when String.Caseless.equal str "NOOP"     -> Noop
-  | str when String.Caseless.equal str "STARTTLS" -> Start_tls
+  | str
+    when String.Caseless.is_prefix str ~prefix:"AUTH " ->
+    let str = String.chop_prefix_exn str ~prefix:"AUTH " in
+    (match String.lsplit2 str ~on:' ' with
+     | None -> Auth (str, None)
+     | Some (method_, first_response) -> Auth (method_, Some first_response))
+  | str
+    when String.Caseless.equal str "DATA" -> Data
+  | str
+    when String.Caseless.equal str "RSET" -> Reset
+  | str
+    when String.Caseless.equal str "QUIT" -> Quit
+  | str
+    when String.Caseless.equal str "HELP" -> Help
+  | str
+    when String.Caseless.equal str "NOOP" -> Noop
+  | str
+    when String.Caseless.equal str "STARTTLS" -> Start_tls
   | str -> failwithf "Unrecognized command: %s" str ()
 ;;
 
@@ -44,9 +54,9 @@ let to_string = function
   | Sender string -> "MAIL FROM: " ^ string
   | Recipient string -> "RCPT TO: " ^ string
   | Auth (meth, arg) ->
-    "AUTH " ^ meth ^ (Option.value_map arg ~default:"" ~f:(fun arg -> " " ^ arg))
+    "AUTH " ^ meth ^ Option.value_map arg ~default:"" ~f:(fun arg -> " " ^ arg)
   | Data -> "DATA"
-  | Reset-> "RSET"
+  | Reset -> "RSET"
   | Quit -> "QUIT"
   | Help -> "HELP"
   | Noop -> "NOOP"
@@ -55,7 +65,7 @@ let to_string = function
 
 (* Test parsing of commands to server *)
 let%test_unit _ =
-  let check a b = [%test_eq:t] (of_string a) b in
+  let check a b = [%test_eq: t] (of_string a) b in
   Variants.iter
     ~hello:(fun _ ->
       check "HELO hi" (Hello "hi");
@@ -94,37 +104,27 @@ let%test_unit _ =
 
 (* Test to_string and of_string functions for symmetry *)
 let%test_unit _ =
-  let check c = [%test_eq:t] c (of_string (to_string c)) in
+  let check c = [%test_eq: t] c (of_string (to_string c)) in
   Variants.iter
-    ~hello:(fun _ ->
-      check (Hello "Helo World!~"))
-    ~extended_hello:(fun _ ->
-      check (Extended_hello "Helo World!~"))
-    ~help:(fun _ ->
-      check Help)
-    ~sender:(fun _ ->
-      check (Sender "Helo World!~"))
-    ~recipient:(fun _ ->
-      check (Recipient "Helo World!~"))
+    ~hello:(fun _ -> check (Hello "Helo World!~"))
+    ~extended_hello:(fun _ -> check (Extended_hello "Helo World!~"))
+    ~help:(fun _ -> check Help)
+    ~sender:(fun _ -> check (Sender "Helo World!~"))
+    ~recipient:(fun _ -> check (Recipient "Helo World!~"))
     ~auth:(fun _ ->
       check (Auth ("LOGIN", None));
-      check (Auth ("SIMPLE", Some  "foobar")))
-    ~data:(fun _ ->
-      check Data)
-    ~reset:(fun _ ->
-      check Reset)
-    ~quit:(fun _ ->
-      check Quit)
-    ~noop:(fun _ ->
-      check Noop)
-    ~start_tls:(fun _ ->
-      check Start_tls)
+      check (Auth ("SIMPLE", Some "foobar")))
+    ~data:(fun _ -> check Data)
+    ~reset:(fun _ -> check Reset)
+    ~quit:(fun _ -> check Quit)
+    ~noop:(fun _ -> check Noop)
+    ~start_tls:(fun _ -> check Start_tls)
 ;;
 
 (* Mechanical sanity checks *)
 let%test_unit _ =
-  let check_to_str a b = [%test_eq:string] a (to_string b) in
-  let check_of_str a b = [%test_eq:t] a (of_string b) in
+  let check_to_str a b = [%test_eq: string] a (to_string b) in
+  let check_of_str a b = [%test_eq: t] a (of_string b) in
   let check_round a b =
     check_to_str a b;
     check_of_str b a;

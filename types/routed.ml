@@ -1,10 +1,12 @@
 open! Core
 
 type 'a t =
-  { envelope         : 'a
+  { envelope :
+      'a
   ; next_hop_choices : Host_and_port.t list
-  ; retry_intervals  : Retry_interval.t list
-  } [@@deriving sexp_of, fields, compare, hash]
+  ; retry_intervals : Retry_interval.t list
+  }
+[@@deriving sexp_of, fields, compare, hash]
 
 type 'a create =
   envelope:'a

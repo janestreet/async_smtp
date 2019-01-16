@@ -1,3 +1,4 @@
+
 (** Spool directory structure:
 
     Async_smtp uses a spool directory structure heavily inspired by that of Exim (see [1]
@@ -46,9 +47,10 @@
     [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
 *)
 open! Core
+
 open! Async
 open Async_smtp_types
-
+module Config = Spool_config
 module Message_id = Message.Id
 
 type t
@@ -56,44 +58,36 @@ type t
 (** Lock the spool directory and load all the files that are already present there. Note
     that for the purposes of locking, the spool directory assumed to NOT be on an NFS file
     system. *)
-val create
-  :  config:Server_config.t
-  -> log:Mail_log.t
-  -> unit
-  -> t Deferred.Or_error.t
+val create : config:Config.t -> log:Mail_log.t -> unit -> t Deferred.Or_error.t
 
 (** Immediately write the message to disk and queue it for sending. The
-    [Smtp_envelope.Routed.t list] represents the different "sections" of one
+    [Smtp_envelope.Routed.Batch.t list] represents the different "sections" of one
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
-  -> ?initial_status:[`Frozen | `Send_now]  (** default: `Send_now *)
+  -> ?initial_status:[`Frozen | `Send_now] (** default: `Send_now *)
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
   -> Smtp_envelope.Routed.Batch.t list
-  -> Smtp_envelope.Id.t Deferred.Or_error.t
+  -> (Message_id.t * Smtp_envelope.Routed.t) list Deferred.Or_error.t
 
 (* Move the message into a special quarantine directory where it can be manually
    inspected and optionally manually injected back into the spool *)
+
 val quarantine
   :  t
-  -> reason: Quarantine_reason.t
+  -> reason:Quarantine_reason.t
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
   -> Smtp_envelope.Routed.Batch.t list
-  -> unit Deferred.Or_error.t
+  -> (Message_id.t * Smtp_envelope.Routed.t) list Deferred.Or_error.t
 
 (** [kill_and_flush t] makes sure no new delivery sessions are being started and waits
     until all the currently running sessions have finished. It will not affect frozen
     messages or those waiting for retry intervals to elapse. *)
-val kill_and_flush
-  :  t
-  -> unit Deferred.t
+val kill_and_flush : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
 
-val freeze
-  :  t
-  -> Message_id.t list
-  -> unit Deferred.Or_error.t
+val freeze : t -> Message_id.t list -> unit Deferred.Or_error.t
 
 module Send_info : sig
   type t =
@@ -103,7 +97,7 @@ module Send_info : sig
 end
 
 val send
-  :  ?retry_intervals : Smtp_envelope.Retry_interval.t list
+  :  ?retry_intervals:Smtp_envelope.Retry_interval.t list
   -> t
   -> Send_info.t
   -> unit Deferred.Or_error.t
@@ -111,35 +105,29 @@ val send
 (* removing a message will move it to spool's removed directory and remove it from the
    hash table so the spool has no awareness of it. It will not be shown in a status
    command. *)
-val remove
-  :  t
-  -> Message_id.t list
-  -> unit Deferred.Or_error.t
+
+val remove : t -> Message_id.t list -> unit Deferred.Or_error.t
 
 module Recover_info : sig
   type t =
-    { msgs :
-        [ `Removed of Message_id.t list
-        | `Quarantined of Message_id.t list ]
-    ; wrapper : Email_wrapper.t option
+    { msgs : Message_id.t list
+    ; from : [`Removed | `Quarantined]
     }
 end
 
-val recover
-  :  t
-  -> Recover_info.t
-  -> unit Deferred.Or_error.t
+val recover : t -> Recover_info.t -> unit Deferred.Or_error.t
 
 module Spooled_message_info : sig
   type t [@@deriving sexp_of]
 
-  val id                 : t -> Message_id.t
-  val spool_date         : t -> Time.t
+  val id : t -> Message_id.t
+  val spool_date : t -> Time.t
   val last_relay_attempt : t -> (Time.t * Error.t) option
-  val parent_id          : t -> Smtp_envelope.Id.t
-  val envelope_info      : t -> Smtp_envelope.Info.t
+  val parent_id : t -> Smtp_envelope.Id.t
+  val envelope_info : t -> Smtp_envelope.Info.t
+
   val status
-    : t
+    :  t
     -> [ `Send_now
        | `Send_at of Time.t
        | `Sending
@@ -154,8 +142,9 @@ module Spooled_message_info : sig
      we don't read the disk. A bigger part is that [status] is used to implement
      the rpc call, and we don't want the result to contain sensitive
      information.  *)
-  val file_size          : t -> Byte_units.t option
-  val envelope           : t -> Smtp_envelope.t option
+
+  val file_size : t -> Byte_units.t option
+  val envelope : t -> Smtp_envelope.t option
 end
 
 module Status : sig
@@ -163,7 +152,7 @@ module Status : sig
 
   val to_formatted_string
     :  t
-    -> format : [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
+    -> format:[`Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp]
     -> string
 end
 
@@ -176,9 +165,9 @@ val status : t -> Status.t
 
     You should not try to work out the total number of unsent messages by counting the
     messages in the status. You should use the [count_from_disk] function instead. *)
-val status_from_disk : Server_config.t -> Status.t Deferred.Or_error.t
-val count_from_disk : Server_config.t -> int Or_error.t Deferred.t
+val status_from_disk : Config.t -> Status.t Deferred.Or_error.t
 
+val count_from_disk : Config.t -> int Or_error.t Deferred.t
 val client_cache : t -> Client_cache.t
 
 module Event : sig
@@ -189,37 +178,41 @@ module Event : sig
     | `Removed
     | `Unfrozen
     | `Recovered of [`From_quarantined | `From_removed]
-    | `Quarantined of [`Reason of Quarantine_reason.t]
-    ] * Message_id.t * Smtp_envelope.Info.t [@@deriving sexp_of]
+    | `Quarantined of [`Reason of Quarantine_reason.t] ]
+    * Message_id.t
+    * Smtp_envelope.Info.t
+  [@@deriving sexp_of]
 
-  type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of]
+  type t = Time.t * [`Spool_event of spool_event | `Ping] [@@deriving sexp_of]
 
   include Comparable.S_plain with type t := t
 
   val to_string : t -> string
 end
 
-val event_stream
-  :  t
-  -> Event.t Pipe.Reader.t
+val event_stream : t -> Event.t Pipe.Reader.t
 
 module Stable : sig
   module Message_id = Message.Stable.Id
+
   module Status : sig
     module V2 : sig
       type t = Status.t [@@deriving bin_io]
     end
   end
+
   module Send_info : sig
     module V1 : sig
       type t = Send_info.t [@@deriving bin_io]
     end
   end
+
   module Recover_info : sig
-    module V1 : sig
+    module V2 : sig
       type t = Recover_info.t [@@deriving bin_io]
     end
   end
+
   module Event : sig
     module V1 : sig
       type t = Event.t [@@deriving bin_io, sexp]

@@ -1,0 +1,3 @@
+(library (name test_async_smtp)
+ (libraries core async async_smtp expect_test_helpers)
+ (preprocess (pps ppx_jane)))

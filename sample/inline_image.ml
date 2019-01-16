@@ -12,6 +12,7 @@ let html_string : string =
 </div>
 </body></html>
            |}
+;;
 
 let body : Email.Simple.Content.t = Email.Simple.Content.html html_string
 
@@ -23,27 +24,24 @@ let png ~file : Email.Simple.Content.t =
 ;;
 
 let email ~png_file : Email.Simple.Content.t =
-  Email.Simple.Content.with_related
-    ~resources:[ "png_id", png ~file:png_file ]
-    body
+  Email.Simple.Content.with_related ~resources:[ "png_id", png ~file:png_file ] body
 ;;
 
 let command =
   let open Command.Let_syntax in
-  Command.async_or_error ~summary:"send an email with an inline picture (png)"
+  Command.async_or_error
+    ~summary:"send an email with an inline picture (png)"
     [%map_open
-      let png_file =
-        flag "png" (required Filename.arg_type) ~doc:"FILE png file"
+      let png_file = flag "png" (required Filename.arg_type) ~doc:"FILE png file"
       and to_ =
         flag "to" (required string) ~doc:"EMAIL who to send it to"
         |> map ~f:Email_address.of_string_exn
       in
       fun () ->
         Simplemail.send
-          ~to_:[to_]
+          ~to_:[ to_ ]
           ~subject:"email with an inline image"
-          (email ~png_file)
-    ]
+          (email ~png_file)]
 ;;
 
 let () = Command.run command

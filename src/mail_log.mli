@@ -5,9 +5,10 @@ open Async_smtp_types
 module Mail_fingerprint : sig
   type t =
     { headers : (string * string) list
-    ; md5     : string option
-    ; parts   : t list
-    } [@@deriving sexp, fields]
+    ; md5 : string option
+    ; parts : t list
+    }
+  [@@deriving sexp, fields]
 
   val of_email : Email.t -> t
 end
@@ -49,47 +50,57 @@ module Flows : sig
       | `Client_session
       | `Inbound_envelope
       | `Outbound_envelope
-      | `Cached_connection
-      ] [@@deriving sexp_of]
+      | `Cached_connection ]
+    [@@deriving sexp_of]
   end
+
   module Id : sig
     type t = private string [@@deriving sexp_of]
+
     val is : t -> Kind.t -> bool
 
     include Comparable.S_plain with type t := t
     include Hashable.S_plain with type t := t
   end
+
   (* Represents a set of opaque flow ids.
      The internal list representation is exposed for use when analysing logs, however
      the order of elements is undefined. *)
+
   type t = private Id.t list [@@deriving sexp_of]
 
   val of_list : Id.t list -> t
 
   (* Should be used with care, but appropriate on some global state messages *)
+
   val none : t
 
   (* The [Kind.t] is only informational and is included in the sexp for information only.
      It is not recoverable and not intended for machine processing.
      two flows that where created are never related.
      [ not (are_related (create t) (create t)) ] *)
+
   val create : Kind.t -> t
 
   (* Create a related flow. An extended flow is always related to its parent.
      [ are_related x (extend x t) ] *)
+
   val extend : t -> Kind.t -> t
 
   (* Combine two flows to created a flow related to each.
      [ are_related x (union x y) && are_related y (union x y) ] *)
+
   val union : t -> t -> t
 
   (* Indicates that two flows where extended from one another.
      [ are_related x x && (are_related x y = are_related y x) ] *)
+
   val are_related : t -> t -> bool
 end
 
 module Component : sig
-  include Identifiable with type t=string list
+  include Identifiable with type t = string list
+
   val parts : t -> string list
   val join : t -> t -> t
   val is_parent : parent:t -> t -> bool
@@ -104,8 +115,7 @@ module Session_marker : sig
     | `Mail_from
     | `Rcpt_to
     | `Data
-    | `Sending
-    ]
+    | `Sending ]
 end
 
 (** Augment [Log.Level] with [`Error_no_monitor] which are errors that are not
@@ -114,18 +124,17 @@ end
 module Level : sig
   type t =
     [ Log.Level.t
-    | `Error_no_monitor
-    ]
+    | `Error_no_monitor ]
 end
 
 (** Wrapper arround Log.Message.t that allows access to various standardised tag names. *)
 module Message : sig
-
-  module Action : Identifiable with type t=string
+  module Action : Identifiable with type t = string
 
   (* See the relevant accessors for information about how these are encoded *)
-  type 'a with_info
-    =  flows:Flows.t
+
+  type 'a with_info =
+    flows:Flows.t
     -> component:Component.t
     -> here:Source_code_position.t
     -> ?local_ip_address:Socket.Address.Inet.t
@@ -133,13 +142,12 @@ module Message : sig
     -> ?remote_ip_address:Socket.Address.Inet.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
-              | `Envelope of Smtp_envelope.t
-              ]
+              | `Envelope of Smtp_envelope.t ]
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t
-    -> ?sender:[ `Sender of Smtp_envelope.Sender.t | `String of string ]
-    -> ?recipients:[ `Email of Email_address.t | `String of string ] list
+    -> ?sender:[`Sender of Smtp_envelope.Sender.t | `String of string]
+    -> ?recipients:[`Email of Email_address.t | `String of string] list
     -> ?spool_id:string
     -> ?command:Smtp_command.t
     -> ?reply:Smtp_reply.t
@@ -153,13 +161,13 @@ module Message : sig
   val create : (Action.t -> t) with_info
 
   (* Should be used only for extended debug output *)
-  val debugf : (('a,unit,string,t) format4 -> 'a) with_info
 
+  val debugf : (('a, unit, string, t) format4 -> 'a) with_info
   val of_error : (Error.t -> t) with_info
-
   val info : (unit -> t) with_info
 
   (* Utility accessors for the standard info tags *)
+
   val level : t -> Level.t
   val time : t -> Time.t
 
@@ -174,36 +182,59 @@ module Message : sig
   val action : t -> Action.t
 
   (* If a value doesn't parse, or is missing this will give back [None] *)
+
   val find_tag' : t -> tag:string -> f:(string -> 'a) -> 'a option
   val find_tag : t -> tag:string -> string option
-
   val tags : t -> (string * string) list
 
   (* tag 'rfc822-id' *)
+
   val rfc822_id : t -> string option
+
   (* tag 'local-id' *)
+
   val local_id : t -> Smtp_envelope.Id.t option
+
   (* tag 'spool-id' *)
+
   val spool_id : t -> string option
+
   (* tag 'sender'. [`String _] if the value doesn't parse *)
-  val sender : t -> [ `Sender of Smtp_envelope.Sender.t | `String of string ] option
+
+  val sender : t -> [`Sender of Smtp_envelope.Sender.t | `String of string] option
+
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
      nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
   *)
-  val recipients : t -> [ `Email of Email_address.t | `String of string ] list option
+
+  val recipients : t -> [`Email of Email_address.t | `String of string] list option
+
   (* tag 'email-fingerprint' *)
+
   val email : t -> Mail_fingerprint.t option
+
   (* tag 'local-ip-address' *)
+
   val local_ip_address : t -> Socket.Address.Inet.t option
+
   (* tag 'remote-address' *)
+
   val remote_address : t -> Host_and_port.t option
+
   (* tag 'remote-ip-address' *)
+
   val remote_ip_address : t -> Socket.Address.Inet.t option
+
   (* tag 'command' *)
+
   val command : t -> Smtp_command.t option
+
   (* tag 'reply' *)
+
   val reply : t -> Smtp_reply.t option
+
   (* tag 'session-marker' *)
+
   val session_marker : t -> Session_marker.t option
 end
 
@@ -221,13 +252,11 @@ val error_no_monitor_tag : string * string
     The given flows will be added as additional 'flow' tags (potentially adding
     a duplicate).
 *)
-val with_flow_and_component
-  :  flows:Flows.t
-  -> component:Component.t
-  -> t -> t
+val with_flow_and_component : flows:Flows.t -> component:Component.t -> t -> t
 
 (* This function is to give external users of this library a chance to control
    the verbosity of our logs. *)
+
 val adjust_log_levels
   :  ?minimum_level:Level.t
   (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
@@ -237,7 +266,8 @@ val adjust_log_levels
   (* Rewrite messages with level [`Error_no_monitor] to level [remap_error_no_monitor_to] *)
   -> ?remap_error_to:Level.t
   (* Rewrite messages with level [`Error] to level [remap_error_to] *)
-  -> t -> t
+  -> t
+  -> t
 
 (** [message] outputs the given message (if appropriate for the current log level).
 
@@ -252,10 +282,11 @@ val adjust_log_levels
     add that information to the message.
 *)
 val message : t -> level:Level.t -> Message.t Lazy.t -> unit
+
 val message' : t -> level:Level.t -> Message.t -> unit
 
 (** [info] is shorthand for [message ~level:`Info]. *)
-val info  : t -> Message.t Lazy.t -> unit
+val info : t -> Message.t Lazy.t -> unit
 
 (** [debug] is shorthand for [message ~level:`Debug]. *)
 val debug : t -> Message.t Lazy.t -> unit

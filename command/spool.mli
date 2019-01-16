@@ -9,15 +9,15 @@ module Status : sig
       [ `Ascii_table
       | `Ascii_table_with_max_width of int
       | `Exim
-      | `Sexp
-      ] [@@deriving sexp]
+      | `Sexp ]
+    [@@deriving sexp]
 
     val arg_type : t Command.Param.Arg_type.t
     val param : t Command.Param.t
   end
 
   val dispatch
-    :  format : [ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
+    :  format:[`Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp]
     -> Rpc.Connection.t
     -> unit Deferred.t
 end
@@ -33,11 +33,7 @@ end
 
 module Set_max_send_jobs : sig
   val num : int Command.Param.t
-
-  val dispatch
-    :  num:int
-    -> Rpc.Connection.t
-    -> unit Deferred.t
+  val dispatch : num:int -> Rpc.Connection.t -> unit Deferred.t
 end
 
 module Freeze : sig
@@ -69,20 +65,13 @@ module Remove : sig
     -> unit Deferred.t
 end
 
-
 module Recover : sig
   val param : Smtp_spool.Recover_info.t Command.Param.t
-
-  val dispatch
-    :  Smtp_spool.Recover_info.t
-    -> Rpc.Connection.t
-    -> unit Deferred.t
+  val dispatch : Smtp_spool.Recover_info.t -> Rpc.Connection.t -> unit Deferred.t
 end
 
 module Events : sig
-  val dispatch
-    :  Rpc.Connection.t
-    -> unit Deferred.t
+  val dispatch : Rpc.Connection.t -> unit Deferred.t
 end
 
 val command : Command.t

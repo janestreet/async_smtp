@@ -1,12 +1,13 @@
 open! Core
 
 type 'a t =
-  { envelope         : 'a
+  { envelope : 'a
   (** Next hops to try. If the first one fails, we are done, otherwise try
       sending to the second one, etc. *)
   ; next_hop_choices : Host_and_port.t list
-  ; retry_intervals  : Retry_interval.t list
-  } [@@deriving sexp_of, fields, compare, hash]
+  ; retry_intervals : Retry_interval.t list
+  }
+[@@deriving sexp_of, fields, compare, hash]
 
 type 'a create =
   envelope:'a

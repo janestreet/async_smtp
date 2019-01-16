@@ -86,13 +86,13 @@ module type With_info = sig
   type t
   type envelope_info
 
-  val sender              : t -> Sender.t
-  val sender_args         : t -> Sender_argument.t list
-  val string_sender       : t -> string
-  val recipients          : t -> Email_address.t list
+  val sender : t -> Sender.t
+  val sender_args : t -> Sender_argument.t list
+  val string_sender : t -> string
+  val recipients : t -> Email_address.t list
   val rejected_recipients : t -> Email_address.t list
-  val string_recipients   : t -> string list
-  val route               : t -> string option
-  val id                  : t -> Envelope_id.t
-  val info                : t -> envelope_info
+  val string_recipients : t -> string list
+  val route : t -> string option
+  val id : t -> Envelope_id.t
+  val info : t -> envelope_info
 end

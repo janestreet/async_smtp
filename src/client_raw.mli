@@ -2,21 +2,21 @@ open! Core
 open! Async
 open Async_smtp_types
 
-
 module Peer_info : sig
   type t
 
   val greeting : t -> string option
+
   val hello
     :  t
-    -> [`Simple of string
-       | `Extended of string * Smtp_extension.t list
-       ] option
+    -> [`Simple of string | `Extended of string * Smtp_extension.t list] option
+
   val supports_extension : t -> Smtp_extension.t -> bool
   val remote_address : t -> Host_and_port.t
   val local_ip_address : t -> Socket.Address.Inet.t option
   val remote_ip_address : t -> Socket.Address.Inet.t option
 end
+
 
 type t
 
@@ -33,14 +33,12 @@ val create
 
 val create_bsmtp
   :  ?flows:Mail_log.Flows.t
-  -> Writer.t
-  (* Config must be set to not use TLS. *)
+  -> Writer.t (* Config must be set to not use TLS. *)
   -> Client_config.t
   -> t
 
 val config : t -> Client_config.t
 val info : t -> Peer_info.t option
-
 val is_using_tls : t -> bool
 
 val with_session
@@ -74,7 +72,7 @@ val receive
   -> log:Mail_log.t
   -> component:Mail_log.Component.t
   -> here:Lexing.position
-  -> [ `Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
+  -> [`Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
 
 val send_receive
   :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
@@ -85,7 +83,7 @@ val send_receive
   -> component:Mail_log.Component.t
   -> here:Lexing.position
   -> Smtp_command.t
-  -> [ `Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
+  -> [`Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
 
 val send_string
   :  t
@@ -105,9 +103,10 @@ val send_receive_string
   -> component:Mail_log.Component.t
   -> here:Lexing.position
   -> string
-  -> [ `Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
+  -> [`Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
 
 (* Low level access *)
+
 val writer : t -> Writer.t
 val reader : t -> Reader.t option
 val remote_address : t -> Host_and_port.t option

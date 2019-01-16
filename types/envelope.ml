@@ -4,21 +4,22 @@ module Stable = struct
 
   module V1 = struct
     type t =
-      { info  : Envelope_info.Stable.V1.t
+      { info : Envelope_info.Stable.V1.t
       ; email : Email.V1.t
-      } [@@deriving bin_io, sexp]
+      }
+    [@@deriving bin_io, sexp]
   end
 
   module V2 = struct
     type t =
-      { info  : Envelope_info.Stable.V2.t
+      { info : Envelope_info.Stable.V2.t
       ; email : Email.V1.t
-      } [@@deriving bin_io, sexp]
+      }
+    [@@deriving bin_io, sexp]
 
     let of_v1 (v1 : V1.t) =
-      { info = Envelope_info.Stable.V2.of_v1 v1.info
-      ; email = v1.email
-      }
+      { info = Envelope_info.Stable.V2.of_v1 v1.info; email = v1.email }
+    ;;
   end
 end
 
@@ -29,38 +30,43 @@ module T = struct
   type t = Stable.V2.t =
     { info : Envelope_info.t
     ; email : Email.t
-    } [@@deriving sexp_of, fields, compare, hash]
+    }
+  [@@deriving sexp_of, fields, compare, hash]
 end
 
 include T
-include Envelope_container.Make_with_info(T)
-include Comparable.Make_plain(T)
-include Hashable.Make_plain(T)
+include Envelope_container.Make_with_info (T)
+include Comparable.Make_plain (T)
+include Hashable.Make_plain (T)
 
 type envelope = t [@@deriving sexp_of, compare, hash]
 
 let create ?id ~sender ?sender_args ~recipients ?rejected_recipients ?route ~email () =
   let info =
-    Envelope_info.create ?id ~sender ?sender_args
-      ~recipients ?rejected_recipients ?route ()
+    Envelope_info.create
+      ?id
+      ~sender
+      ?sender_args
+      ~recipients
+      ?rejected_recipients
+      ?route
+      ()
   in
   { info; email }
 ;;
 
 let create' ~info ~email = Fields.create ~info ~email
 
-let set
-      ?sender
-      ?sender_args
-      ?recipients
-      ?rejected_recipients
-      ?route
-      ?email
-      t
-      () =
+let set ?sender ?sender_args ?recipients ?rejected_recipients ?route ?email t () =
   { info =
-      Envelope_info.set t.info ?sender ?sender_args
-        ?recipients ?rejected_recipients ?route ()
+      Envelope_info.set
+        t.info
+        ?sender
+        ?sender_args
+        ?recipients
+        ?rejected_recipients
+        ?route
+        ()
   ; email = Option.value email ~default:t.email
   }
 ;;
@@ -80,9 +86,7 @@ let modify_email t ~f =
 let of_bodiless bodiless body =
   let info = Envelope_bodiless.info bodiless in
   let email =
-    Email.create
-      ~headers:(Envelope_bodiless.headers bodiless)
-      ~raw_content:body
+    Email.create ~headers:(Envelope_bodiless.headers bodiless) ~raw_content:body
   in
   create' ~info ~email
 ;;
@@ -97,10 +101,11 @@ let with_bodiless t f =
   of_bodiless (f bodiless) body
 ;;
 
-include Envelope_container.Make_with_headers(struct
+include Envelope_container.Make_with_headers (struct
     type t = envelope
 
     let headers t = Email.headers t.email
+
     let set_headers t headers =
       let email = Email.set_headers t.email headers in
       set t ~email ()

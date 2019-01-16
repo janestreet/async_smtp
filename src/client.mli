@@ -25,11 +25,11 @@ module Peer_info : sig
   type t
 
   val greeting : t -> string option
+
   val hello
     :  t
-    -> [ `Simple of string
-       | `Extended of string * Smtp_extension.t list
-       ] option
+    -> [`Simple of string | `Extended of string * Smtp_extension.t list] option
+
   val supports_extension : t -> Smtp_extension.t -> bool
 end
 
@@ -40,21 +40,20 @@ val is_using_tls : t -> bool
 module Envelope_status : sig
   type envelope_id = string
   type rejected_recipients = (Email_address.t * Smtp_reply.t) list
-
   type ok = envelope_id * rejected_recipients
 
   type err =
     [ `Rejected_sender of Smtp_reply.t
     | `No_recipients of rejected_recipients
     | `Rejected_sender_and_recipients of Smtp_reply.t * rejected_recipients
-    | `Rejected_body of Smtp_reply.t * rejected_recipients
-    ] [@@deriving sexp_of]
+    | `Rejected_body of Smtp_reply.t * rejected_recipients ]
+  [@@deriving sexp_of]
 
   type t = (ok, err) Result.t [@@deriving sexp_of]
 
-  val to_string   : t -> string
+  val to_string : t -> string
   val ok_or_error : allow_rejected_recipients:bool -> t -> string Or_error.t
-  val ok_exn      : allow_rejected_recipients:bool -> t -> string
+  val ok_exn : allow_rejected_recipients:bool -> t -> string
 end
 
 (** Perform all required commands to send an SMTP evelope *)
@@ -68,18 +67,19 @@ val send_envelope
 
 (** Standard SMTP over tcp *)
 module Tcp : sig
+
   (** Establish a connection to the given address and perform the appropriate
       SMTP handshake. Use [send_envelope] to (attempt) to deliver messages. *)
-  val with_
-    : (?config:Client_config.t
-       -> ?credentials:Credentials.t  (** default: [Credentials.Anon] *)
-       -> log:Mail_log.t
-       -> ?flows:Mail_log.Flows.t
-       -> ?component:Mail_log.Component.t
-       -> Host_and_port.t
-       -> f:(t -> 'a Deferred.Or_error.t)
-       -> 'a Deferred.Or_error.t
-      ) Tcp.with_connect_options
+  val with_ :
+    (?config:Client_config.t
+     -> ?credentials:Credentials.t (** default: [Credentials.Anon] *)
+     -> log:Mail_log.t
+     -> ?flows:Mail_log.Flows.t
+     -> ?component:Mail_log.Component.t
+     -> Host_and_port.t
+     -> f:(t -> 'a Deferred.Or_error.t)
+     -> 'a Deferred.Or_error.t)
+      Tcp.with_connect_options
 end
 
 module Expert : sig

@@ -4,6 +4,7 @@ open! Async_smtp_types
 
 module type Server = sig
   type session
+
   val mechanism : string
 
   (** perform the server side authentication negotiation.
@@ -27,13 +28,13 @@ module type Server = sig
     -> session Smtp_monad.t
 end
 
-
 module type Client = sig
   (** A mechanism with [require_tls] will only be used if STARTTLS was negotiated during
       the SMTP session. [Login] and [Plain] below both require tls. If you need to use
       one of these mechanisms on an insecure transport you need to define your own
       custom mechanisms. *)
   val require_tls : bool
+
   val mechanism : string
 
   (** perform the client side authentication negotiation.
@@ -56,32 +57,34 @@ module type Client = sig
   val negotiate
     :  log:Mail_log.t
     -> remote:Host_and_port.t option
-    -> send_response_and_expect_challenge:
-         ([`Start_auth | `Response of string]
-          -> [ `Challenge of string | `Auth_completed] Deferred.t)
+    -> send_response_and_expect_challenge:([`Start_auth | `Response of string]
+                                           -> [`Challenge of string | `Auth_completed]
+                                                Deferred.t)
     -> unit Deferred.t
 end
 
 module Login : sig
-  module Server(Session : sig
+  module Server (Session : sig
       type t
+
       val authenticate
         :  log:Mail_log.t
         -> t
         -> username:string
         -> password:string
         -> t Smtp_monad.t
-    end) : Server with type session=Session.t
+    end) : Server with type session = Session.t
 
-  module Client(C : sig
+  module Client (C : sig
       val username : string
       val password : string
     end) : Client
 end
 
 module Plain : sig
-  module Server(Session : sig
+  module Server (Session : sig
       type t
+
       val authenticate
         :  log:Mail_log.t
         -> ?on_behalf_of:string
@@ -89,11 +92,11 @@ module Plain : sig
         -> username:string
         -> password:string
         -> t Smtp_monad.t
-    end) : Server with type session=Session.t
-  module Client(C : sig
+    end) : Server with type session = Session.t
+
+  module Client (C : sig
       val on_behalf_of : string option
       val username : string
       val password : string
     end) : Client
 end
-

@@ -11,14 +11,14 @@ open Async_smtp
 type t
 
 (** start an smtp server that will be accepting messages back *)
-val start_exn : Smtp_server.Config.t -> log : Log.t -> t Deferred.t
+val start_exn : Smtp_server.Config.t -> log:Log.t -> t Deferred.t
 
 (** [send_receive ?timeout addr message] will attempt to send [message] to [addr]. It
     waits up to [timeout] for a response message. [addr] must send a response that has
     the same headers as [message] so it can recognized as a response. *)
 val send_receive
   :  t
-  -> ?timeout : Time.Span.t (** defaults to 10 seconds *)
+  -> ?timeout:Time.Span.t (** defaults to 10 seconds *)
   -> Host_and_port.t
   -> Smtp_envelope.t
   -> Smtp_envelope.t Or_error.t Deferred.t
