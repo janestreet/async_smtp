@@ -5,6 +5,8 @@ type t =
   { spool_dir : string
   ; tmp_dir : string option
   ; max_concurrent_send_jobs : int
+  ; connection_cache : Resource_cache.Address_config.Stable.V1.t
+                         [@default Resource_cache.Address_config.default]
   ; client : Client_config.t
   }
 [@@deriving fields, sexp]
@@ -15,6 +17,7 @@ let default =
   { spool_dir = "."
   ; tmp_dir = None
   ; max_concurrent_send_jobs = 0
+  ; connection_cache = Resource_cache.Address_config.default
   ; client = Client_config.default
   }
 ;;

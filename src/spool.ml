@@ -265,19 +265,12 @@ let create ~config ~log : t Deferred.Or_error.t =
     Bus.write event_stream (Time.now (), `Ping));
   let active_send_jobs = Message_id.Table.create () in
   let messages = Message_id.Table.create () in
-  let cache_config =
-    Client_cache.Config.create
-      ~max_open_connections:500
-      ~cleanup_idle_connection_after:(Time_ns.Span.of_sec 5.)
-      ~max_connections_per_address:10
-      ~max_connection_reuse:10
-  in
   let client_cache =
     Client_cache.init
       ~log
       ~component:[ "spool"; "client_cache" ]
-      ~cache_config
-      ~client_config:config.Config.client
+      ~cache_config:config.connection_cache
+      ~client_config:config.client
       ()
   in
   let killed_and_flushed = Ivar.create () in

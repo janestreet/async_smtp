@@ -5,6 +5,7 @@ type t =
   { spool_dir : string
   ; tmp_dir : string option
   ; max_concurrent_send_jobs : int
+  ; connection_cache : Resource_cache.Address_config.t
   ; client : Client_config.t
   }
 [@@deriving fields, sexp]
