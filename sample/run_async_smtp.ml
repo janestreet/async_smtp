@@ -4,7 +4,8 @@ open Async_smtp
 open Async_smtp_types
 
 let server_config =
-  { Smtp_server.Config.where_to_listen = [ `Port 2200; `Port 2201 ]
+  { Smtp_server.Config.where_to_listen =
+      [ Localhost_on_port 2200; Localhost_on_port 2201 ]
   ; max_concurrent_receive_jobs_per_port = 1
   ; timeouts = Smtp_server.Config.default.timeouts
   ; rpc_port = 2210

@@ -139,7 +139,7 @@ module Config = struct
       }
     in
     let server =
-      { Smtp_server.Config.where_to_listen = [ `Port t.port ]
+      { Smtp_server.Config.where_to_listen = [ Localhost_on_port t.port ]
       ; max_concurrent_receive_jobs_per_port = concurrent_receivers
       ; timeouts = Smtp_server.Config.Timeouts.default
       ; rpc_port = 0 (* not used *)

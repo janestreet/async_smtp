@@ -969,15 +969,15 @@ module Make (Cb : Plugin.S) = struct
     }
 
   let tcp_servers ~server_state ~config ~log ~server_events ~close_started =
-    let start_servers port =
-      let local_ip_address = Socket.Address.Inet.create_bind_any ~port in
+    let start_server where_to_listen =
+      let local_ip_address = Config.Where_to_listen.socket_address where_to_listen in
       let tcp_options = Config.tcp_options config in
       let max_accepts_per_batch =
         Option.bind tcp_options ~f:Config.Tcp_options.max_accepts_per_batch
       in
       let backlog = Option.bind tcp_options ~f:Config.Tcp_options.backlog in
       Tcp.Server.create
-        (Tcp.Where_to_listen.of_port port)
+        (Config.Where_to_listen.to_tcp_where_to_listen where_to_listen)
         ?max_accepts_per_batch
         ?backlog
         ~on_handler_error:
@@ -1035,10 +1035,7 @@ module Make (Cb : Plugin.S) = struct
                     ~remote_ip_address
                     err))))
     in
-    Deferred.List.map
-      ~how:`Parallel
-      (Config.where_to_listen config)
-      ~f:(fun (`Port port) -> start_servers port)
+    Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:start_server
   ;;
 
   let start ~server_state ~config ~log =

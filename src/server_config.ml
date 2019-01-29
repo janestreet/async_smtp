@@ -25,7 +25,64 @@ module Tcp_options = struct
 end
 
 module Where_to_listen = struct
-  type t = [`Port of int] [@@deriving sexp]
+  module V2 = struct
+    type t =
+      | All_interfaces_on_port of int
+      | Localhost_on_port of int
+      | Localhost_on_port_chosen_by_os
+      | Ip_on_port of Unix.Inet_addr.Stable.V1.t * int
+    [@@deriving sexp]
+
+    let to_tcp_where_to_listen = function
+      | All_interfaces_on_port port -> Tcp.Where_to_listen.of_port port
+      | Localhost_on_port port -> Tcp.Where_to_listen.bind_to Localhost (On_port port)
+      | Localhost_on_port_chosen_by_os ->
+        Tcp.Where_to_listen.bind_to Localhost On_port_chosen_by_os
+      | Ip_on_port (addr, port) ->
+        Tcp.Where_to_listen.bind_to (Address addr) (On_port port)
+    ;;
+
+    let interface = function
+      | All_interfaces_on_port _ -> `All
+      | Localhost_on_port _ -> `Ip Unix.Inet_addr.localhost
+      | Localhost_on_port_chosen_by_os -> `Ip Unix.Inet_addr.localhost
+      | Ip_on_port (addr, _) -> `Ip addr
+    ;;
+
+    let port = function
+      | All_interfaces_on_port port -> port
+      | Localhost_on_port port -> port
+      | Localhost_on_port_chosen_by_os -> 0
+      | Ip_on_port (_, port) -> port
+    ;;
+
+    let socket_address t =
+      let port = port t in
+      match interface t with
+      | `All -> Socket.Address.Inet.create_bind_any ~port
+      | `Ip ip -> Socket.Address.Inet.create ip ~port
+    ;;
+  end
+
+  module V1 = struct
+    type t = [`Port of int] [@@deriving sexp]
+
+    let to_v2 (`Port port) = V2.All_interfaces_on_port port
+  end
+
+  include V2
+
+  let t_of_sexp sexp =
+    try t_of_sexp sexp with
+    | v2_exn ->
+      (try V1.t_of_sexp sexp |> V1.to_v2 with
+       | v1_exn ->
+         raise_s
+           [%message
+             "Failed to parse [Server_config.Where_to_listen.t]"
+               (v2_exn : Exn.t)
+               (v1_exn : Exn.t)])
+  ;;
 end
 
 module Timeouts = struct

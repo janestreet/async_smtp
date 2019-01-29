@@ -30,8 +30,7 @@ let%test_module _ =
       Log.Global.set_level `Error;
       let server_config =
         { server_config with
-          (* let the system choose a port *)
-          Server.Config.where_to_listen = [ `Port 0 ]
+          Server.Config.where_to_listen = [ Localhost_on_port_chosen_by_os ]
         ; rpc_port = 0
         ; max_concurrent_receive_jobs_per_port = 1
         }

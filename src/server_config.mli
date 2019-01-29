@@ -25,7 +25,15 @@ module Tcp_options : sig
 end
 
 module Where_to_listen : sig
-  type t = [`Port of int] [@@deriving sexp]
+  type t =
+    | All_interfaces_on_port of int
+    | Localhost_on_port of int
+    | Localhost_on_port_chosen_by_os
+    | Ip_on_port of Unix.Inet_addr.t * int
+  [@@deriving sexp]
+
+  val to_tcp_where_to_listen : t -> Tcp.Where_to_listen.inet
+  val socket_address : t -> Socket.Address.Inet.t
 end
 
 module Timeouts : sig
