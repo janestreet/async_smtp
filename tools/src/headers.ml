@@ -1,5 +1,4 @@
 open Core
-open Async
 open Async_smtp_types
 module Envelope = Smtp_envelope
 module Crypto = Crypto.Cryptokit
@@ -49,7 +48,7 @@ module Config = struct
     }
   ;;
 
-  let load file = Reader.load_sexp_exn file t_of_sexp
+  let load file = Async.Reader.load_sexp_exn file t_of_sexp
 end
 
 module Header = struct
@@ -114,7 +113,19 @@ let normalize_whitespace s =
   in
   let merge_spaces s = replace "\\s\\s*" " " s in
   let normalize_commas s = replace "\\s*,\\s*" ", " s in
-  merge_spaces s |> normalize_commas
+  merge_spaces s |> normalize_commas |> String.strip
+;;
+
+let%expect_test _ =
+  let test s = printf "%S\n" (normalize_whitespace s) in
+  test "";
+  [%expect {|""|}];
+  test "     ";
+  [%expect {|""|}];
+  test "a b c d, e, f, g";
+  [%expect {|"a b c d, e, f, g"|}];
+  test "  a b   c\n d, e  \r  , \n f,g  \n ";
+  [%expect {|"a b c d, e, f, g"|}]
 ;;
 
 let normalize_whitespace_headers cond =
@@ -164,7 +175,7 @@ let sort_emails_in_header pattern =
        | Error e ->
          (* Not an error since this is not a reason to trigger the kill
             switch. *)
-         Log.Global.info "could not parse %s: %s" value (Error.to_string_hum e);
+         Async.Log.Global.info "could not parse %s: %s" value (Error.to_string_hum e);
          value
        | Ok emails -> f ~remove_duplicates emails |> String.concat ~sep:", "))
 ;;
