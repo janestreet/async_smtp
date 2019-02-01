@@ -60,8 +60,8 @@ module Entry = struct
     let open Deferred.Or_error.Let_syntax in
     let data_file = On_disk_spool.Entry.Direct.data_file entry in
     let%bind stats = On_disk_spool.Data_file.stat data_file in
-    let size = Unix.Stats.size stats |> Float.of_int64 in
-    return (Byte_units.create `Bytes size)
+    let size = Unix.Stats.size stats in
+    return (Byte_units.of_bytes_int64_exn size)
   ;;
 end
 

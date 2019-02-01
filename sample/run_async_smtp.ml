@@ -10,7 +10,7 @@ let server_config =
   ; timeouts = Smtp_server.Config.default.timeouts
   ; rpc_port = 2210
   ; malformed_emails = `Reject
-  ; max_message_size = Byte_units.create `Megabytes 1.
+  ; max_message_size = Byte_units.of_megabytes 1.
   ; tls_options =
       Some
         { Smtp_server.Config.Tls_options.version = None

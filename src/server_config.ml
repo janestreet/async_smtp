@@ -104,7 +104,7 @@ type t =
   ; timeouts : Timeouts.t
   ; rpc_port : int
   ; malformed_emails : [`Reject | `Wrap]
-  ; max_message_size : Byte_units.t
+  ; max_message_size : Byte_units.Stable.V1.t
   ; tls_options : Tls_options.t sexp_option
   ; tcp_options : Tcp_options.t sexp_option
   }
@@ -118,7 +118,7 @@ let default =
   ; timeouts = Timeouts.default
   ; rpc_port = 0
   ; malformed_emails = `Reject
-  ; max_message_size = Byte_units.create `Megabytes 24.
+  ; max_message_size = Byte_units.of_megabytes 24.
   ; tls_options = None
   ; tcp_options = None
   }

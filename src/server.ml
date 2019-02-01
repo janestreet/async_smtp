@@ -68,7 +68,7 @@ let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reade
 
 (* Utility to read all data up to and including a '\n.' discarding the '\n.'. *)
 let read_data ~max_size ~close_started ~timeouts reader =
-  let max_size = max_size |> Byte_units.bytes |> Float.to_int in
+  let max_size = max_size |> Byte_units.bytes_int_exn in
   let rec loop ~is_first accum =
     let add_string s =
       Option.iter accum ~f:(fun accum -> Bigbuffer.add_string accum s)
@@ -1083,7 +1083,7 @@ module For_test (P : Plugin.S) = struct
   let session
         ~server_state
         ~log
-        ?(max_message_size = Byte_units.create `Bytes (Float.of_int Int.max_value_30_bits))
+        ?(max_message_size = Byte_units.of_bytes_int Int.max_value_30_bits)
         ?tls_options
         ?(emulate_tls = false)
         ?(malformed_emails = `Reject)

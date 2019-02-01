@@ -144,7 +144,7 @@ module Config = struct
       ; timeouts = Smtp_server.Config.Timeouts.default
       ; rpc_port = 0 (* not used *)
       ; malformed_emails = `Reject
-      ; max_message_size = Byte_units.create `Megabytes 1.
+      ; max_message_size = Byte_units.of_megabytes 1.
       ; tls_options = Option.map ~f:fst tls_options
       ; tcp_options = None
       }
