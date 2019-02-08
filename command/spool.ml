@@ -104,23 +104,6 @@ module Count = struct
   ;;
 end
 
-module Set_max_send_jobs = struct
-  let num = Command.Param.(anon ("n" %: int))
-
-  let dispatch ~num client =
-    Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.set_max_concurrent_send_jobs client num
-  ;;
-
-  let command =
-    let open Command.Let_syntax in
-    Command.rpc
-      ~summary:""
-      [%map_open
-        let num = num in
-        dispatch ~num]
-  ;;
-end
-
 module Freeze = struct
   let msgids = Command.Param.(anon (sequence ("msgid" %: msgid)))
 
@@ -251,6 +234,5 @@ let command =
     ; "remove", Remove.command
     ; "recover", Recover.command
     ; "events", Events.command
-    ; "set-max-send-jobs", Set_max_send_jobs.command
     ]
 ;;

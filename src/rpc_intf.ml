@@ -126,7 +126,6 @@ module Spool = struct
   let remove = rpc ~name:(prefix ^- "remove") (list id) (or_error unit)
   let recover = rpc ~name:(prefix ^- "recover") recover_info (or_error unit) ~version:1
   let events = pipe_rpc ~name:(prefix ^- "events") unit spool_event error
-  let set_max_concurrent_send_jobs = rpc ~name:(prefix ^- "set-max-send-jobs") int unit
 end
 
 module Gc = struct

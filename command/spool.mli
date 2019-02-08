@@ -31,11 +31,6 @@ module Count : sig
     -> int Deferred.t
 end
 
-module Set_max_send_jobs : sig
-  val num : int Command.Param.t
-  val dispatch : num:int -> Rpc.Connection.t -> unit Deferred.t
-end
-
 module Freeze : sig
   val msgids : Smtp_spool.Message_id.t list Command.Param.t
 

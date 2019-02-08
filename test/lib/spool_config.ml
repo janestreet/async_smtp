@@ -2,7 +2,7 @@ open Core
 open! Async
 open Async_smtp.Smtp_spool.Config
 
-let v1 =
+let v0 =
   {|
 ((spool_dir .)
  (tmp_dir ())
@@ -23,11 +23,36 @@ let v1 =
  |}
 ;;
 
-let v2 =
+let v1 =
   {|
 ((spool_dir .)
  (tmp_dir ())
  (max_concurrent_send_jobs 0)
+ (connection_cache (
+   (max_open_connections          500)
+   (cleanup_idle_connection_after 5s)
+   (max_connections_per_address   10)
+   (max_connection_reuse          10)))
+ (client (
+   (tls ((
+     "" (
+       (version ())
+       (options ())
+       (name    ())
+       (allowed_ciphers Secure)
+       (ca_file ())
+       (ca_path ())
+       (mode             If_available)
+       (certificate_mode Ignore)))))
+   (send_receive_timeout Default)
+   (final_ok_timeout     Default))))
+ |}
+;;
+
+let v2 =
+  {|
+((spool_dir .)
+ (tmp_dir ())
  (connection_cache (
    (max_open_connections          500)
    (cleanup_idle_connection_after 5s)
@@ -59,6 +84,8 @@ let ensure_parses config =
 ;;
 
 let%expect_test _ =
+  let%bind () = ensure_parses v0 in
+  let%bind () = [%expect {| Ok |}] in
   let%bind () = ensure_parses v1 in
   let%bind () = [%expect {| Ok |}] in
   let%bind () = ensure_parses v2 in

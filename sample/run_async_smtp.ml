@@ -29,7 +29,6 @@ let server_config =
 let spool_config =
   { Smtp_spool.Config.spool_dir = "/tmp/spool-mailcore"
   ; tmp_dir = None
-  ; max_concurrent_send_jobs = 1
   ; connection_cache = Resource_cache.Address_config.default
   ; client = Smtp_client.Config.default
   }
