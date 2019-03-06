@@ -42,7 +42,7 @@ module Expert = struct
     send' ?log ?credentials ?server ~sender ?sender_args ~recipients email
     >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
     >>| Or_error.join
-    >>| Or_error.ignore
+    >>| Or_error.ignore_m
   ;;
 end
 
@@ -127,5 +127,5 @@ let send
     content
   >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
   >>| Or_error.join
-  >>| Or_error.ignore
+  >>| Or_error.ignore_m
 ;;

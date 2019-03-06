@@ -426,9 +426,9 @@ module Message = struct
       else (
         match List.find tags ~f:(fun (k, _) -> k = Tag.component) with
         | None -> [ Tag.component, Component.to_string component ] @ tags
-        | Some (_, base_component) ->
+        | Some (_, msg_component) ->
           let tags = List.filter tags ~f:(fun (k, _) -> k <> Tag.component) in
-          [ Tag.component, Component.to_string (base_component :: component) ] @ tags)
+          [ Tag.component, Component.to_string (component @ [ msg_component ]) ] @ tags)
     in
     let tags = List.map flows ~f:(fun f -> Tag.flow, f) @ tags in
     Log.Message.create
@@ -651,4 +651,32 @@ let adjust_log_levels
                 ~level:`Error
                 ~tags:[ Message.Tag.component, "_LOG" ]
                 (Error.sexp_of_t err)))
+;;
+
+let%expect_test "with_flow_and_component" =
+  let log =
+    let stdout = force Writer.stdout in
+    Log.create
+      ~level:`Info
+      ~output:
+        [ Log.Output.create
+            ~flush:(fun () -> Writer.flushed stdout)
+            (fun messages ->
+               Queue.iter messages ~f:(fun message ->
+                 let component = Message.component message in
+                 printf !"Component: %{Component}\n" component);
+               Deferred.unit)
+        ]
+      ~on_error:`Raise
+  in
+  let info log ~component =
+    info log (lazy (Message.create ~flows:[] ~component ~here:[%here] ""));
+    Log.flushed log
+  in
+  let%bind () = info log ~component:[ "1"; "2" ] in
+  let%bind () = [%expect {| Component: 1/2 |}] in
+  let log = with_flow_and_component log ~flows:[] ~component:[ "1"; "2" ] in
+  let%bind () = info log ~component:[ "3" ] in
+  let%bind () = [%expect {| Component: 1/2/3 |}] in
+  Deferred.unit
 ;;

@@ -1,5 +1,5 @@
-open Core
-open Async
+open! Core
+open! Async
 open Async_smtp_types
 
 module Event = struct
@@ -36,4 +36,4 @@ let create () =
   { event_stream }
 ;;
 
-let event_stream t = Bus.pipe1_exn (Bus.read_only t.event_stream) [%here]
+let event_stream t = Async_bus.pipe1_exn (Bus.read_only t.event_stream) [%here]
