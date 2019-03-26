@@ -6,7 +6,7 @@ module Stable = struct
   module V1 = struct
     type t =
       { sender : Sender.V1.t
-      ; sender_args : Sender_argument.V1.t sexp_list
+      ; sender_args : Sender_argument.V1.t list [@sexp.list]
       ; recipients : Email_address.Stable.V1.t list
       ; rejected_recipients : Email_address.Stable.V1.t list
       ; id : Envelope_id.Stable.V1.t
@@ -22,7 +22,7 @@ module Stable = struct
   module V2 = struct
     type t =
       { sender : Sender.V1.t
-      ; sender_args : Sender_argument.V1.t sexp_list
+      ; sender_args : Sender_argument.V1.t list [@sexp.list]
       ; recipients : Email_address.Stable.V1.t list
       ; rejected_recipients : Email_address.Stable.V1.t list
       ; route : string option
@@ -53,7 +53,7 @@ open Email_message
 module T = struct
   type t = Stable.V2.t =
     { sender : Sender.t
-    ; sender_args : Sender_argument.t sexp_list
+    ; sender_args : Sender_argument.t list [@sexp.list]
     ; recipients :
         Email_address.t list
     ; rejected_recipients : Email_address.t list

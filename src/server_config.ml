@@ -18,8 +18,8 @@ end
 
 module Tcp_options = struct
   type t =
-    { max_accepts_per_batch : int sexp_option
-    ; backlog : int sexp_option
+    { max_accepts_per_batch : int option [@sexp.option]
+    ; backlog : int option [@sexp.option]
     }
   [@@deriving fields, sexp]
 end
@@ -105,8 +105,8 @@ type t =
   ; rpc_port : int
   ; malformed_emails : [`Reject | `Wrap]
   ; max_message_size : Byte_units.Stable.V1.t
-  ; tls_options : Tls_options.t sexp_option
-  ; tcp_options : Tcp_options.t sexp_option
+  ; tls_options : Tls_options.t option [@sexp.option]
+  ; tcp_options : Tcp_options.t option [@sexp.option]
   }
 [@@deriving fields, sexp]
 

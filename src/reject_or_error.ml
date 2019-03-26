@@ -2,9 +2,9 @@ open! Core
 open! Async
 
 type t =
-  { reject : Smtp_reply.t sexp_option
+  { reject : Smtp_reply.t option [@sexp.option]
   ; error : Error.t
-  ; here : Source_code_position.t sexp_option
+  ; here : Source_code_position.t option [@sexp.option]
   }
 [@@deriving sexp_of]
 

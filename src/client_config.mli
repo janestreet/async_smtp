@@ -42,7 +42,7 @@ module Domain_suffix : Identifiable
 type t =
   { (* Defaults to [Unix.gethostname ()]. *)
     greeting :
-      string sexp_option
+      string option
   (* First match wins. No match - no TLS. To add a default setting include an empty suffix
      at the end of the list. *)
   ; tls :

@@ -8,7 +8,7 @@ module Config = struct
   module Header_cond = struct
     type t =
       { name : Email_headers.Stable.Name.V1.t
-      ; if_ : [`Contains of string] sexp_option
+      ; if_ : [`Contains of string] option [@sexp.option]
       }
     [@@deriving sexp]
   end
@@ -16,22 +16,22 @@ module Config = struct
   module Listed_header_cond = struct
     type t =
       { name : Email_headers.Stable.Name.V1.t
-      ; if_ : [`Contains of string] sexp_option
-      ; remove_duplicates : unit sexp_option
+      ; if_ : [`Contains of string] option [@sexp.option]
+      ; remove_duplicates : unit option [@sexp.option]
       }
     [@@deriving sexp]
   end
 
   type t =
-    { strip_whitespace : unit sexp_option
-    ; normalize_whitespace : Header_cond.t sexp_list
-    ; filter : Header_cond.t sexp_list
-    ; mask : Header_cond.t sexp_list
-    ; hash : Header_cond.t sexp_list
-    ; dedup : Header_cond.t sexp_list
-    ; sort_emails : Listed_header_cond.t sexp_list
-    ; sort_words : Listed_header_cond.t sexp_list
-    ; sort : sexp_bool
+    { strip_whitespace : unit option [@sexp.option]
+    ; normalize_whitespace : Header_cond.t list [@sexp.list]
+    ; filter : Header_cond.t list [@sexp.list]
+    ; mask : Header_cond.t list [@sexp.list]
+    ; hash : Header_cond.t list [@sexp.list]
+    ; dedup : Header_cond.t list [@sexp.list]
+    ; sort_emails : Listed_header_cond.t list [@sexp.list]
+    ; sort_words : Listed_header_cond.t list [@sexp.list]
+    ; sort : bool [@sexp.bool]
     }
   [@@deriving sexp]
 

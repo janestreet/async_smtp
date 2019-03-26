@@ -31,7 +31,7 @@ end
 module Domain_suffix = String
 
 type t =
-  { greeting : string sexp_option
+  { greeting : string option [@sexp.option]
   ; tls : (Domain_suffix.t * Tls.t) list
   ; send_receive_timeout : [`Default | `This of Time.Span.t]
   ; final_ok_timeout : [`Default | `This of Time.Span.t]

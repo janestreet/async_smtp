@@ -53,7 +53,7 @@ end
 module Mail_fingerprint = struct
   type t =
     { headers : (string * string) list [@default []]
-    ; md5 : string sexp_option
+    ; md5 : string option [@sexp.option]
     ; parts : t list [@default []]
     }
   [@@deriving sexp, fields]

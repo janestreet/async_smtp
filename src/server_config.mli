@@ -18,8 +18,8 @@ end
 
 module Tcp_options : sig
   type t =
-    { max_accepts_per_batch : int sexp_option
-    ; backlog : int sexp_option
+    { max_accepts_per_batch : int option
+    ; backlog : int option
     }
   [@@deriving fields, sexp]
 end

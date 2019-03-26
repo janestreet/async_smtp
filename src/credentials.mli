@@ -21,7 +21,7 @@ module Stable : sig
   module Login : sig
     module V1 : sig
       type t =
-        { on_behalf_of : string sexp_option
+        { on_behalf_of : string option
         ; username : string
         ; password : string
         }

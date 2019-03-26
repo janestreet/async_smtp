@@ -6,7 +6,7 @@ module Config : sig
   module Header_cond : sig
     type t =
       { name : Email_headers.Name.t
-      ; if_ : [`Contains of string] sexp_option
+      ; if_ : [`Contains of string] option
       }
     [@@deriving sexp]
   end
@@ -14,24 +14,24 @@ module Config : sig
   module Listed_header_cond : sig
     type t =
       { name : Email_headers.Name.t
-      ; if_ : [`Contains of string] sexp_option
-      ; remove_duplicates : unit sexp_option
+      ; if_ : [`Contains of string] option
+      ; remove_duplicates : unit option
       }
     [@@deriving sexp]
   end
 
   type t =
-    { strip_whitespace : unit sexp_option
-    ; normalize_whitespace : Header_cond.t sexp_list
-    ; filter : Header_cond.t sexp_list
-    ; mask : Header_cond.t sexp_list
-    ; hash : Header_cond.t sexp_list
-    ; dedup : Header_cond.t sexp_list
+    { strip_whitespace : unit option
+    ; normalize_whitespace : Header_cond.t list
+    ; filter : Header_cond.t list
+    ; mask : Header_cond.t list
+    ; hash : Header_cond.t list
+    ; dedup : Header_cond.t list
     ; (* read in as list of emails and sort *)
-      sort_emails : Listed_header_cond.t sexp_list
+      sort_emails : Listed_header_cond.t list
     ; (* read in as list of whitespace-separated words and sort *)
-      sort_words : Listed_header_cond.t sexp_list
-    ; sort : sexp_bool
+      sort_words : Listed_header_cond.t list
+    ; sort : bool
     }
   [@@deriving sexp]
 

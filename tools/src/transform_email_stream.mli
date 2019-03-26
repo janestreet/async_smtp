@@ -4,9 +4,7 @@ open Async_smtp_types
 
 module Envelopes : sig
   type t =
-    { sort :
-        [`Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers] sexp_list
-    }
+    { sort : [`Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers] list }
   [@@deriving sexp]
 end
 
@@ -17,8 +15,8 @@ module Bodies : sig
   end
 
   type t =
-    { rewrites : Rewrite.t sexp_list
-    ; hash : [`whole | `parts] sexp_option
+    { rewrites : Rewrite.t list
+    ; hash : [`whole | `parts] option
     }
   [@@deriving sexp]
 end

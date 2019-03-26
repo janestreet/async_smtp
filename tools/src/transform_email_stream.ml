@@ -15,8 +15,8 @@ module Hash = Crypto.Hash
 
 module Envelopes = struct
   type t =
-    { sort :
-        [`Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers] sexp_list
+    { sort : [`Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers] list
+               [@sexp.list]
     }
   [@@deriving sexp]
 
@@ -31,8 +31,8 @@ module Bodies = struct
   end
 
   type t =
-    { rewrites : Rewrite.t sexp_list
-    ; hash : [`whole | `parts] sexp_option
+    { rewrites : Rewrite.t list [@sexp.list]
+    ; hash : [`whole | `parts] option [@sexp.option]
     }
   [@@deriving sexp]
 

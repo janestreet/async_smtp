@@ -31,9 +31,9 @@ end
 module Inbound_envelope = struct
   type t =
     { id : Flows.Id.t
-    ; mutable mail_from : string sexp_option
+    ; mutable mail_from : string option [@sexp.option]
     ; mutable rcpt_to : string list
-    ; mutable data : Smtp_mail_log.Mail_fingerprint.t sexp_option
+    ; mutable data : Smtp_mail_log.Mail_fingerprint.t option [@sexp.option]
     ; mutable events : Smtp_mail_log.Message.t list
     ; mutable outbound_envelopes : Outbound_envelope.t list
     }
@@ -75,10 +75,10 @@ end
 
 type t =
   { id : Flows.Id.t
-  ; mutable session_connect : Time.t sexp_option
+  ; mutable session_connect : Time.t option [@sexp.option]
   ; mutable events : Smtp_mail_log.Message.t list
   ; mutable inbound_envelopes : Inbound_envelope.t list
-  ; mutable raw_messages : Message.t sexp_list
+  ; mutable raw_messages : Message.t list [@sexp.list]
   }
 [@@deriving sexp_of]
 
@@ -210,18 +210,18 @@ let raw_messages t = List.rev t.raw_messages
 
 module Summary = struct
   type email =
-    { subject : string sexp_list
-    ; from : string sexp_list
-    ; to_ : string sexp_list
-    ; cc : string sexp_list
-    ; rfc822_id : string sexp_list
+    { subject : string list [@sexp.list]
+    ; from : string list [@sexp.list]
+    ; to_ : string list [@sexp.list]
+    ; cc : string list [@sexp.list]
+    ; rfc822_id : string list [@sexp.list]
     ; flow : Smtp_mail_log.Flows.Id.t
-    ; recipients : (string list * Smtp_mail_log.Flows.Id.t) sexp_list
+    ; recipients : (string list * Smtp_mail_log.Flows.Id.t) list [@sexp.list]
     }
   [@@deriving sexp_of]
 
   type t =
-    { connect_time : Time.t sexp_option
+    { connect_time : Time.t option [@sexp.option]
     ; emails : email list
     ; session_flow : Smtp_mail_log.Flows.Id.t
     }

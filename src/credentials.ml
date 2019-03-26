@@ -6,7 +6,7 @@ module Stable = struct
   module Login = struct
     module V1 = struct
       type t =
-        { on_behalf_of : string sexp_option
+        { on_behalf_of : string option [@sexp.option]
         ; username : string
         ; password : string
         }
@@ -64,9 +64,9 @@ open Async_smtp_types
 
 module Login = struct
   type t = Stable.Login.V1.t =
-    { on_behalf_of : string sexp_option
+    { on_behalf_of : string option [@sexp.option]
     ; username : string
-    ; password : string sexp_opaque
+    ; password : (string[@sexp.opaque])
     }
   [@@deriving sexp_of]
 end
