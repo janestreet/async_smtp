@@ -48,22 +48,25 @@ module Bodies = struct
           |> Email.Raw_content.to_bigstring_shared
           |> Bigstring_shared.to_string
         in
-        let rewrite =
-          List.find_map t.rewrites ~f:(fun (re, rewrite_to) ->
-            if Re2.matches re content_str
-            then (
-              match rewrite_to with
-              | `Rewrite_entire_body_to content -> Some content
-              | `Rewrite_all_matches_to template ->
-                Re2.rewrite re ~template content_str |> Result.ok)
-            else None)
+        let rewritten_content_str =
+          List.fold
+            t.rewrites
+            ~init:content_str
+            ~f:(fun content_str (re, rewrite_to) ->
+              if Re2.matches re content_str
+              then (
+                match rewrite_to with
+                | `Rewrite_entire_body_to content_str -> content_str
+                | `Rewrite_all_matches_to template ->
+                  Re2.rewrite_exn re ~template content_str)
+              else content_str)
         in
-        match rewrite with
-        | None -> email
-        | Some rewrite ->
+        if String.equal content_str rewritten_content_str
+        then email
+        else (
           let headers = Email.headers email in
-          let raw_content = Email.Raw_content.of_string rewrite in
-          Email.create ~headers ~raw_content)
+          let raw_content = Email.Raw_content.of_string rewritten_content_str in
+          Email.create ~headers ~raw_content))
   ;;
 
   let hash_fun data = data |> Crypto.hash_string (Hash.sha256 ()) |> Util.Hex.to_hex
