@@ -160,7 +160,10 @@ module Status = struct
   end
 end
 
-type t = Client_cache.t
+type t =
+  { cache : Client_cache.t
+  ; load_balance : bool
+  }
 
 let init
       ?buffer_age_limit
@@ -172,6 +175,7 @@ let init
       ~log
       ~cache_config
       ~client_config
+      ~load_balance
       ()
   =
   let config = Config.to_cache_config cache_config in
@@ -185,17 +189,17 @@ let init
       ()
   in
   let args = Resource.Common_args.create ~component ~tcp_options ~log ~client_config in
-  Client_cache.init ~config args
+  { cache = Client_cache.init ~config args; load_balance }
 ;;
 
-let close_and_flush = Client_cache.close_and_flush
-let close_finished = Client_cache.close_finished
-let close_started = Client_cache.close_started
-let status = Client_cache.status
-let config t = Config.of_cache_config (Client_cache.config t)
+let close_and_flush t = Client_cache.close_and_flush t.cache
+let close_finished t = Client_cache.close_finished t.cache
+let close_started t = Client_cache.close_started t.cache
+let status t = Client_cache.status t.cache
+let config t = Config.of_cache_config (Client_cache.config t.cache)
 
 module Tcp = struct
-  let with_' ?give_up ~f ~cache ?route addresses =
+  let with_' ?give_up ~f ~cache:t ?route addresses =
     let f (r : Resource.t) =
       match%bind f ~flows:r.flows r.client with
       | Error _ as err ->
@@ -210,7 +214,8 @@ module Tcp = struct
       Client_cache.with_any_loop
         ~open_timeout:(Time_ns.Span.of_sec 10.)
         ?give_up
-        cache
+        ~load_balance:t.load_balance
+        t.cache
         addresses
         ~f
     with

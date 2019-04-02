@@ -6,6 +6,7 @@ type t =
   ; tmp_dir : string option
   ; connection_cache : Resource_cache.Address_config.t
   ; client : Client_config.t
+  ; load_balance : bool
   }
 [@@deriving fields, sexp]
 

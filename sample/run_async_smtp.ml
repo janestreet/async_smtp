@@ -31,6 +31,7 @@ let spool_config =
   ; tmp_dir = None
   ; connection_cache = Resource_cache.Address_config.default
   ; client = Smtp_client.Config.default
+  ; load_balance = false
   }
 ;;
 

@@ -36,6 +36,7 @@ val init :
    -> log:Mail_log.t
    -> cache_config:Config.t
    -> client_config:Client_config.t
+   -> load_balance:bool
    -> unit
    -> t)
     Tcp.with_connect_options

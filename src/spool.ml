@@ -271,6 +271,7 @@ let create ~config ~log : t Deferred.Or_error.t =
       ~component:[ "spool"; "client_cache" ]
       ~cache_config:config.connection_cache
       ~client_config:config.client
+      ~load_balance:config.load_balance
       ()
   in
   let killed_and_flushed = Ivar.create () in
