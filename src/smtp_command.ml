@@ -1,4 +1,5 @@
 open! Core
+open Poly
 
 type t =
   | Hello of string

@@ -1,4 +1,5 @@
 open Core
+open Poly
 open Async
 open Async_ssl.Std
 open Async_smtp_types

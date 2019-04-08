@@ -1,4 +1,5 @@
 open! Core
+open Poly
 
 module Code = struct
   type 'a t_ =

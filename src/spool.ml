@@ -88,6 +88,7 @@ module Stable = struct
 end
 
 open Core
+open Poly
 open Async
 open Async_smtp_types
 

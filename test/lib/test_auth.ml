@@ -1,4 +1,5 @@
 open! Core
+open Poly
 open Async
 open Expect_test_helpers
 open Async_smtp

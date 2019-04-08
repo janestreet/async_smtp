@@ -1,4 +1,5 @@
 open Core
+open Poly
 open! Async
 open Async_smtp
 module Message = Smtp_mail_log.Message
