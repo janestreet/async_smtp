@@ -16,7 +16,7 @@ module Hash = Crypto.Hash
 module Envelopes = struct
   type t =
     { sort : [`Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers] list
-               [@sexp.list]
+             [@sexp.list]
     }
   [@@deriving sexp]
 
