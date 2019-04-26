@@ -3,8 +3,9 @@ open! Async
 
 type t =
   { spool_dir : string
-  ; tmp_dir : string option
-  ; connection_cache : Resource_cache.Address_config.t
+  ; tmp_dir :
+      string option
+  ; connection_cache : Resource_cache.Address_config.Stable.V1.t
   ; client : Client_config.t
   ; load_balance : bool
   }

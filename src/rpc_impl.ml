@@ -50,7 +50,9 @@ module Spool = struct
 
     let config =
       Rpc.Rpc.implement Rpc_intf.Spool.Cache.config (fun spool () ->
-        return (Client_cache.config (Spool.client_cache spool)))
+        return
+          (Client_cache.config (Spool.client_cache spool)
+           |> Resource_cache.Address_config.Stable.V1.of_v2))
     ;;
 
     let rpcs = [ status; config ]

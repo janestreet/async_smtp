@@ -270,7 +270,8 @@ let create ~config ~log : t Deferred.Or_error.t =
     Client_cache.init
       ~log
       ~component:[ "spool"; "client_cache" ]
-      ~cache_config:config.connection_cache
+      ~cache_config:
+        (config.connection_cache |> Resource_cache.Address_config.Stable.V1.to_v2)
       ~client_config:config.client
       ~load_balance:config.load_balance
       ()

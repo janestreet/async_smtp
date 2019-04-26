@@ -29,7 +29,9 @@ let server_config =
 let spool_config =
   { Smtp_spool.Config.spool_dir = "/tmp/spool-mailcore"
   ; tmp_dir = None
-  ; connection_cache = Resource_cache.Address_config.default
+  ; connection_cache =
+      Resource_cache.Address_config.default
+      |> Resource_cache.Address_config.Stable.V1.of_v2
   ; client = Smtp_client.Config.default
   ; load_balance = false
   }

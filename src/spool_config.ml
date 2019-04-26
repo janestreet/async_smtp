@@ -7,7 +7,9 @@ module Stable = struct
       ; tmp_dir : string option
       ; max_concurrent_send_jobs : int
       ; connection_cache : Resource_cache.Address_config.Stable.V1.t
-                           [@default Resource_cache.Address_config.default]
+                           [@default
+                             Resource_cache.Address_config.default
+                             |> Resource_cache.Address_config.Stable.V1.of_v2]
       ; client : Client_config.t
       }
     [@@deriving sexp]
@@ -69,7 +71,9 @@ let tmp_dir t = Option.value ~default:(spool_dir t ^/ "temp") (tmp_dir t)
 let default =
   { spool_dir = "."
   ; tmp_dir = None
-  ; connection_cache = Resource_cache.Address_config.default
+  ; connection_cache =
+      Resource_cache.Address_config.default
+      |> Resource_cache.Address_config.Stable.V1.of_v2
   ; client = Client_config.default
   ; load_balance = false
   }
