@@ -585,7 +585,7 @@ let with_flow_and_component ~flows ~component t =
     ~level:(Log.level t)
     ~output:
       [ Log.Output.create
-          ~flush:(fun () -> Log.flushed t)
+          ~flush:(fun () -> if Log.is_closed t then Deferred.unit else Log.flushed t)
           (fun msgs ->
              Queue.iter msgs ~f:(fun msg ->
                let level = Message.level msg in
@@ -632,7 +632,7 @@ let adjust_log_levels
       ~level:(Level.to_async_log_level minimum_level)
       ~output:
         [ Log.Output.create
-            ~flush:(fun () -> Log.flushed t)
+            ~flush:(fun () -> if Log.is_closed t then Deferred.unit else Log.flushed t)
             (fun msgs ->
                Queue.iter msgs ~f:(fun msg ->
                  let level =

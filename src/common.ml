@@ -45,7 +45,7 @@ let urlbase64_encode_float ?(length = 6) f =
       |> Int64.bit_and 0xffL
       |> Int64.to_int_exn
       |> Char.of_int_exn)
-    |> Base64.Websafe.encode
+    |> Base64.encode_string ~pad:false ~alphabet:Base64.uri_safe_alphabet
     |> String.sub ~pos:(12 - length) ~len:length
 ;;
 

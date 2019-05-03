@@ -572,7 +572,9 @@ let do_auth t ~log ~component (module Auth : Auth.Client) =
          `Auth_completed
        | Ok (`Received { Smtp_reply.code = `Start_authentication_input_334; raw_message })
          ->
-         let challenge = String.concat ~sep:"\n" raw_message |> Base64.decode_exn in
+         let challenge =
+           raw_message |> List.map ~f:String.strip |> String.concat |> Base64.decode_exn
+         in
          `Challenge challenge
        | Ok (`Received reply) ->
          let err = Error.createf !"AUTH failed: %{Smtp_reply}" reply in
@@ -592,7 +594,7 @@ let do_auth t ~log ~component (module Auth : Auth.Client) =
       let msg =
         match msg with
         | `Start_auth -> None
-        | `Response msg -> Some (Base64.encode msg)
+        | `Response msg -> Some (Base64.encode_string msg)
       in
       send_receive
         t
@@ -605,7 +607,7 @@ let do_auth t ~log ~component (module Auth : Auth.Client) =
       let msg =
         match msg with
         | `Start_auth -> failwith "Unexpected use of [`Initial] once AUTH has been sent"
-        | `Response msg -> Base64.encode msg
+        | `Response msg -> Base64.encode_string msg
       in
       send_receive_string t ~log ~component ~here:[%here] msg
       >>| consume_challenge_or_result)

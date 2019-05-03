@@ -10,7 +10,7 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml" {>= "4.07.0" & < "4.08.0"}
+  "ocaml" {>= "4.07.0"}
   "async"
   "async_extra"
   "async_inotify"
@@ -18,13 +18,13 @@ depends: [
   "async_shell"
   "async_ssl"
   "core"
-  "core_extended"
   "email_message"
   "ppx_jane"
   "re2"
   "resource_cache"
   "sexp_macro"
   "textutils"
+  "base64"
   "cryptokit"
   "dune"           {build & >= "1.5.1"}
 ]

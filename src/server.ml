@@ -524,7 +524,7 @@ module Make (Cb : Plugin.S) = struct
                   ~here:[%here]
                   ~flows
                   ~component
-                  (Smtp_reply.start_authentication_input_334 (Base64.encode msg))
+                  (Smtp_reply.start_authentication_input_334 (Base64.encode_exn msg))
               in
               (match%bind Reader.read_line reader with
                | `Eof ->

@@ -147,7 +147,7 @@ module Resource = struct
 end
 
 module Client_cache = struct
-  include Resource_cache.Make (Resource)
+  include Resource_cache.Make (Resource) ()
 
   let init ~config k = init ~config ~log_error:(Async.Log.Global.string ~level:`Error) k
 end
