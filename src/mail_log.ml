@@ -574,10 +574,11 @@ let error ?dont_send_to_monitor =
 ;;
 
 let null_log =
-  Log.create
-    ~level:`Error
-    ~output:[ Log.Output.create ~flush:(fun () -> return ()) (fun _ -> Deferred.unit) ]
-    ~on_error:(`Call ignore)
+  lazy
+    (Log.create
+       ~level:`Error
+       ~output:[ Log.Output.create ~flush:(fun () -> return ()) (fun _ -> Deferred.unit) ]
+       ~on_error:(`Call ignore))
 ;;
 
 let with_flow_and_component ~flows ~component t =
@@ -621,7 +622,7 @@ let adjust_log_levels
   if Level.( < ) remap_info_to minimum_level
   && Level.( < ) remap_error_no_monitor_to minimum_level
   && Level.( < ) remap_error_to minimum_level
-  then null_log
+  then force null_log
   else if minimum_level = log_level
        && remap_info_to = `Info
        && remap_error_no_monitor_to = `Error_no_monitor
