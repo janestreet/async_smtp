@@ -59,7 +59,7 @@ module Count = struct
   let which =
     Command.Param.(
       choose_one
-        ~if_nothing_chosen:(`Default_to `All)
+        ~if_nothing_chosen:(Default_to `All)
         [ flag "-frozen-only" no_arg ~doc:" Only count frozen messages"
           |> map ~f:(fun b -> Option.some_if b `Only_frozen)
         ; flag "-active-only" no_arg ~doc:" Only count active messages"
