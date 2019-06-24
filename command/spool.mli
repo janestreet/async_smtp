@@ -9,7 +9,8 @@ module Status : sig
       [ `Ascii_table
       | `Ascii_table_with_max_width of int
       | `Exim
-      | `Sexp ]
+      | `Sexp
+      ]
     [@@deriving sexp]
 
     val arg_type : t Command.Param.Arg_type.t
@@ -17,16 +18,16 @@ module Status : sig
   end
 
   val dispatch
-    :  format:[`Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp]
+    :  format:[ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
     -> Rpc.Connection.t
     -> unit Deferred.t
 end
 
 module Count : sig
-  val which : [`Only_frozen | `Only_active | `All] Command.Param.t
+  val which : [ `Only_frozen | `Only_active | `All ] Command.Param.t
 
   val dispatch
-    :  which:[`Only_frozen | `Only_active | `All]
+    :  which:[ `Only_frozen | `Only_active | `All ]
     -> Rpc.Connection.t
     -> int Deferred.t
 end

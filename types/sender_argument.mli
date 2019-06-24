@@ -5,7 +5,7 @@ open! Core
 
 type t =
   | Auth of Email_address.t option
-  | Body of [`Mime_8bit | `Mime_7bit]
+  | Body of [ `Mime_8bit | `Mime_7bit ]
 [@@deriving sexp_of, compare, hash]
 
 val of_string : string -> t Or_error.t

@@ -28,7 +28,7 @@ module Peer_info : sig
 
   val hello
     :  t
-    -> [`Simple of string | `Extended of string * Smtp_extension.t list] option
+    -> [ `Simple of string | `Extended of string * Smtp_extension.t list ] option
 
   val supports_extension : t -> Smtp_extension.t -> bool
 end
@@ -46,7 +46,8 @@ module Envelope_status : sig
     [ `Rejected_sender of Smtp_reply.t
     | `No_recipients of rejected_recipients
     | `Rejected_sender_and_recipients of Smtp_reply.t * rejected_recipients
-    | `Rejected_body of Smtp_reply.t * rejected_recipients ]
+    | `Rejected_body of Smtp_reply.t * rejected_recipients
+    ]
   [@@deriving sexp_of]
 
   type t = (ok, err) Result.t [@@deriving sexp_of]
@@ -70,16 +71,16 @@ module Tcp : sig
 
   (** Establish a connection to the given address and perform the appropriate
       SMTP handshake. Use [send_envelope] to (attempt) to deliver messages. *)
-  val with_ :
-    (?config:Client_config.t
-     -> ?credentials:Credentials.t (** default: [Credentials.Anon] *)
-     -> log:Mail_log.t
-     -> ?flows:Mail_log.Flows.t
-     -> ?component:Mail_log.Component.t
-     -> Host_and_port.t
-     -> f:(t -> 'a Deferred.Or_error.t)
-     -> 'a Deferred.Or_error.t)
-      Tcp.with_connect_options
+  val with_
+    : (?config:Client_config.t
+       -> ?credentials:Credentials.t (** default: [Credentials.Anon] *)
+       -> log:Mail_log.t
+       -> ?flows:Mail_log.Flows.t
+       -> ?component:Mail_log.Component.t
+       -> Host_and_port.t
+       -> f:(t -> 'a Deferred.Or_error.t)
+       -> 'a Deferred.Or_error.t)
+        Tcp.with_connect_options
 end
 
 module Expert : sig

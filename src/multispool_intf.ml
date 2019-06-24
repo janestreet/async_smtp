@@ -64,7 +64,8 @@ module Spoolable = struct
       type t
 
       (** [of_string] and [to_string] are used to persist and read [t] on disk. *)
-      include Stringable.S with type t := t
+      include
+        Stringable.S with type t := t
     end
 
     (** [Spoolable.Data.t] is where the "real" data lives and it allows for data-specific
@@ -181,7 +182,8 @@ module type S = sig
     -> Spoolable.Metadata.t
     -> Spoolable.Data.t
     -> [ `Reserve of Spoolable.Name_generator.t
-       | `Use of Spoolable.Name_generator.Unique_name.t ]
+       | `Use of Spoolable.Name_generator.Unique_name.t
+       ]
     -> Entry.t Deferred.Or_error.t
 
   (** Do something with the contents of an entry within [f].  Use [with_entry] if you
@@ -191,7 +193,7 @@ module type S = sig
   val with_entry
     :  f:(Spoolable.Metadata.t
           -> Data_file.t
-          -> ([`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] * 'a)
+          -> ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a)
                Deferred.t)
     -> Entry.t
     -> 'a Deferred.Or_error.t
@@ -202,10 +204,10 @@ module type S = sig
   val with_entry'
     :  f:(Spoolable.Metadata.t
           -> Data_file.t
-          -> ([`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] * 'a)
+          -> ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a)
                Deferred.t)
     -> Entry.t
-    -> [`Ok of 'a | `Not_found] Deferred.Or_error.t
+    -> [ `Ok of 'a | `Not_found ] Deferred.Or_error.t
 
   (** Interface for iteration and waiting on queue activity.  Multiple processes will not
       interfere with one another. *)
@@ -220,7 +222,8 @@ module type S = sig
       :  ?stop:unit Deferred.t
       -> f:(Spoolable.Metadata.t
             -> Data_file.t
-            -> [`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] Deferred.t)
+            -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ]
+                 Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
 
@@ -229,7 +232,8 @@ module type S = sig
     val iter_available
       :  f:(Spoolable.Metadata.t
             -> Data_file.t
-            -> [`Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove] Deferred.t)
+            -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ]
+                 Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
   end
@@ -266,7 +270,7 @@ module type S = sig
         race to grab an [Entry.t].  See [with_entry'] for a higher-level interface. *)
     val checkout'
       :  Entry.t
-      -> [`Not_found | `Ok of Checked_out_entry.t] Deferred.Or_error.t
+      -> [ `Not_found | `Ok of Checked_out_entry.t ] Deferred.Or_error.t
 
     (** Get a hold of all currently checked out entries in the given [queue].
         This operation breaks the invariant that each [t] has a single owner. It should
@@ -282,13 +286,14 @@ module type S = sig
       val dequeue
         :  ?stop:unit Deferred.t
         -> Queue_reader.t
-        -> [`Stopped | `Checked_out of Checked_out_entry.t * Queue_reader.t]
+        -> [ `Stopped | `Checked_out of Checked_out_entry.t * Queue_reader.t ]
              Deferred.Or_error.t
 
       (** Dequeue the next entry that that is available, if any.  Do not wait. *)
       val dequeue_available
         :  Queue_reader.t
-        -> ([`Nothing_available | `Checked_out of Checked_out_entry.t] * Queue_reader.t)
+        -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ]
+            * Queue_reader.t)
              Deferred.Or_error.t
     end
   end
@@ -376,8 +381,7 @@ module Monitor = struct
 
       type t =
         { check_every : Time.Span.t (* default: 15 seconds *)
-        ; alert_after_cycles : int
-        (* default: 2 cycles   *)
+        ; alert_after_cycles : int (* default: 2 cycles   *)
         }
 
       val create : ?check_every:Time.Span.t -> ?alert_after_cycles:int -> unit -> t

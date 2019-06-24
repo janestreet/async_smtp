@@ -24,7 +24,7 @@ end
     Returns the list of entries that were recovered along with any errors that occurred. *)
 val uncheckout_all_entries
   :  t
-  -> ([`Recovered of string list] * [`Errors of Error.t option]) Deferred.t
+  -> ([ `Recovered of string list ] * [ `Errors of Error.t option ]) Deferred.t
 
 val ls : t -> Message.Queue.t list -> Entry.t list Or_error.t Deferred.t
 
@@ -47,7 +47,7 @@ val send
   :  Message.t
   -> log:Mail_log.t
   -> client_cache:Client_cache.t
-  -> [`Delivered | `Failed of Error.t] Or_error.t Deferred.t
+  -> [ `Delivered | `Failed of Error.t ] Or_error.t Deferred.t
 
 val freeze : Message.t -> log:Mail_log.t -> unit Or_error.t Deferred.t
 

@@ -54,8 +54,7 @@ module T = struct
   type t = Stable.V2.t =
     { sender : Sender.t
     ; sender_args : Sender_argument.t list [@sexp.list]
-    ; recipients :
-        Email_address.t list
+    ; recipients : Email_address.t list
     ; rejected_recipients : Email_address.t list
     ; route : string option
     ; id : Envelope_id.t [@compare.ignore] [@hash.ignore]

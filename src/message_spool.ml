@@ -106,8 +106,10 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
 
 let with_file
       t
-      (f : On_disk_spool.Data_file.t -> ([`Sync_meta | `Unlink] * 'a) Or_error.t Deferred.t)
-  : 'a Or_error.t Deferred.t =
+      (f :
+         On_disk_spool.Data_file.t -> ([ `Sync_meta | `Unlink ] * 'a) Or_error.t Deferred.t)
+  : 'a Or_error.t Deferred.t
+  =
   entry t
   >>=? fun entry ->
   return (Message.Queue.of_status' (Message.status t))
@@ -120,9 +122,9 @@ let with_file
           "spooled message in memory differs from spooled message on disk"
           (`In_memory t, `On_disk meta, `Entry entry)
           [%sexp_of:
-            [`In_memory of Message.t]
-            * [`On_disk of Message.t]
-            * [`Entry of On_disk_spool.Entry.t]]
+            [ `In_memory of Message.t ]
+            * [ `On_disk of Message.t ]
+            * [ `Entry of On_disk_spool.Entry.t ]]
       in
       return (`Save (meta, original_queue), Error e)
     | true ->
@@ -297,7 +299,8 @@ let send_to_hops t ~log ~client_cache data_file =
          ~allow_rejected_recipients:false
          envelope_status
      with
-     | Ok _msg_id -> (* Already logged by the client *)
+     | Ok _msg_id ->
+       (* Already logged by the client *)
        return `Done
      | Error e ->
        (* We are being conservative here for simplicity - if we get a permanent error
@@ -344,8 +347,7 @@ let do_send t ~log ~client_cache =
       Ok (`Unlink, `Delivered)
     | (`Fail_permanently | `Try_later) as fail ->
       (match fail, Message.retry_intervals t with
-       | `Fail_permanently, _
-       | `Try_later, [] ->
+       | `Fail_permanently, _ | `Try_later, [] ->
          let delivery_failure = last_relay_error t in
          Message.set_status t `Frozen;
          Ok (`Sync_meta, `Failed delivery_failure)

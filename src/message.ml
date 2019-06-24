@@ -30,7 +30,8 @@ module Stable = struct
         | `Frozen
         | `Removed
         | `Quarantined of Quarantine_reason.V1.t
-        | `Delivered ]
+        | `Delivered
+        ]
       [@@deriving sexp, bin_io]
 
       let%expect_test _ =
@@ -47,7 +48,7 @@ module Stable = struct
       ; flows : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
       ; parent_id : Smtp_envelope.Id.V1.t
       ; spool_date : Time.V1.t
-      ; next_hop_choices : [`Inet of Host_and_port.V1.t] list
+      ; next_hop_choices : [ `Inet of Host_and_port.V1.t ] list
       ; mutable retry_intervals : Retry_interval.V2.t list
       ; mutable remaining_recipients : Email_address.V1.t list
       ; mutable failed_recipients : Email_address.V1.t list
@@ -70,7 +71,7 @@ module Stable = struct
       ; flows : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
       ; parent_id : Smtp_envelope.Id.V1.t
       ; spool_date : Time.V1.t
-      ; next_hop_choices : [`Inet of Host_and_port.V1.t] list
+      ; next_hop_choices : [ `Inet of Host_and_port.V1.t ] list
       ; mutable retry_intervals : Retry_interval.V2.t list
       ; mutable remaining_recipients : Email_address.V1.t list
       ; mutable failed_recipients : Email_address.V1.t list
@@ -297,8 +298,7 @@ let compare t1 t2 = Sexp.compare (sexp_of_t t1) (sexp_of_t t2)
 
 let status t =
   match t.status with
-  | `Send_at time
-    when Time.(time < now ()) -> `Send_now
+  | `Send_at time when Time.(time < now ()) -> `Send_now
   | status -> status
 ;;
 

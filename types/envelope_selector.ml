@@ -3,7 +3,7 @@ open Email_message
 
 module Email_selector : sig
   module Base : sig
-    type t = [ | Email_selector.Base.t] [@@deriving sexp]
+    type t = [ | Email_selector.Base.t ] [@@deriving sexp]
 
     include module type of Email_selector.Base with type t := t
   end
@@ -14,7 +14,7 @@ end = struct
     include (
       Email_selector.Stable.Base.V1 :
       sig
-        type t = [ | Email_selector.Base.t] [@@deriving sexp]
+        type t = [ | Email_selector.Base.t ] [@@deriving sexp]
       end
       with type t := Email_selector.Base.t)
   end
@@ -28,7 +28,8 @@ module Base = struct
     [ Email_selector.Base.t
     | `envelope_sender of Regex.t
     | `exists_envelope_recipient of Regex.t
-    | `all_envelope_recipients of Regex.t ]
+    | `all_envelope_recipients of Regex.t
+    ]
   [@@deriving sexp]
 
   let matches' t envelope =

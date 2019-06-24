@@ -16,7 +16,8 @@ module Command : sig
     :  summary:string
     -> ?readme:(unit -> string)
     -> ([ `Configs of Smtp_server.Config.t * Smtp_spool.Config.t
-        | `Rpc of Rpc.Connection.t ]
+        | `Rpc of Rpc.Connection.t
+        ]
         -> unit Deferred.t)
          Param.t
     -> t
@@ -68,8 +69,7 @@ end = struct
         | None, None, None ->
           failwith
             "At least one of (-rpc-server) or (-server-config and -spool-config) required"
-        | None, Some _, None
-        | None, None, Some _ ->
+        | None, Some _, None | None, None, Some _ ->
           failwith "Both -server-config and -spool-config required, or use -rpc-server"
         | None, Some server_config, Some _ ->
           let port = Smtp_server.Config.rpc_port server_config in

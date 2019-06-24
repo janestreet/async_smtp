@@ -8,7 +8,7 @@ type email =
 
 type email_with_suffix =
   { prefix : string option
-  ; sender : [`Email of email | `Null]
+  ; sender : [ `Email of email | `Null ]
   ; suffix : string
   }
 [@@deriving sexp, compare]

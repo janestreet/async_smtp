@@ -18,3 +18,4 @@ val tag' : ?tag:string -> ?here:Source_code_position.t -> t -> t
 val reject : t -> Smtp_reply.t option
 
 val error : t -> Error.t
+

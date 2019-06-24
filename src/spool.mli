@@ -55,6 +55,7 @@ module Message_id = Message.Id
 
 type t
 
+
 (** Lock the spool directory and load all the files that are already present there. Note
     that for the purposes of locking, the spool directory assumed to NOT be on an NFS file
     system. *)
@@ -65,7 +66,7 @@ val create : config:Config.t -> log:Mail_log.t -> unit -> t Deferred.Or_error.t
     message. We make no guarantees about the order of delivery of messages. *)
 val add
   :  t
-  -> ?initial_status:[`Frozen | `Send_now] (** default: `Send_now *)
+  -> ?initial_status:[ `Frozen | `Send_now ] (** default: `Send_now *)
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
   -> Smtp_envelope.Routed.Batch.t list
@@ -93,7 +94,8 @@ module Send_info : sig
   type t =
     [ `All_messages
     | `Frozen_only
-    | `Some_messages of Message_id.t list ]
+    | `Some_messages of Message_id.t list
+    ]
 end
 
 val send
@@ -111,7 +113,7 @@ val remove : t -> Message_id.t list -> unit Deferred.Or_error.t
 module Recover_info : sig
   type t =
     { msgs : Message_id.t list
-    ; from : [`Removed | `Quarantined]
+    ; from : [ `Removed | `Quarantined ]
     }
 end
 
@@ -134,7 +136,8 @@ module Spooled_message_info : sig
        | `Frozen
        | `Removed
        | `Delivered
-       | `Quarantined of Quarantine_reason.t ]
+       | `Quarantined of Quarantine_reason.t
+       ]
 
   (* These will not be populated for information obtained using [status].  Use
      [status_from_disk] if you want to see envelopes. Part of the reason is that
@@ -152,7 +155,7 @@ module Status : sig
 
   val to_formatted_string
     :  t
-    -> format:[`Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp]
+    -> format:[ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
     -> string
 end
 
@@ -177,13 +180,14 @@ module Event : sig
     | `Frozen
     | `Removed
     | `Unfrozen
-    | `Recovered of [`From_quarantined | `From_removed]
-    | `Quarantined of [`Reason of Quarantine_reason.t] ]
+    | `Recovered of [ `From_quarantined | `From_removed ]
+    | `Quarantined of [ `Reason of Quarantine_reason.t ]
+    ]
     * Message_id.t
     * Smtp_envelope.Info.t
   [@@deriving sexp_of]
 
-  type t = Time.t * [`Spool_event of spool_event | `Ping] [@@deriving sexp_of]
+  type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of]
 
   include Comparable.S_plain with type t := t
 

@@ -8,7 +8,7 @@ let valid_username = "username"
 let valid_password = "password"
 
 let plugin ~login ~plain =
-  ( module struct
+  (module struct
     open Smtp_monad.Let_syntax
     module State = Unit
 
@@ -29,7 +29,9 @@ let plugin ~login ~plain =
                   struct
                     type session = t
 
-                    let upgrade_to_tls ~log:_ t = return { t with tls = true }
+                    let upgrade_to_tls ~log:_ t =
+                      return { t with tls = true }
+                    ;;
                   end :
                     Smtp_server.Plugin.Start_tls with type session = t)))
           ; Option.some_if
@@ -77,9 +79,8 @@ let plugin ~login ~plain =
     end
 
     let rpcs () = []
-  end
-  : Smtp_server.Plugin.S
-    with type State.t = unit )
+  end : Smtp_server.Plugin.S
+    with type State.t = unit)
 ;;
 
 let anon = Smtp_client.Credentials.anon

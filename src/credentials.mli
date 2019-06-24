@@ -15,7 +15,7 @@ val get_auth_client
   :  t
   -> tls:bool (** Plaintext protocols should not be used without [tls] *)
   -> Smtp_extension.t list
-  -> [`Anon | `Auth_with of (module Mech)] Or_error.t
+  -> [ `Anon | `Auth_with of (module Mech) ] Or_error.t
 
 module Stable : sig
   module Login : sig

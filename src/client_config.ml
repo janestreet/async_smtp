@@ -7,11 +7,11 @@ module Tls = struct
     { version : Ssl.Version.t option
     ; options : Ssl.Opt.t list option
     ; name : string option
-    ; allowed_ciphers : [`Secure | `Openssl_default | `Only of string list]
+    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; ca_file : string option
     ; ca_path : string option
-    ; mode : [`Required | `Always_try | `If_available]
-    ; certificate_mode : [`Ignore | `Verify]
+    ; mode : [ `Required | `Always_try | `If_available ]
+    ; certificate_mode : [ `Ignore | `Verify ]
     }
   [@@deriving sexp, fields]
 
@@ -33,8 +33,8 @@ module Domain_suffix = String
 type t =
   { greeting : string option [@sexp.option]
   ; tls : (Domain_suffix.t * Tls.t) list
-  ; send_receive_timeout : [`Default | `This of Time.Span.t]
-  ; final_ok_timeout : [`Default | `This of Time.Span.t]
+  ; send_receive_timeout : [ `Default | `This of Time.Span.t ]
+  ; final_ok_timeout : [ `Default | `This of Time.Span.t ]
   }
 [@@deriving sexp, fields]
 

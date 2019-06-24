@@ -37,7 +37,7 @@ module type For_test = sig
     -> ?max_message_size:Byte_units.t
     -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
-    -> ?malformed_emails:[`Reject | `Wrap]
+    -> ?malformed_emails:[ `Reject | `Wrap ]
     -> ?local_ip_address:Socket.Address.Inet.t
     -> ?remote_ip_address:Socket.Address.Inet.t
     -> Reader.t

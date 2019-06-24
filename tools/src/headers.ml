@@ -8,7 +8,7 @@ module Config = struct
   module Header_cond = struct
     type t =
       { name : Email_headers.Stable.Name.V1.t
-      ; if_ : [`Contains of string] option [@sexp.option]
+      ; if_ : [ `Contains of string ] option [@sexp.option]
       }
     [@@deriving sexp]
   end
@@ -16,7 +16,7 @@ module Config = struct
   module Listed_header_cond = struct
     type t =
       { name : Email_headers.Stable.Name.V1.t
-      ; if_ : [`Contains of string] option [@sexp.option]
+      ; if_ : [ `Contains of string ] option [@sexp.option]
       ; remove_duplicates : unit option [@sexp.option]
       }
     [@@deriving sexp]

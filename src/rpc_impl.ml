@@ -130,6 +130,9 @@ module Gc = struct
 end
 
 module Process = struct
-  let pid = Rpc.Rpc.implement Rpc_intf.Process.pid (fun () () -> Unix.getpid () |> return)
+  let pid =
+    Rpc.Rpc.implement Rpc_intf.Process.pid (fun () () -> Unix.getpid () |> return)
+  ;;
+
   let rpcs = [ pid ]
 end

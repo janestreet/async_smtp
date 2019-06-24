@@ -31,15 +31,15 @@ end
 
 type t
 
-val init :
-  (?component:Mail_log.Component.t
-   -> log:Mail_log.t
-   -> cache_config:Config.t
-   -> client_config:Client_config.t
-   -> load_balance:bool
-   -> unit
-   -> t)
-    Tcp.with_connect_options
+val init
+  : (?component:Mail_log.Component.t
+     -> log:Mail_log.t
+     -> cache_config:Config.t
+     -> client_config:Client_config.t
+     -> load_balance:bool
+     -> unit
+     -> t)
+      Tcp.with_connect_options
 
 val close_and_flush : t -> unit Deferred.t
 val close_started : t -> bool
@@ -61,6 +61,8 @@ module Tcp : sig
     -> [ `Ok of Host_and_port.t * 'a Or_error.t
        | `Error_opening_all_addresses of (Host_and_port.t * Error.t) list
        | `Gave_up_waiting_for_address
-       | `Cache_is_closed ]
+       | `Cache_is_closed
+       ]
          Deferred.t
 end
+

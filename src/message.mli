@@ -19,7 +19,8 @@ module Status : sig
     | `Frozen
     | `Removed
     | `Quarantined of Quarantine_reason.t
-    | `Delivered ]
+    | `Delivered
+    ]
   [@@deriving sexp_of]
 end
 

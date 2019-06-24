@@ -13,7 +13,7 @@ module Peer_info = struct
     ; remote_ip_address : Socket.Address.Inet.t option
     ; greeting : string Set_once.Stable.V1.t
     ; hello :
-        [`Simple of string | `Extended of string * Smtp_extension.t list]
+        [ `Simple of string | `Extended of string * Smtp_extension.t list ]
           Set_once.Stable.V1.t
     }
   [@@deriving sexp_of, fields]
@@ -38,8 +38,7 @@ module Peer_info = struct
 
   let extensions t =
     match Set_once.get t.hello with
-    | None
-    | Some (`Simple _) -> None
+    | None | Some (`Simple _) -> None
     | Some (`Extended (_, extensions)) -> Some extensions
   ;;
 
@@ -91,7 +90,8 @@ type t =
       [ `Bsmtp of Bsmtp.t
       | `Plain of Plain.t
       | `Emulate_tls_for_test of Plain.t
-      | `Tls of Tls.t ]
+      | `Tls of Tls.t
+      ]
   }
 [@@deriving fields]
 
@@ -549,9 +549,9 @@ let maybe_start_tls t ~log ~component =
                ( `Command_not_recognized_500
                | `Command_not_implemented_502
                | `Parameter_not_implemented_504
-               | `Tls_temporarily_unavailable_454 ); _
-           } ->
-         return (Ok ())
+               | `Tls_temporarily_unavailable_454 )
+           ; _
+           } -> return (Ok ())
        | `Received reply ->
          return (Or_error.errorf !"Unexpected response to STARTTLS: %{Smtp_reply}" reply)))
   >>=? fun () -> return (check_tls_security t)
@@ -631,8 +631,7 @@ let do_auth t ~log ~component (module Auth : Auth.Client) =
 
 let maybe_auth t ~log ~component ~credentials =
   match t.mode with
-  | `Bsmtp _
-    when not (Credentials.allows_anon credentials) ->
+  | `Bsmtp _ when not (Credentials.allows_anon credentials) ->
     let command = Smtp_command.Auth ("<mechanism>", None) in
     Log.info
       log

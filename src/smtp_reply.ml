@@ -25,7 +25,8 @@ module Code = struct
     | `Exceeded_storage_allocation_552
     | `Transaction_failed_554
     | `From_to_parameters_bad_555
-    | `Other of 'a ]
+    | `Other of 'a
+    ]
   [@@deriving bin_io, sexp, enumerate]
 
   type t = int t_ [@@deriving bin_io, sexp]
@@ -105,13 +106,17 @@ type t =
   }
 [@@deriving bin_io]
 
-include Sexpable.Of_sexpable (struct
-    type t = int * string list [@@deriving sexp]
-  end)
+include Sexpable.Of_sexpable
+    (struct
+      type t = int * string list [@@deriving sexp]
+    end)
     (struct
       type nonrec t = t
 
-      let of_sexpable (code, raw_message) = { code = Code.of_int code; raw_message }
+      let of_sexpable (code, raw_message) =
+        { code = Code.of_int code; raw_message }
+      ;;
+
       let to_sexpable { code; raw_message } = Code.to_int code, raw_message
     end)
 

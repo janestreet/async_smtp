@@ -15,17 +15,17 @@ type 'a server_flags =
   ?max_message_size:Byte_units.t
   (** [max_message_size] limits the size of messages accepted by the server.
       (default: no practical limit) *)
-  -> ?malformed_emails:[`Reject | `Wrap]
+  -> ?malformed_emails:[ `Reject | `Wrap ]
   (** [malformed_emails] indicates how a malformed email should be handled.
       (default: [`Reject]) *)
-  -> ?server_log:[Log.Level.t | `None]
+  -> ?server_log:[ Log.Level.t | `None ]
   (** [server_log] controls the amount of detail logged from the server logic, excluding
       the plugins. This is usually not relevant to tests and generates a lot of noise.
       (default: `None) *)
   -> ?plugin:(module Server.Plugin.S with type State.t = unit)
   (** Provide a custom [Server.Plugin.S] with custom logic.
       (default: Server.Plugin.Simple) *)
-  -> ?plugin_log:[Log.Level.t | `None]
+  -> ?plugin_log:[ Log.Level.t | `None ]
   (** [plugin_log] controls the log level from the plugin logic. (default: `Debug) *)
   -> 'a
 
@@ -35,7 +35,7 @@ type 'a client_flags =
   -> ?client_greeting:string
   (** [client_greeting] specifies the HELO/EHLO greeting to send.
       (default: "[SMTP TEST CLIENT]") *)
-  -> ?client_log:[Log.Level.t | `None]
+  -> ?client_log:[ Log.Level.t | `None ]
   (** [client_log] controls the log level from the client logic.
       This is usually not relevant to tests and a lot of noise.
       (default: `None) *)
@@ -56,6 +56,7 @@ val envelope
     > 200 Server Response
     Custom plugin output *)
 val smtp : (Smtp_envelope.t list -> unit Deferred.t) client_flags server_flags smtp_flags
+
 
 (** Like [smtp] but instead of the mailcore client you describe the client behaviour
     allowing testing server behaviour in edge cases.
@@ -84,22 +85,22 @@ val smtp : (Smtp_envelope.t list -> unit Deferred.t) client_flags server_flags s
         )
     ]}
 *)
-val manual_client :
-  ((client:(string -> unit Deferred.t)
-    -> server:(string -> unit Deferred.t)
-    -> unit Deferred.t)
-   -> unit Deferred.t)
-    server_flags
-    smtp_flags
+val manual_client
+  : ((client:(string -> unit Deferred.t)
+      -> server:(string -> unit Deferred.t)
+      -> unit Deferred.t)
+     -> unit Deferred.t)
+      server_flags
+      smtp_flags
 
 (** Like [manual_client] but you provide the server side of the protocol.
 
     Use [client] to document expected requests, and [server] to send the responses. *)
-val manual_server :
-  (Smtp_envelope.t list
-   -> (client:(string -> unit Deferred.t)
-       -> server:(string -> unit Deferred.t)
-       -> unit Deferred.t)
-   -> unit Deferred.t)
-    client_flags
-    smtp_flags
+val manual_server
+  : (Smtp_envelope.t list
+     -> (client:(string -> unit Deferred.t)
+         -> server:(string -> unit Deferred.t)
+         -> unit Deferred.t)
+     -> unit Deferred.t)
+      client_flags
+      smtp_flags

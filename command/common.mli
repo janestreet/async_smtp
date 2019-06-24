@@ -15,7 +15,8 @@ module Command : sig
     :  summary:string
     -> ?readme:(unit -> string)
     -> ([ `Configs of Smtp_server.Config.t * Smtp_spool.Config.t
-        | `Rpc of Rpc.Connection.t ]
+        | `Rpc of Rpc.Connection.t
+        ]
         -> unit Deferred.t)
          Param.t
     -> t

@@ -7,7 +7,7 @@ module Tls_options = struct
     { version : Ssl.Version.t option
     ; options : Ssl.Opt.t list option
     ; name : string option
-    ; allowed_ciphers : [`Secure | `Openssl_default | `Only of string list]
+    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; crt_file : string
     ; key_file : string
     ; ca_file : string option
@@ -65,7 +65,7 @@ module Where_to_listen = struct
   end
 
   module V1 = struct
-    type t = [`Port of int] [@@deriving sexp]
+    type t = [ `Port of int ] [@@deriving sexp]
 
     let to_v2 (`Port port) = V2.All_interfaces_on_port port
   end
@@ -103,7 +103,7 @@ type t =
   ; max_concurrent_receive_jobs_per_port : int
   ; timeouts : Timeouts.t
   ; rpc_port : int
-  ; malformed_emails : [`Reject | `Wrap]
+  ; malformed_emails : [ `Reject | `Wrap ]
   ; max_message_size : Byte_units.Stable.V1.t
   ; tls_options : Tls_options.t option [@sexp.option]
   ; tcp_options : Tcp_options.t option [@sexp.option]

@@ -14,8 +14,7 @@ module Test_active_and_passive_queues = struct
 
   let dequeue_and_move ?(timeout_span = sec 5.) ?stop spool ~iterations ~print_detail =
     let rec loop ~timeout reader = function
-      | i
-        when i = iterations ->
+      | i when i = iterations ->
         print_string "Dequeued and moved all expected widgets.\n";
         Deferred.unit
       | i ->
@@ -36,8 +35,7 @@ module Test_active_and_passive_queues = struct
               (match widget with
                | Sprocket _ ->
                  failwith "[dequeue_and_move] only supports Cogs, sorry Cosmo!"
-               | Cog num
-                 when num <> i ->
+               | Cog num when num <> i ->
                  printf !"OUT-OF-ORDER Widget: expected %i, got %i\n" i num;
                  ()
                | Cog _ -> ());
@@ -58,8 +56,7 @@ module Test_active_and_passive_queues = struct
 
   let enqueue spool ~iterations =
     let rec enqueue_loop = function
-      | x
-        when x = iterations -> Deferred.unit
+      | x when x = iterations -> Deferred.unit
       | i ->
         let data =
           Widget.Data.Fields.create ~customer:"Amalgamated Consolidated" ~serial_number:i

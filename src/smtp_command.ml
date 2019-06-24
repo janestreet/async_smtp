@@ -16,36 +16,25 @@ type t =
 [@@deriving variants, sexp]
 
 let of_string = function
-  | str
-    when String.Caseless.is_prefix str ~prefix:"HELO " ->
+  | str when String.Caseless.is_prefix str ~prefix:"HELO " ->
     Hello (String.drop_prefix str 5 |> String.lstrip)
-  | str
-    when String.Caseless.is_prefix str ~prefix:"EHLO " ->
+  | str when String.Caseless.is_prefix str ~prefix:"EHLO " ->
     Extended_hello (String.drop_prefix str 5 |> String.lstrip)
-  | str
-    when String.Caseless.is_prefix str ~prefix:"MAIL FROM:" ->
+  | str when String.Caseless.is_prefix str ~prefix:"MAIL FROM:" ->
     Sender (String.drop_prefix str 10 |> String.lstrip)
-  | str
-    when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
+  | str when String.Caseless.is_prefix str ~prefix:"RCPT TO:" ->
     Recipient (String.drop_prefix str 8 |> String.lstrip)
-  | str
-    when String.Caseless.is_prefix str ~prefix:"AUTH " ->
+  | str when String.Caseless.is_prefix str ~prefix:"AUTH " ->
     let str = String.chop_prefix_exn str ~prefix:"AUTH " in
     (match String.lsplit2 str ~on:' ' with
      | None -> Auth (str, None)
      | Some (method_, first_response) -> Auth (method_, Some first_response))
-  | str
-    when String.Caseless.equal str "DATA" -> Data
-  | str
-    when String.Caseless.equal str "RSET" -> Reset
-  | str
-    when String.Caseless.equal str "QUIT" -> Quit
-  | str
-    when String.Caseless.equal str "HELP" -> Help
-  | str
-    when String.Caseless.equal str "NOOP" -> Noop
-  | str
-    when String.Caseless.equal str "STARTTLS" -> Start_tls
+  | str when String.Caseless.equal str "DATA" -> Data
+  | str when String.Caseless.equal str "RSET" -> Reset
+  | str when String.Caseless.equal str "QUIT" -> Quit
+  | str when String.Caseless.equal str "HELP" -> Help
+  | str when String.Caseless.equal str "NOOP" -> Noop
+  | str when String.Caseless.equal str "STARTTLS" -> Start_tls
   | str -> failwithf "Unrecognized command: %s" str ()
 ;;
 

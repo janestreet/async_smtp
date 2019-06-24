@@ -7,7 +7,7 @@ module Tls_options : sig
     { version : Ssl.Version.t option
     ; options : Ssl.Opt.t list option
     ; name : string option
-    ; allowed_ciphers : [`Secure | `Openssl_default | `Only of string list]
+    ; allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; crt_file : string
     ; key_file : string
     ; ca_file : string option
@@ -55,12 +55,11 @@ module Timeouts : sig
 end
 
 type t =
-  { where_to_listen :
-      Where_to_listen.t list
+  { where_to_listen : Where_to_listen.t list
   ; max_concurrent_receive_jobs_per_port : int
   ; timeouts : Timeouts.t
   ; rpc_port : int
-  ; malformed_emails : [`Reject | `Wrap]
+  ; malformed_emails : [ `Reject | `Wrap ]
   ; max_message_size : Byte_units.t
   ; tls_options : Tls_options.t option
   ; tcp_options : Tcp_options.t option

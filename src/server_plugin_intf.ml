@@ -112,6 +112,7 @@ module type Envelope = sig
     -> t
     -> Email.t
     -> string Smtp_monad.t
+
 end
 
 module type S = sig

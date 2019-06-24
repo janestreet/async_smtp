@@ -4,7 +4,7 @@ module Stable = struct
   module V1 = struct
     type t =
       | Auth of Email_address.Stable.V1.t option
-      | Body of [`Mime_8bit | `Mime_7bit]
+      | Body of [ `Mime_8bit | `Mime_7bit ]
     [@@deriving bin_io, sexp]
 
     let%expect_test _ =
@@ -19,13 +19,12 @@ open! Async
 
 type t = Stable.V1.t =
   | Auth of Email_address.t option
-  | Body of [`Mime_8bit | `Mime_7bit]
+  | Body of [ `Mime_8bit | `Mime_7bit ]
 [@@deriving sexp_of, compare, hash]
 
 let of_string = function
   | "AUTH=<>" -> Ok (Auth None)
-  | str
-    when String.is_prefix str ~prefix:"AUTH=" ->
+  | str when String.is_prefix str ~prefix:"AUTH=" ->
     let email_address = String.drop_prefix str 5 |> String.strip in
     (match Email_address.of_string email_address with
      | Ok email_address -> Ok (Auth (Some email_address))

@@ -4,19 +4,20 @@ open Async_smtp_types
 
 module Envelopes : sig
   type t =
-    { sort : [`Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers] list }
+    { sort : [ `Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers ] list
+    }
   [@@deriving sexp]
 end
 
 module Bodies : sig
   module Rewrite : sig
     type t =
-      Re2.t * [`Rewrite_entire_body_to of string | `Rewrite_all_matches_to of string]
+      Re2.t * [ `Rewrite_entire_body_to of string | `Rewrite_all_matches_to of string ]
   end
 
   type t =
     { rewrites : Rewrite.t list
-    ; hash : [`whole | `parts] option
+    ; hash : [ `whole | `parts ] option
     }
   [@@deriving sexp]
 end

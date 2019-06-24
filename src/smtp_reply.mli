@@ -25,7 +25,8 @@ type t = private
       | `Exceeded_storage_allocation_552
       | `Transaction_failed_554
       | `From_to_parameters_bad_555
-      | `Other of int ]
+      | `Other of int
+      ]
   ; raw_message : string list
   }
 [@@deriving bin_io, sexp]
@@ -65,4 +66,4 @@ val of_bigstring : Bigstring.t -> t
 
 type partial
 
-val parse : ?partial:partial -> string -> [`Done of t | `Partial of partial]
+val parse : ?partial:partial -> string -> [ `Done of t | `Partial of partial ]

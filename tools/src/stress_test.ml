@@ -14,9 +14,9 @@ module Config = struct
     ; port : int
     ; tls : bool
     ; send_n_messages : int
-    ; client_allowed_ciphers : [`Secure | `Openssl_default | `Only of string list]
-    ; server_allowed_ciphers : [`Secure | `Openssl_default | `Only of string list]
-    ; key_type : [`rsa of int | `ecdsa of string | `dsa of int]
+    ; client_allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
+    ; server_allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
+    ; key_type : [ `rsa of int | `ecdsa of string | `dsa of int ]
     }
   [@@deriving fields, sexp]
 
@@ -221,45 +221,45 @@ let main
       return [ Smtp_envelope.create ~sender ~recipients ~email () ])
   in
   let envelopes = List.init num_copies ~f:(fun _ -> envelopes) |> List.concat in
-  throttle :=
-    Throttle.create ~continue_on_error:true ~max_concurrent_jobs:concurrent_senders;
+  throttle
+  := Throttle.create ~continue_on_error:true ~max_concurrent_jobs:concurrent_senders;
   let%bind server_config, client_config =
     Config.server_and_client_config ~concurrent_receivers config
   in
-  let module Server = Smtp_server.Make (struct
-                        open Smtp_monad.Let_syntax
-                        module State = Smtp_server.Plugin.Simple.State
+  let module Server =
+    Smtp_server.Make (struct
+      open Smtp_monad.Let_syntax
+      module State = Smtp_server.Plugin.Simple.State
 
-                        module Session = struct
-                          include Smtp_server.Plugin.Simple.Session
+      module Session = struct
+        include Smtp_server.Plugin.Simple.Session
 
-                          let extensions ~state:_ _ =
-                            [ Smtp_server.Plugin.Extension.Start_tls
-                                ( module struct
-                                  type session = t
+        let extensions ~state:_ _ =
+          [ Smtp_server.Plugin.Extension.Start_tls
+              (module struct
+                type session = t
 
-                                  let upgrade_to_tls ~log:_ t = return { t with tls = true }
-                                end
-                                : Smtp_server.Plugin.Start_tls
-                                  with type session = t )
-                            ]
-                          ;;
-                        end
+                let upgrade_to_tls ~log:_ t = return { t with tls = true }
+              end : Smtp_server.Plugin.Start_tls
+                with type session = t)
+          ]
+        ;;
+      end
 
-                        module Envelope = struct
-                          include Smtp_server.Plugin.Simple.Envelope
+      module Envelope = struct
+        include Smtp_server.Plugin.Simple.Envelope
 
-                          let process ~state:_ ~log:_ ~flows:_ _session t email =
-                            let envelope = smtp_envelope t email in
-                            if !counter >= Config.send_n_messages config
-                            then Ivar.fill_if_empty finished ()
-                            else send ~config ~client_config envelope;
-                            return (sprintf "stress-test:%d" !counter)
-                          ;;
-                        end
+        let process ~state:_ ~log:_ ~flows:_ _session t email =
+          let envelope = smtp_envelope t email in
+          if !counter >= Config.send_n_messages config
+          then Ivar.fill_if_empty finished ()
+          else send ~config ~client_config envelope;
+          return (sprintf "stress-test:%d" !counter)
+        ;;
+      end
 
-                        let rpcs () = []
-                      end)
+      let rpcs () = []
+    end)
   in
   let%bind server =
     Server.start ~server_state:() ~log ~config:server_config >>| Or_error.ok_exn

@@ -24,7 +24,7 @@ module Config = Resource_cache.Address_config
 
 module Tcp_options = struct
   type t =
-    { buffer_age_limit : [`At_most of Time.Span.t | `Unlimited] option
+    { buffer_age_limit : [ `At_most of Time.Span.t | `Unlimited ] option
     ; interrupt : unit Deferred.t option
     ; reader_buffer_size : int option
     ; writer_buffer_size : int option

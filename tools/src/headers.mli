@@ -6,7 +6,7 @@ module Config : sig
   module Header_cond : sig
     type t =
       { name : Email_headers.Name.t
-      ; if_ : [`Contains of string] option
+      ; if_ : [ `Contains of string ] option
       }
     [@@deriving sexp]
   end
@@ -14,7 +14,7 @@ module Config : sig
   module Listed_header_cond : sig
     type t =
       { name : Email_headers.Name.t
-      ; if_ : [`Contains of string] option
+      ; if_ : [ `Contains of string ] option
       ; remove_duplicates : unit option
       }
     [@@deriving sexp]

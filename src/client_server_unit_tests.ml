@@ -38,41 +38,43 @@ let%test_module _ =
       in
       let finished = Ivar.create () in
       let envelope = envelope message in
-      let module Server = Server.Make (struct
-                            open Smtp_monad.Let_syntax
-                            module State = Unit
+      let module Server =
+        Server.Make (struct
+          open Smtp_monad.Let_syntax
+          module State = Unit
 
-                            module Session = struct
-                              include Server.Plugin.Simple.Session
+          module Session = struct
+            include Server.Plugin.Simple.Session
 
-                              let extensions ~state:() _ =
-                                if expect_tls
-                                then
-                                  [ Server.Plugin.Extension.Start_tls
-                                      ( module struct
-                                        type session = t
+            let extensions ~state:() _ =
+              if expect_tls
+              then
+                [ Server.Plugin.Extension.Start_tls
+                    (module struct
+                      type session = t
 
-                                        let upgrade_to_tls ~log:_ session = return { session with tls = true }
-                                      end
-                                      : Server.Plugin.Start_tls
-                                        with type session = t )
-                                  ]
-                                else []
-                              ;;
-                            end
+                      let upgrade_to_tls ~log:_ session =
+                        return { session with tls = true }
+                      ;;
+                    end : Server.Plugin.Start_tls
+                      with type session = t)
+                ]
+              else []
+            ;;
+          end
 
-                            module Envelope = struct
-                              include Server.Plugin.Simple.Envelope
+          module Envelope = struct
+            include Server.Plugin.Simple.Envelope
 
-                              let process ~state:() ~log:_ ~flows:_ _session t email =
-                                let envelope = smtp_envelope t email in
-                                Ivar.fill finished envelope;
-                                return "done"
-                              ;;
-                            end
+            let process ~state:() ~log:_ ~flows:_ _session t email =
+              let envelope = smtp_envelope t email in
+              Ivar.fill finished envelope;
+              return "done"
+            ;;
+          end
 
-                            let rpcs () = []
-                          end)
+          let rpcs () = []
+        end)
       in
       let%bind server =
         Server.start ~server_state:() ~log ~config:server_config >>| Or_error.ok_exn

@@ -9,7 +9,8 @@ module Base : sig
     [ Email_selector.Base.t
     | `envelope_sender of Re2.t
     | `exists_envelope_recipient of Re2.t
-    | `all_envelope_recipients of Re2.t ]
+    | `all_envelope_recipients of Re2.t
+    ]
   [@@deriving sexp]
 
   val matches : t -> Envelope.t -> bool

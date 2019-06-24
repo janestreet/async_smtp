@@ -6,16 +6,16 @@ type 'a smtp_flags = ?tls:bool -> 'a
 
 type 'a server_flags =
   ?max_message_size:Byte_units.t
-  -> ?malformed_emails:[`Reject | `Wrap]
-  -> ?server_log:[Log.Level.t | `None]
+  -> ?malformed_emails:[ `Reject | `Wrap ]
+  -> ?server_log:[ Log.Level.t | `None ]
   -> ?plugin:(module Server.Plugin.S with type State.t = unit)
-  -> ?plugin_log:[Log.Level.t | `None]
+  -> ?plugin_log:[ Log.Level.t | `None ]
   -> 'a
 
 type 'a client_flags =
   ?credentials:Credentials.t
   -> ?client_greeting:string
-  -> ?client_log:[Log.Level.t | `None]
+  -> ?client_log:[ Log.Level.t | `None ]
   -> 'a
 
 let stdout_log ~tag ~level () =
@@ -149,7 +149,7 @@ module Default_plugin : Server.Plugin.S with type State.t = unit = struct
 end
 
 module Safe_plugin (Info : sig
-    val level : [Log.Level.t | `None]
+    val level : [ Log.Level.t | `None ]
     val tag : string
   end)
     (P : Server.Plugin.S) : Server.Plugin.S with type State.t = P.State.t = struct
@@ -179,10 +179,10 @@ module Safe_plugin (Info : sig
 
     let extensions ~state session =
       List.map (P.extensions ~state session) ~f:(function
-        | Server.Plugin.Extension.Auth (module P : Server.Plugin.Auth
-                                         with type session = t) ->
+        | Server.Plugin.Extension.Auth
+            (module P : Server.Plugin.Auth with type session = t) ->
           Server.Plugin.Extension.Auth
-            ( module struct
+            (module struct
               type session = t
 
               let mechanism = P.mechanism
@@ -191,21 +191,19 @@ module Safe_plugin (Info : sig
                 with_stdout_log (fun ~log ->
                   P.negotiate ~log session ~send_challenge_and_expect_response)
               ;;
-            end
-            : Server.Plugin.Auth
-              with type session = t )
-        | Server.Plugin.Extension.Start_tls (module P : Server.Plugin.Start_tls
-                                              with type session = t) ->
+            end : Server.Plugin.Auth
+              with type session = t)
+        | Server.Plugin.Extension.Start_tls
+            (module P : Server.Plugin.Start_tls with type session = t) ->
           Server.Plugin.Extension.Start_tls
-            ( module struct
+            (module struct
               type session = t
 
               let upgrade_to_tls ~log:_ session =
                 with_stdout_log (fun ~log -> P.upgrade_to_tls ~log session)
               ;;
-            end
-            : Server.Plugin.Start_tls
-              with type session = t ))
+            end : Server.Plugin.Start_tls
+              with type session = t))
     ;;
   end
 
@@ -248,13 +246,13 @@ let server_impl
     match plugin with
     | None -> (module Default_plugin)
     | Some (module Plugin : Server.Plugin.S with type State.t = unit) ->
-      ( module Safe_plugin (struct
-            let level = plugin_log
-            let tag = "server.plugin"
-          end)
-            (Plugin)
-          : Server.Plugin.S
-            with type State.t = Plugin.State.t )
+      (module Safe_plugin
+           (struct
+             let level = plugin_log
+             let tag = "server.plugin"
+           end)
+           (Plugin) : Server.Plugin.S
+         with type State.t = Plugin.State.t)
   in
   let module S = Server.For_test (Plugin) in
   with_stdout_log ~tag:"server" ~level:server_log (fun ~log ->

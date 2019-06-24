@@ -21,7 +21,8 @@ open Async_smtp_types
 module Level = struct
   type t =
     [ Log.Level.t
-    | `Error_no_monitor ]
+    | `Error_no_monitor
+    ]
   [@@deriving sexp]
 
   let severity = function
@@ -62,8 +63,7 @@ module Mail_fingerprint = struct
   let rec of_email email =
     let headers = Email_headers.to_list (Email.headers email) in
     match Email.Content.parse email with
-    | Ok (Email.Content.Data _)
-    | Error _ ->
+    | Ok (Email.Content.Data _) | Error _ ->
       { headers
       ; md5 =
           Some
@@ -87,7 +87,8 @@ module Flows = struct
       | `Client_session
       | `Inbound_envelope
       | `Outbound_envelope
-      | `Cached_connection ]
+      | `Cached_connection
+      ]
     [@@deriving sexp_of]
   end
 
@@ -143,8 +144,7 @@ module Component = struct
   let is_parent ~parent t =
     let rec loop = function
       | [], _ -> true
-      | ph :: pt, th :: tt
-        when String.equal ph th -> loop (pt, tt)
+      | ph :: pt, th :: tt when String.equal ph th -> loop (pt, tt)
       | _ -> false
     in
     loop (parent, t)
@@ -160,7 +160,8 @@ module Session_marker = struct
     | `Mail_from
     | `Rcpt_to
     | `Data
-    | `Sending ]
+    | `Sending
+    ]
   [@@deriving sexp]
 
   let of_string s = t_of_sexp (Sexp.of_string s)
@@ -184,7 +185,8 @@ module Message = struct
   module Sender = struct
     type t =
       [ `Sender of Smtp_envelope.Sender.t
-      | `String of string ]
+      | `String of string
+      ]
 
     let to_string : t -> string = function
       | `String str -> str
@@ -201,7 +203,8 @@ module Message = struct
   module Recipient = struct
     type t =
       [ `Email of Email_address.t
-      | `String of string ]
+      | `String of string
+      ]
 
     let to_string : t -> string = function
       | `String str -> str
@@ -226,7 +229,8 @@ module Message = struct
     -> ?remote_ip_address:Socket.Address.Inet.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
-              | `Envelope of Smtp_envelope.t ]
+              | `Envelope of Smtp_envelope.t
+              ]
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t
@@ -405,7 +409,9 @@ module Message = struct
 
   type t = Log.Message.t [@@deriving sexp_of]
 
-  let create = with_info ~f:(fun tags action -> Log.Message.create ~tags (`String action))
+  let create =
+    with_info ~f:(fun tags action -> Log.Message.create ~tags (`String action))
+  ;;
 
   let debugf ~flows =
     with_info ~flows ~f:(fun tags fmt ->

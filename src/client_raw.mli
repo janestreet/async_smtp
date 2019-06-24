@@ -9,7 +9,7 @@ module Peer_info : sig
 
   val hello
     :  t
-    -> [`Simple of string | `Extended of string * Smtp_extension.t list] option
+    -> [ `Simple of string | `Extended of string * Smtp_extension.t list ] option
 
   val supports_extension : t -> Smtp_extension.t -> bool
   val remote_address : t -> Host_and_port.t
@@ -72,7 +72,7 @@ val receive
   -> log:Mail_log.t
   -> component:Mail_log.Component.t
   -> here:Lexing.position
-  -> [`Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
+  -> [ `Bsmtp | `Received of Smtp_reply.t ] Deferred.Or_error.t
 
 val send_receive
   :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
@@ -83,7 +83,7 @@ val send_receive
   -> component:Mail_log.Component.t
   -> here:Lexing.position
   -> Smtp_command.t
-  -> [`Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
+  -> [ `Bsmtp | `Received of Smtp_reply.t ] Deferred.Or_error.t
 
 val send_string
   :  t
@@ -103,7 +103,7 @@ val send_receive_string
   -> component:Mail_log.Component.t
   -> here:Lexing.position
   -> string
-  -> [`Bsmtp | `Received of Smtp_reply.t] Deferred.Or_error.t
+  -> [ `Bsmtp | `Received of Smtp_reply.t ] Deferred.Or_error.t
 
 (* Low level access *)
 

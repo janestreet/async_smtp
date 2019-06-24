@@ -9,8 +9,7 @@ module Utils = struct
     | Error e ->
       let exn = Monitor.extract_exn (Error.to_exn e) in
       (match exn with
-       | Unix.Unix_error (err, _, _)
-         when err = error -> Ok replacement
+       | Unix.Unix_error (err, _, _) when err = error -> Ok replacement
        | e -> Or_error.of_exn e)
     | Ok retval -> Ok (`Ok retval)
   ;;
@@ -419,7 +418,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       ; queue_dir : string
       ; lazy_inotify_pipe : Async_inotify.Event.t Pipe.Reader.t Deferred.t Lazy.t
       ; entry_cache : Entry.t list
-      ; test_mode_last_moved_into : [`Disabled | `Enabled of string option]
+      ; test_mode_last_moved_into : [ `Disabled | `Enabled of string option ]
       }
 
     let create_internal ~test_mode spool queue =
@@ -553,8 +552,8 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
            | entry :: entry_cache ->
              let entry_cache =
                match t.test_mode_last_moved_into with
-               | `Enabled (Some last_moved_into)
-                 when Entry.name entry = last_moved_into ->
+               | `Enabled (Some last_moved_into) when Entry.name entry = last_moved_into
+                 ->
                  (* TESTING ONLY.  Treat the file referenced by the most recent [Moved
                     Into] inotify event as the last cache entry so that we do not process
                     any files that appear in a queue during a traversal with readdir(3).

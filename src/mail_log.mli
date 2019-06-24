@@ -50,7 +50,8 @@ module Flows : sig
       | `Client_session
       | `Inbound_envelope
       | `Outbound_envelope
-      | `Cached_connection ]
+      | `Cached_connection
+      ]
     [@@deriving sexp_of]
   end
 
@@ -115,7 +116,8 @@ module Session_marker : sig
     | `Mail_from
     | `Rcpt_to
     | `Data
-    | `Sending ]
+    | `Sending
+    ]
 end
 
 (** Augment [Log.Level] with [`Error_no_monitor] which are errors that are not
@@ -124,7 +126,8 @@ end
 module Level : sig
   type t =
     [ Log.Level.t
-    | `Error_no_monitor ]
+    | `Error_no_monitor
+    ]
 end
 
 (** Wrapper arround Log.Message.t that allows access to various standardised tag names. *)
@@ -142,12 +145,13 @@ module Message : sig
     -> ?remote_ip_address:Socket.Address.Inet.t
     -> ?email:[ `Fingerprint of Mail_fingerprint.t
               | `Email of Email.t
-              | `Envelope of Smtp_envelope.t ]
+              | `Envelope of Smtp_envelope.t
+              ]
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t
-    -> ?sender:[`Sender of Smtp_envelope.Sender.t | `String of string]
-    -> ?recipients:[`Email of Email_address.t | `String of string] list
+    -> ?sender:[ `Sender of Smtp_envelope.Sender.t | `String of string ]
+    -> ?recipients:[ `Email of Email_address.t | `String of string ] list
     -> ?spool_id:string
     -> ?command:Smtp_command.t
     -> ?reply:Smtp_reply.t
@@ -201,13 +205,13 @@ module Message : sig
 
   (* tag 'sender'. [`String _] if the value doesn't parse *)
 
-  val sender : t -> [`Sender of Smtp_envelope.Sender.t | `String of string] option
+  val sender : t -> [ `Sender of Smtp_envelope.Sender.t | `String of string ] option
 
   (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
      nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
   *)
 
-  val recipients : t -> [`Email of Email_address.t | `String of string] list option
+  val recipients : t -> [ `Email of Email_address.t | `String of string ] list option
 
   (* tag 'email-fingerprint' *)
 

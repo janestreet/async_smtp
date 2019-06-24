@@ -11,7 +11,8 @@ module Status = struct
       [ `Ascii_table
       | `Ascii_table_with_max_width of int
       | `Exim
-      | `Sexp ]
+      | `Sexp
+      ]
     [@@deriving sexp]
 
     let of_string = function
@@ -139,13 +140,10 @@ module Send = struct
         flag "frozen" no_arg ~doc:" force immidiate resending of frozen messages only"
       and msgids = anon (sequence ("msgid" %: msgid)) in
       match msgids with
-      | []
-        when frozen -> `Frozen_only
-      | []
-        when all -> `All_messages
+      | [] when frozen -> `Frozen_only
+      | [] when all -> `All_messages
       | [] -> failwith "Must specify either msgids or -all or -frozen"
-      | _
-        when all || frozen -> failwith "Can't specify msgids and -all or -frozen"
+      | _ when all || frozen -> failwith "Can't specify msgids and -all or -frozen"
       | msgids -> `Some_messages msgids]
   ;;
 

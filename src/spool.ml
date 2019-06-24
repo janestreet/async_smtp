@@ -10,7 +10,8 @@ module Stable = struct
       type t =
         [ `All_messages
         | `Frozen_only
-        | `Some_messages of Message_id.V1.t list ]
+        | `Some_messages of Message_id.V1.t list
+        ]
       [@@deriving bin_io]
 
       let%expect_test _ =
@@ -24,7 +25,7 @@ module Stable = struct
     module V2 = struct
       type t =
         { msgs : Message_id.V1.t list
-        ; from : [`Removed | `Quarantined]
+        ; from : [ `Removed | `Quarantined ]
         }
       [@@deriving bin_io]
 
@@ -70,13 +71,14 @@ module Stable = struct
         | `Frozen
         | `Removed
         | `Unfrozen
-        | `Recovered of [`From_quarantined | `From_removed]
-        | `Quarantined of [`Reason of Quarantine_reason.V1.t] ]
+        | `Recovered of [ `From_quarantined | `From_removed ]
+        | `Quarantined of [ `Reason of Quarantine_reason.V1.t ]
+        ]
         * Message_id.V1.t
         * Smtp_envelope.Info.V2.t
       [@@deriving bin_io, sexp]
 
-      type t = Time.V1.t * [`Spool_event of spool_event | `Ping]
+      type t = Time.V1.t * [ `Spool_event of spool_event | `Ping ]
       [@@deriving bin_io, sexp]
 
       let%expect_test _ =
@@ -106,13 +108,15 @@ module Event = struct
       | `Frozen
       | `Removed
       | `Unfrozen
-      | `Recovered of [`From_quarantined | `From_removed]
-      | `Quarantined of [`Reason of Quarantine_reason.t] ]
+      | `Recovered of [ `From_quarantined | `From_removed ]
+      | `Quarantined of [ `Reason of Quarantine_reason.t ]
+      ]
       * Message_id.t
       * Smtp_envelope.Info.t
     [@@deriving sexp_of, compare]
 
-    type t = Time.t * [`Spool_event of spool_event | `Ping] [@@deriving sexp_of, compare]
+    type t = Time.t * [ `Spool_event of spool_event | `Ping ]
+    [@@deriving sexp_of, compare]
   end
 
   include T
@@ -140,7 +144,7 @@ module Event = struct
 
   let event_gen
         event
-        ~(time : [`Now | `Of_msg of Message.t -> Time.t])
+        ~(time : [ `Now | `Of_msg of Message.t -> Time.t ])
         ~here
         ~log
         event_stream
@@ -598,7 +602,8 @@ module Send_info = struct
   type t =
     [ `All_messages
     | `Frozen_only
-    | `Some_messages of Message_id.t list ]
+    | `Some_messages of Message_id.t list
+    ]
 end
 
 let send_msgs ?(retry_intervals = []) t ids =
@@ -644,7 +649,7 @@ let remove t ids =
 module Recover_info = struct
   type t = Stable.Recover_info.V2.t =
     { msgs : Message_id.t list
-    ; from : [`Removed | `Quarantined]
+    ; from : [ `Removed | `Quarantined ]
     }
 end
 
@@ -800,7 +805,7 @@ module Status = struct
   ;;
 
   let to_formatted_string t ~format =
-    let format : [`Sexp | `Exim | `Ascii_table_with_max_width of int] =
+    let format : [ `Sexp | `Exim | `Ascii_table_with_max_width of int ] =
       match format with
       | `Ascii_table -> `Ascii_table_with_max_width 180
       | (`Sexp | `Exim | `Ascii_table_with_max_width _) as format -> format
@@ -813,12 +818,9 @@ module Status = struct
         let display_span span =
           let style =
             match Time.Span.to_min span with
-            | x
-              when 0. < x && x < 10. -> [ `Green ]
-            | x
-              when 10. <= x && x < 60. -> [ `Yellow ]
-            | x
-              when 60. <= x && x < 180. -> [ `Red ]
+            | x when 0. < x && x < 10. -> [ `Green ]
+            | x when 10. <= x && x < 60. -> [ `Yellow ]
+            | x when 60. <= x && x < 180. -> [ `Red ]
             | _x -> [ `Blue ]
           in
           style, Time.Span.to_short_string span
@@ -857,7 +859,8 @@ module Status = struct
               |> String.concat ~sep:", ")
           in
           let time_on_spool =
-            Column.create_attr "time on spool" (fun a -> display_span (S.time_on_spool a))
+            Column.create_attr "time on spool" (fun a ->
+              display_span (S.time_on_spool a))
           in
           [ id; sender; recipients; time_on_spool; next_attempt; next_hop ]
         in

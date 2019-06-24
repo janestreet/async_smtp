@@ -8,7 +8,8 @@ module Base : sig
     | `recipient of Re2.t
     | `subject of Re2.t
     | `rfc822_id of Re2.t
-    | `flows of Smtp_mail_log.Flows.t ]
+    | `flows of Smtp_mail_log.Flows.t
+    ]
   [@@deriving sexp]
 
   val regex : t -> Re2.t

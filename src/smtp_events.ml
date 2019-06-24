@@ -11,7 +11,8 @@ module Event = struct
     [@@deriving sexp, bin_io]
   end
 
-  type t = Time.t * [`Envelope_received of Envelope_received.t] [@@deriving sexp, bin_io]
+  type t = Time.t * [ `Envelope_received of Envelope_received.t ]
+  [@@deriving sexp, bin_io]
 end
 
 type t = { event_stream : (Event.t -> unit) Bus.Read_write.t }

@@ -16,7 +16,8 @@ module Event : sig
     [@@deriving sexp, bin_io]
   end
 
-  type t = Time.t * [`Envelope_received of Envelope_received.t] [@@deriving sexp, bin_io]
+  type t = Time.t * [ `Envelope_received of Envelope_received.t ]
+  [@@deriving sexp, bin_io]
 end
 
 val envelope_received : t -> Smtp_envelope.t -> unit

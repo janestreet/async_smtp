@@ -20,8 +20,8 @@ module type Client = sig
   val negotiate
     :  log:Mail_log.t
     -> remote:Host_and_port.t option
-    -> send_response_and_expect_challenge:([`Start_auth | `Response of string]
-                                           -> [`Challenge of string | `Auth_completed]
+    -> send_response_and_expect_challenge:([ `Start_auth | `Response of string ]
+                                           -> [ `Challenge of string | `Auth_completed ]
                                                 Deferred.t)
     -> unit Deferred.t
 end

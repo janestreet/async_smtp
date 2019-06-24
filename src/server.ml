@@ -30,7 +30,7 @@ module type For_test = sig
     -> ?max_message_size:Byte_units.t
     -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
-    -> ?malformed_emails:[`Reject | `Wrap]
+    -> ?malformed_emails:[ `Reject | `Wrap ]
     -> ?local_ip_address:Socket.Address.Inet.t
     -> ?remote_ip_address:Socket.Address.Inet.t
     -> Reader.t
@@ -331,25 +331,25 @@ module Make (Cb : Plugin.S) = struct
         | Smtp_command.Auth (meth, initial_resp) ->
           top_auth ~flows ~session ~meth ~initial_resp
         | Smtp_command.Start_tls ->
-          (match
-             (* We assume that [Cb.Session.extensions] only changes after a protocol
-                upgrade. *)
-             Cb.Session.extensions ~state session
-             |> List.find_map ~f:(function
-               | Plugin.Extension.Start_tls cb ->
-                 Option.map tls_options ~f:(fun opts -> opts, cb)
-               | _ -> None)
-           with
-           | None ->
-             let%bind () =
-               command_not_implemented
-                 ~here:[%here]
-                 ~flows
-                 ~component
-                 Smtp_command.Start_tls
-             in
-             top ~session
-           | Some (tls_options, cbs) -> top_start_tls ~session ~flows tls_options cbs)
+          ((* We assume that [Cb.Session.extensions] only changes after a protocol
+              upgrade. *)
+            match
+              Cb.Session.extensions ~state session
+              |> List.find_map ~f:(function
+                | Plugin.Extension.Start_tls cb ->
+                  Option.map tls_options ~f:(fun opts -> opts, cb)
+                | _ -> None)
+            with
+            | None ->
+              let%bind () =
+                command_not_implemented
+                  ~here:[%here]
+                  ~flows
+                  ~component
+                  Smtp_command.Start_tls
+              in
+              top ~session
+            | Some (tls_options, cbs) -> top_start_tls ~session ~flows tls_options cbs)
         | Smtp_command.Sender sender -> top_envelope ~flows ~session sender
         | (Smtp_command.Recipient _ | Smtp_command.Data) as cmd ->
           let%bind () = bad_sequence_of_commands ~here:[%here] ~flows ~component cmd in
@@ -774,11 +774,11 @@ module Make (Cb : Plugin.S) = struct
                 | `Wrap ->
                   let raw = Bigbuffer.contents raw in
                   Ok
-                    ( Email.Simple.Content.text
-                        ~extra_headers:
-                          [ "X-JS-Parse-Error", sprintf !"%{sexp:Error.t}" error ]
-                        raw
-                      :> Email.t ))
+                    (Email.Simple.Content.text
+                       ~extra_headers:
+                         [ "X-JS-Parse-Error", sprintf !"%{sexp:Error.t}" error ]
+                       raw
+                     :> Email.t))
            in
            (match email with
             | Error error ->
@@ -1120,22 +1120,23 @@ let read_bsmtp ?(log = Lazy.force bsmtp_log) reader =
   let server_events = Smtp_events.create () in
   Pipe.create_reader ~close_on_exception:true (fun out ->
     let session_flows = Log.Flows.create `Server_session in
-    let module Smtp = Make (struct
-                        module State = Unit
-                        module Session = Plugin.Simple.Session
+    let module Smtp =
+      Make (struct
+        module State = Unit
+        module Session = Plugin.Simple.Session
 
-                        module Envelope = struct
-                          include Plugin.Simple.Envelope
+        module Envelope = struct
+          include Plugin.Simple.Envelope
 
-                          let process ~state:() ~log:_ ~flows:_ _session t email =
-                            let envelope = smtp_envelope t email in
-                            let%bind () = Pipe.write out (Ok envelope) in
-                            Smtp_monad.return "bsmtp"
-                          ;;
-                        end
+          let process ~state:() ~log:_ ~flows:_ _session t email =
+            let envelope = smtp_envelope t email in
+            let%bind () = Pipe.write out (Ok envelope) in
+            Smtp_monad.return "bsmtp"
+          ;;
+        end
 
-                        let rpcs = Plugin.Simple.rpcs
-                      end)
+        let rpcs = Plugin.Simple.rpcs
+      end)
     in
     Smtp.start_session
       ~state:()

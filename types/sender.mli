@@ -15,7 +15,8 @@ open! Core
 
 type t =
   [ `Null
-  | `Email of Email_address.t ]
+  | `Email of Email_address.t
+  ]
 [@@deriving compare, hash, sexp_of]
 
 val of_string : ?default_domain:string -> string -> t Or_error.t

@@ -33,7 +33,8 @@ module Base = struct
     | `recipient of Regex.t
     | `subject of Regex.t
     | `rfc822_id of Regex.t
-    | `flows of Smtp_mail_log.Stable.Flows.V1.t ]
+    | `flows of Smtp_mail_log.Stable.Flows.V1.t
+    ]
   [@@deriving sexp]
 
   let regex = function
@@ -63,8 +64,7 @@ module Base = struct
         | `String str -> str
         | `Sender sender -> Smtp_envelope.Sender.to_string sender)
       |> Option.value_map ~default:false ~f:(Regex.matches regex)
-    | `envelope_recipient regex
-    | `recipient regex ->
+    | `envelope_recipient regex | `recipient regex ->
       Smtp_mail_log.Message.recipients msg
       |> Option.value ~default:[]
       |> List.map ~f:(function
