@@ -29,9 +29,7 @@ let plugin ~login ~plain =
                   struct
                     type session = t
 
-                    let upgrade_to_tls ~log:_ t =
-                      return { t with tls = true }
-                    ;;
+                    let upgrade_to_tls ~log:_ t = return { t with tls = true }
                   end :
                     Smtp_server.Plugin.Start_tls with type session = t)))
           ; Option.some_if

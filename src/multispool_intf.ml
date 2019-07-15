@@ -222,8 +222,7 @@ module type S = sig
       :  ?stop:unit Deferred.t
       -> f:(Spoolable.Metadata.t
             -> Data_file.t
-            -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ]
-                 Deferred.t)
+            -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
 
@@ -232,8 +231,7 @@ module type S = sig
     val iter_available
       :  f:(Spoolable.Metadata.t
             -> Data_file.t
-            -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ]
-                 Deferred.t)
+            -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
       -> t
       -> unit Deferred.Or_error.t
   end
