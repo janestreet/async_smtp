@@ -213,7 +213,7 @@ module Data = struct
       | `Encode -> fun s -> Dot_escaping.encode_line_string s |> String_monoid.to_string
       | `Decode -> Dot_escaping.decode_line_string
     in
-    Email_headers.map' ~whitespace:`Raw headers ~f:(fun ~name ~value -> f name, value)
+    Email_headers.map' ~normalize:`None headers ~f:(fun ~name ~value -> f name, value)
   ;;
 
   let map_raw_content_bstr body ~encode_or_decode =

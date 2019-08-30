@@ -69,7 +69,7 @@ module Inbound_envelope = struct
     | Some data ->
       let headers =
         Email_headers.of_list
-          ~whitespace:`Normalize
+          ~normalize:`Whitespace
           (Smtp_mail_log.Mail_fingerprint.headers data)
       in
       Email_headers.find_all headers header

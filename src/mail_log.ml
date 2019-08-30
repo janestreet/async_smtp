@@ -369,7 +369,7 @@ module Message = struct
          | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
          | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
            Email_headers.last
-             (Email_headers.of_list ~whitespace:`Raw headers)
+             (Email_headers.of_list ~normalize:`None headers)
              "Message-Id"
          | None -> None)
     in

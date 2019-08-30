@@ -7,46 +7,46 @@ module type With_headers = sig
   val headers : t -> Email_headers.t
 
   val last_header
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.decode
     -> t
     -> Email_headers.Name.t
     -> Email_headers.Value.t option
 
   val find_all_headers
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.decode
     -> t
     -> Email_headers.Name.t
     -> Email_headers.Value.t list
 
   val add_header
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> name:string
     -> value:string
     -> t
 
   val add_headers
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> (string * string) list
     -> t
 
   val set_header
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> name:string
     -> value:string
     -> t
 
   val add_header_at_bottom
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> name:string
     -> value:string
     -> t
 
   val add_headers_at_bottom
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> (string * string) list
     -> t
@@ -54,14 +54,14 @@ module type With_headers = sig
   val set_headers : t -> Email_headers.t -> t
 
   val set_header_at_bottom
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> name:string
     -> value:string
     -> t
 
   val smash_and_add_header
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.encode
     -> t
     -> name:string
     -> value:string
@@ -70,16 +70,20 @@ module type With_headers = sig
   val modify_headers : t -> f:(Email_headers.t -> Email_headers.t) -> t
 
   val filter_headers
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.decode
     -> t
     -> f:(name:Email_headers.Name.t -> value:Email_headers.Value.t -> bool)
     -> t
 
   val map_headers
-    :  ?whitespace:Email_headers.Whitespace.t
+    :  ?normalize:Email_headers.Normalize.decode
     -> t
     -> f:(name:Email_headers.Name.t -> value:Email_headers.Value.t -> string)
     -> t
+
+
+  (** Equivalent to [last_header t "Subject" ~normalize:`Whitespace_and_encoded_words] *)
+  val subject_decoded : t -> string option
 end
 
 module type With_info = sig

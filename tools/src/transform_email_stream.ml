@@ -100,7 +100,7 @@ module Bodies = struct
         let body = hash_body email in
         let email =
           Email.Simple.Expert.content
-            ~whitespace:`Raw
+            ~normalize_headers:`None
             ~encoding:`Quoted_printable
             ~extra_headers:[]
             body
@@ -109,9 +109,9 @@ module Bodies = struct
           email
           (List.fold
              ~init:headers
-             (Email.headers email |> Email_headers.to_list ~whitespace:`Raw)
+             (Email.headers email |> Email_headers.to_list ~normalize:`None)
              ~f:(fun headers (name, value) ->
-               Email_headers.set ~whitespace:`Raw headers ~name ~value)))
+               Email_headers.set ~normalize:`None headers ~name ~value)))
   ;;
 
   let transform t =
@@ -153,7 +153,8 @@ let compare_message_recipients =
 
 let compare_message_subject =
   Compare.map
-    ~f:(fun e -> Envelope.find_all_headers e "Subject")
+    ~f:(fun e ->
+      Envelope.find_all_headers e "Subject")
     (List.compare String.compare)
 ;;
 
@@ -164,7 +165,7 @@ let compare_message_body =
 
 let compare_message_headers =
   List.compare Headers.Header.compare
-  |> Compare.map ~f:(Email_headers.to_list ~whitespace:`Raw)
+  |> Compare.map ~f:(Email_headers.to_list ~normalize:`None)
   |> Compare.map ~f:Email.headers
   |> Compare.map ~f:Envelope.email
 ;;

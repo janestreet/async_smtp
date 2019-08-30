@@ -15,10 +15,10 @@ module Make_with_headers (S : sig
 struct
   include S
 
-  let last_header ?whitespace t name = Email_headers.last ?whitespace (headers t) name
+  let last_header ?normalize t name = Email_headers.last ?normalize (headers t) name
 
-  let find_all_headers ?whitespace t name =
-    Email_headers.find_all ?whitespace (headers t) name
+  let find_all_headers ?normalize t name =
+    Email_headers.find_all ?normalize (headers t) name
   ;;
 
   let modify_headers t ~f =
@@ -26,46 +26,50 @@ struct
     set_headers t (f headers)
   ;;
 
-  let add_header ?whitespace t ~name ~value =
+  let add_header ?normalize t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Email_headers.add ?whitespace headers ~name ~value)
+      Email_headers.add ?normalize headers ~name ~value)
   ;;
 
-  let add_headers ?whitespace t ts =
-    modify_headers t ~f:(fun headers -> Email_headers.add_all ?whitespace headers ts)
+  let add_headers ?normalize t ts =
+    modify_headers t ~f:(fun headers -> Email_headers.add_all ?normalize headers ts)
   ;;
 
-  let set_header ?whitespace t ~name ~value =
+  let set_header ?normalize t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Email_headers.set ?whitespace headers ~name ~value)
+      Email_headers.set ?normalize headers ~name ~value)
   ;;
 
-  let add_header_at_bottom ?whitespace t ~name ~value =
+  let add_header_at_bottom ?normalize t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Email_headers.add_at_bottom ?whitespace headers ~name ~value)
+      Email_headers.add_at_bottom ?normalize headers ~name ~value)
   ;;
 
-  let add_headers_at_bottom ?whitespace t ts =
+  let add_headers_at_bottom ?normalize t ts =
     modify_headers t ~f:(fun headers ->
-      Email_headers.add_all_at_bottom ?whitespace headers ts)
+      Email_headers.add_all_at_bottom ?normalize headers ts)
   ;;
 
-  let set_header_at_bottom ?whitespace t ~name ~value =
+  let set_header_at_bottom ?normalize t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Email_headers.set_at_bottom ?whitespace headers ~name ~value)
+      Email_headers.set_at_bottom ?normalize headers ~name ~value)
   ;;
 
-  let filter_headers ?whitespace t ~f =
-    modify_headers t ~f:(fun headers -> Email_headers.filter ?whitespace headers ~f)
+  let filter_headers ?normalize t ~f =
+    modify_headers t ~f:(fun headers -> Email_headers.filter ?normalize headers ~f)
   ;;
 
-  let map_headers ?whitespace t ~f =
-    modify_headers t ~f:(fun headers -> Email_headers.map ?whitespace headers ~f)
+  let map_headers ?normalize t ~f =
+    modify_headers t ~f:(fun headers -> Email_headers.map ?normalize headers ~f)
   ;;
 
-  let smash_and_add_header ?whitespace t ~name ~value =
+  let smash_and_add_header ?normalize t ~name ~value =
     modify_headers t ~f:(fun headers ->
-      Email_headers.smash_and_add ?whitespace headers ~name ~value)
+      Email_headers.smash_and_add ?normalize headers ~name ~value)
+  ;;
+
+  let subject_decoded t =
+    last_header t "Subject" ~normalize:`Whitespace_and_encoded_words
   ;;
 end
 

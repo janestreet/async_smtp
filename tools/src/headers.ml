@@ -102,8 +102,8 @@ let match_listed_header conds =
 ;;
 
 let strip_whitespace_headers =
-  Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name:_ ~value ->
-    Email_headers.Value.to_string ~whitespace:`Normalize value)
+  Envelope.map_headers ~normalize:`None ~f:(fun ~name:_ ~value ->
+    Email_headers.Value.to_string ~normalize:`Whitespace value)
 ;;
 
 let normalize_whitespace s =
@@ -130,7 +130,7 @@ let%expect_test _ =
 
 let normalize_whitespace_headers cond =
   let cond = match_header cond in
-  Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->
+  Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
     if cond ~name ~value then normalize_whitespace value else value)
 ;;
 
@@ -147,13 +147,13 @@ let hash_headers cond =
     |> sprintf "[hidden : sha256 = %s]"
   in
   let cond = match_header cond in
-  Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->
+  Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
     if cond ~name ~value then hash value else value)
 ;;
 
 let mask_headers cond =
   let cond = match_header cond in
-  Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->
+  Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
     if cond ~name ~value then "XXX" else value)
 ;;
 
@@ -167,7 +167,7 @@ let sort_emails_in_header pattern =
       else l)
     |> List.map ~f:Email_address.to_string
   in
-  Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->
+  Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
     match match_listed_header pattern ~name ~value with
     | None -> value
     | Some remove_duplicates ->
@@ -192,7 +192,7 @@ let sort_words_in_header pattern =
       else l)
     |> String.concat ~sep:" "
   in
-  Envelope.map_headers ~whitespace:`Raw ~f:(fun ~name ~value ->
+  Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
     match match_listed_header pattern ~name ~value with
     | None -> value
     | Some remove_duplicates -> f ~remove_duplicates value)
@@ -200,9 +200,9 @@ let sort_words_in_header pattern =
 
 let sort_headers =
   Envelope.modify_headers ~f:(fun headers ->
-    Email_headers.to_list ~whitespace:`Raw headers
+    Email_headers.to_list ~normalize:`None headers
     |> List.stable_sort ~compare:Header.compare
-    |> Email_headers.of_list ~whitespace:`Raw)
+    |> Email_headers.of_list ~normalize:`None)
 ;;
 
 let sort_envelope_recipients message =
@@ -220,9 +220,9 @@ let dedup_headers conds =
     else false
   in
   Envelope.modify_headers ~f:(fun headers ->
-    Email_headers.to_list ~whitespace:`Raw headers
+    Email_headers.to_list ~normalize:`None headers
     |> List.remove_consecutive_duplicates ~equal
-    |> Email_headers.of_list ~whitespace:`Raw)
+    |> Email_headers.of_list ~normalize:`None)
 ;;
 
 let transform
