@@ -39,7 +39,8 @@ val send'
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
   -> ?reply_to:Email_address.t list
-  -> ?bounce_to:Email_address.t (* defaults to [from] *)
+  -> ?bounce_to:Email_address.t
+  (* defaults to [from] *)
   -> subject:string
   -> ?id:string
   -> ?in_reply_to:string
@@ -60,7 +61,8 @@ val send
   -> ?cc:Email_address.t list
   -> ?bcc:Email_address.t list
   -> ?reply_to:Email_address.t list
-  -> ?bounce_to:Email_address.t (* defaults to [from] *)
+  -> ?bounce_to:Email_address.t
+  (* defaults to [from] *)
   -> subject:string
   -> ?id:string
   -> ?in_reply_to:string
