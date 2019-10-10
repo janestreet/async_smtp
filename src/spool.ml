@@ -915,5 +915,5 @@ let event_stream t =
          ~flows:Log.Flows.none
          ~component:[ "spool"; "event-stream" ]
          "subscription"));
-  Async_bus.pipe1_exn (Bus.read_only t.event_stream) [%here]
+  Async_bus.pipe1_exn t.event_stream [%here]
 ;;
