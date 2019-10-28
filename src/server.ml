@@ -774,7 +774,7 @@ module Make (Cb : Plugin.S) = struct
                 | `Wrap ->
                   let raw = Bigbuffer.contents raw in
                   Ok
-                    (Email.Simple.Content.text
+                    (Email.Simple.Content.text_utf8
                        ~extra_headers:
                          [ "X-JS-Parse-Error", sprintf !"%{sexp:Error.t}" error ]
                        raw

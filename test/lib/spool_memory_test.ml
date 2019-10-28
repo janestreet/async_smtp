@@ -12,7 +12,7 @@ let main ~tmp_dir ~iterations ~msg_size =
     Email.Simple.create
       ~to_:[]
       ~subject:""
-      (Email.Simple.Content.text (String.init msg_size ~f:(fun _ -> '0')))
+      (Email.Simple.Content.text_utf8 (String.init msg_size ~f:(fun _ -> '0')))
   in
   let envelope = Smtp_envelope.create ~sender:`Null ~recipients:[] ~email () in
   let envelope_batch =

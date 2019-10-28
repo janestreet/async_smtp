@@ -215,7 +215,7 @@ let main
           ~from:(Email_address.local_address ())
           ~subject:"Stress test"
           ~to_:recipients
-          (Email.Simple.Content.text "Stress Test")
+          (Email.Simple.Content.text_utf8 "Stress Test")
       in
       let sender = `Null in
       return [ Smtp_envelope.create ~sender ~recipients ~email () ])

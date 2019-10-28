@@ -30,9 +30,9 @@ let command =
             "content-type"
             ~doc:
               (sprintf
-                 "STRING content-type of the message (default: %s)"
-                 (Mimetype.text :> string))
-            (optional_with_default Mimetype.text Mimetype.arg_type))
+                 !"STRING content-type of the message (default: %s)"
+                 (Mimetype.text_utf8 :> string))
+            (optional_with_default Mimetype.text_utf8 Mimetype.arg_type))
       and extra_headers =
         flag
           "extra-header"
@@ -46,7 +46,7 @@ let command =
             let%map content = Simplemail.Content.of_file file in
             Filename.basename file, content)
         in
-        let content = Simplemail.Content.create ~content_type body in
+        let content = Simplemail.Content.create_custom ~content_type body in
         Simplemail.send
           ?server
           ?from

@@ -20,7 +20,7 @@ let%test_module _ =
       Email.Simple.create
         ~to_:recipients
         ~subject:("Async_smtp unit test: " ^ subject)
-        (Email.Simple.Content.text ("Async_smtp unit test:\n  " ^ message))
+        (Email.Simple.Content.text_utf8 ("Async_smtp unit test:\n  " ^ message))
     ;;
 
     let envelope message =

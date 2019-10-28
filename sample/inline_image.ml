@@ -14,10 +14,10 @@ let html_string : string =
            |}
 ;;
 
-let body : Email.Simple.Content.t = Email.Simple.Content.html html_string
+let body : Email.Simple.Content.t = Email.Simple.Content.html_utf8 html_string
 
 let png ~file : Email.Simple.Content.t =
-  Email.Simple.Content.create
+  Email.Simple.Content.create_custom
     ~content_type:Email.Simple.Mimetype.png
     ~encoding:`Base64
     (In_channel.read_all file)
