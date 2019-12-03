@@ -26,7 +26,7 @@ depends: [
   "textutils"
   "base64"
   "cryptokit"
-  "dune"           {>= "1.5.1"}
+  "dune"           {>= "2.0.0"}
 ]
 synopsis: "SMTP client and server"
 description: "
