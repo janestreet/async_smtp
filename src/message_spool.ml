@@ -314,8 +314,8 @@ let send_to_hops t ~log ~client_cache data_file =
           let permanently_failed_recipients, temporarily_failed_recipients =
             List.partition_map rejected_recipients ~f:(fun (recipient, reject) ->
               if Smtp_reply.is_permanent_error reject
-              then `Fst recipient
-              else `Snd recipient)
+              then First recipient
+              else Second recipient)
           in
           Message.set_remaining_recipients t temporarily_failed_recipients;
           Message.set_failed_recipients

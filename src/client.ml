@@ -176,8 +176,8 @@ module Expert = struct
             ~here:[%here]
             (Smtp_command.Recipient (recipient |> Email_address.to_string))
           >>|? function
-          | `Bsmtp -> `Fst recipient
-          | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> `Fst recipient
+          | `Bsmtp -> First recipient
+          | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> First recipient
           | `Received reply ->
             Log.info
               log
@@ -188,7 +188,7 @@ module Expert = struct
                    ~component:(component @ [ "recipient" ])
                    ~reply
                    "send rejected"));
-            `Snd (recipient, reply))
+            Second (recipient, reply))
       >>|? List.partition_map ~f:ident
       >>|? (function
         | [], rejected_recipients -> Error (`No_recipients rejected_recipients)
