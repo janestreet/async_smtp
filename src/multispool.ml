@@ -17,7 +17,7 @@ module Utils = struct
   let open_creat_excl_wronly ?perm path =
     Deferred.Or_error.try_with (fun () ->
       Unix.openfile path ?perm ~mode:[ `Creat; `Excl; `Wronly ])
-    >>| replace_unix_error ~error:Unix.EEXIST ~replacement:`Exists
+    >>| replace_unix_error ~error:EEXIST ~replacement:`Exists
   ;;
 
   let touch path =
@@ -30,7 +30,7 @@ module Utils = struct
 
   let stat_or_notfound path =
     Deferred.Or_error.try_with (fun () -> Unix.stat path)
-    >>| replace_unix_error ~error:Unix.ENOENT ~replacement:`Not_found
+    >>| replace_unix_error ~error:ENOENT ~replacement:`Not_found
   ;;
 
   let ls dir = Deferred.Or_error.try_with (fun () -> Sys.ls_dir dir)
@@ -197,7 +197,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
 
     let rename' ~src_dir ~dst_dir ~filename t =
       rename ~src_dir ~dst_dir ~filename t
-      >>| Utils.replace_unix_error ~error:Unix.ENOENT ~replacement:`Not_found
+      >>| Utils.replace_unix_error ~error:ENOENT ~replacement:`Not_found
     ;;
   end
 
