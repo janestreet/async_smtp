@@ -584,7 +584,8 @@ let null_log =
     (Log.create
        ~level:`Error
        ~output:[ Log.Output.create ~flush:(fun () -> return ()) (fun _ -> Deferred.unit) ]
-       ~on_error:(`Call ignore))
+       ~on_error:(`Call ignore)
+       ())
 ;;
 
 let with_flow_and_component ~flows ~component t =
@@ -614,6 +615,7 @@ let with_flow_and_component ~flows ~component t =
                 ([ Message.Tag.component, sprintf !"%{Component}" (component @ [ "_LOG" ]) ]
                  @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
               (Error.sexp_of_t err)))
+    ()
 ;;
 
 let adjust_log_levels
@@ -659,6 +661,7 @@ let adjust_log_levels
                 ~level:`Error
                 ~tags:[ Message.Tag.component, "_LOG" ]
                 (Error.sexp_of_t err)))
+      ()
 ;;
 
 let%expect_test "with_flow_and_component" =
@@ -676,6 +679,7 @@ let%expect_test "with_flow_and_component" =
                Deferred.unit)
         ]
       ~on_error:`Raise
+      ()
   in
   let info log ~component =
     info log (lazy (Message.create ~flows:[] ~component ~here:[%here] ""));

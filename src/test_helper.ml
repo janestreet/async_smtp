@@ -20,7 +20,7 @@ type 'a client_flags =
 
 let stdout_log ~tag ~level () =
   match level with
-  | `None -> Log.create ~level:`Error ~output:[] ~on_error:(`Call ignore)
+  | `None -> Log.create ~level:`Error ~output:[] ~on_error:(`Call ignore) ()
   | #Log.Level.t as level ->
     let output =
       Log.Output.create
@@ -35,7 +35,7 @@ let stdout_log ~tag ~level () =
              printf "\n%!");
            Deferred.unit)
     in
-    Log.create ~level ~output:[ output ] ~on_error:`Raise
+    Log.create ~level ~output:[ output ] ~on_error:`Raise ()
 ;;
 
 let with_stdout_log ~tag ~level (f : log:Log.t -> 'a Deferred.t) : 'a Deferred.t =
