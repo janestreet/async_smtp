@@ -1,36 +1,40 @@
-open Core
-open Email_message
+open! Core.Core_stable
 
-module Email_selector : sig
-  module Base : sig
-    type t = [ | Email_selector.Base.t ] [@@deriving sexp]
-
-    include module type of Email_selector.Base with type t := t
-  end
-end = struct
+module Stable = struct
   module Base = struct
-    include Email_selector.Base
+    module V1 = struct
+      type t =
+        (* When adding to this type, don't forget to add to examples below. *)
+        [ Email_message.Email_selector.Stable.Base.V1.t
+        | `envelope_sender of Re2_stable.V1.t
+        | `exists_envelope_recipient of Re2_stable.V1.t
+        | `all_envelope_recipients of Re2_stable.V1.t
+        ]
+      [@@deriving bin_shape, sexp]
 
-    include (
-      Email_selector.Stable.Base.V1 :
-      sig
-        type t = [ | Email_selector.Base.t ] [@@deriving sexp]
-      end
-      with type t := Email_selector.Base.t)
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| 60bd581ef4f767466e97e74e3c15f1b8 |}]
+      ;;
+    end
+  end
+
+  module V1 = struct
+    type t = Base.V1.t Blang.V1.t [@@deriving bin_shape, sexp]
+
+    let%expect_test _ =
+      print_endline [%bin_digest: t];
+      [%expect {| 343a90f661b8f1e5dbe9d2c82f93ce4c |}]
+    ;;
   end
 end
 
+open Core
+open Email_message
 module Regex = Re2
 
 module Base = struct
-  type t =
-    (* When adding to this type, don't forget to add to examples below. *)
-    [ Email_selector.Base.t
-    | `envelope_sender of Regex.t
-    | `exists_envelope_recipient of Regex.t
-    | `all_envelope_recipients of Regex.t
-    ]
-  [@@deriving sexp]
+  type t = Stable.Base.V1.t [@@deriving sexp_of]
 
   let matches' t envelope =
     match t with
@@ -59,7 +63,7 @@ module Base = struct
   ;;
 end
 
-type t = Base.t Blang.t [@@deriving sexp]
+type t = Base.t Blang.t [@@deriving sexp_of]
 
 let matches' t envelope = Blang.eval t (fun base -> Base.matches' base envelope)
 

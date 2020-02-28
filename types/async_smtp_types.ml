@@ -31,5 +31,6 @@ module Async_smtp_types_stable = struct
     module Id = Envelope_id.Stable
     module Info = Envelope_info.Stable
     module Retry_interval = Retry_interval.Stable
+    module Selector = Envelope_selector.Stable
   end
 end

@@ -11,14 +11,26 @@ module Base : sig
     | `exists_envelope_recipient of Re2.t
     | `all_envelope_recipients of Re2.t
     ]
-  [@@deriving sexp]
+  [@@deriving sexp_of]
 
   val matches : t -> Envelope.t -> bool
   val matches' : t -> Envelope_bodiless.t -> bool
 end
 
-type t = Base.t Blang.t [@@deriving sexp]
+type t = Base.t Blang.t [@@deriving sexp_of]
 
 val matches : t -> Envelope.t -> bool
 val matches' : t -> Envelope_bodiless.t -> bool
 val example : t
+
+module Stable : sig
+  module Base : sig
+    module V1 : sig
+      type nonrec t = Base.t [@@deriving sexp]
+    end
+  end
+
+  module V1 : sig
+    type nonrec t = t [@@deriving sexp]
+  end
+end

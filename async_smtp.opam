@@ -21,6 +21,7 @@ depends: [
   "email_message"
   "ppx_jane"
   "re2"
+  "re2_stable"
   "resource_cache"
   "sexp_macro"
   "textutils"
