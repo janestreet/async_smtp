@@ -138,16 +138,19 @@ module Expert = struct
              ?local_ip_address:(local_ip_address t)
              ~session_marker:`Sending
              "sending"));
+      let command =
+        Smtp_command.Sender
+          (Smtp_envelope.Sender.to_string_with_arguments
+             ( Smtp_envelope.Info.sender envelope_info
+             , Smtp_envelope.Info.sender_args envelope_info ))
+      in
       send_receive
         t
         ~log
         ~flows
         ~component:(component @ [ "sender" ])
         ~here:[%here]
-        (Smtp_command.Sender
-           (Smtp_envelope.Sender.to_string_with_arguments
-              ( Smtp_envelope.Info.sender envelope_info
-              , Smtp_envelope.Info.sender_args envelope_info )))
+        command
       >>=? (function
         | `Bsmtp -> return (Ok (Ok ()))
         | `Received { Smtp_reply.code = `Ok_completed_250; _ } ->
@@ -160,6 +163,8 @@ module Expert = struct
                  ~here:[%here]
                  ~flows
                  ~component:(component @ [ "sender" ])
+                 ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
+                 ~command
                  ~reply
                  "send rejected"));
           return (Ok (Error (`Rejected_sender reply))))
@@ -168,13 +173,16 @@ module Expert = struct
         ~how:`Sequential
         (Smtp_envelope.Info.recipients envelope_info)
         ~f:(fun recipient ->
+          let command =
+            Smtp_command.Recipient (recipient |> Email_address.to_string)
+          in
           send_receive
             t
             ~log
             ~flows
             ~component:(component @ [ "recipient" ])
             ~here:[%here]
-            (Smtp_command.Recipient (recipient |> Email_address.to_string))
+            command
           >>|? function
           | `Bsmtp -> First recipient
           | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> First recipient
@@ -186,6 +194,8 @@ module Expert = struct
                    ~here:[%here]
                    ~flows
                    ~component:(component @ [ "recipient" ])
+                   ~recipients:[ `Email recipient ]
+                   ~command
                    ~reply
                    "send rejected"));
             Second (recipient, reply))
@@ -195,13 +205,14 @@ module Expert = struct
         | accepted_recipients, rejected_recipients ->
           Ok (accepted_recipients, rejected_recipients))
       >>=?? fun (accepted_recipients, rejected_recipients) ->
+      let command = Smtp_command.Data in
       send_receive
         t
         ~log
         ~flows
         ~component:(component @ [ "data" ])
         ~here:[%here]
-        Smtp_command.Data
+        command
       >>=? (function
         | `Bsmtp -> return (Ok (Ok ()))
         | `Received { Smtp_reply.code = `Start_mail_input_354; _ } ->
@@ -214,6 +225,7 @@ module Expert = struct
                  ~here:[%here]
                  ~flows
                  ~component:(component @ [ "data" ])
+                 ~command
                  ~reply
                  "send rejected"));
           return
