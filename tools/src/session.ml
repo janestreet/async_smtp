@@ -132,7 +132,7 @@ let add_event t message =
       Option.iter
         (Inbound_envelope.find_outbound_envelope in_ outbound_id)
         ~f:(fun out -> Outbound_envelope.add_event out message))
-  | None, Some _ -> failwithp [%here] "invalid log entry" message Message.sexp_of_t
+  | None, Some _ -> failwiths ~here:[%here] "invalid log entry" message Message.sexp_of_t
 ;;
 
 let set_connected t message = t.session_connect <- Some (Message.time message)
