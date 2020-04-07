@@ -26,7 +26,6 @@ module Make (P : Plugin.S) : S with type server_state := P.State.t
 (* Read messages from a bsmtp session transcript. *)
 
 val read_bsmtp : ?log:Mail_log.t -> Reader.t -> Smtp_envelope.t Or_error.t Pipe.Reader.t
-val read_mbox : ?log:Mail_log.t -> Reader.t -> Smtp_envelope.t Or_error.t Pipe.Reader.t
 
 module type For_test = sig
   type server_state
