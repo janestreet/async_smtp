@@ -33,7 +33,7 @@ let v2 =
 ;;
 
 let ensure_parses config =
-  Expect_test_helpers.with_temp_dir (fun dir ->
+  Expect_test_helpers_async.with_temp_dir (fun dir ->
     let path = dir ^/ "config" in
     let%bind () = Writer.save path ~contents:config in
     let%bind (_ : t) = load_exn path in

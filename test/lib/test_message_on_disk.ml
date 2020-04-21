@@ -2,7 +2,8 @@ open! Core
 open Async
 open Async_smtp
 open Async_smtp.Private
-open Expect_test_helpers
+open Expect_test_helpers_core
+open Expect_test_helpers_async
 
 let envelope_batch_and_envelope email_str =
   let envelope =

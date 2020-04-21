@@ -1,7 +1,7 @@
 open! Core
 open Poly
 open Async
-open Expect_test_helpers
+open Expect_test_helpers_async
 open Async_smtp
 
 let valid_username = "username"

@@ -3,7 +3,8 @@ open! Async
 open Async_smtp
 open Async_smtp.Private
 open Email_message
-open Expect_test_helpers
+open Expect_test_helpers_core
+open Expect_test_helpers_async
 
 let main ~tmp_dir ~iterations ~msg_size =
   let%bind spool_dir = Message_spool.create tmp_dir >>| ok_exn in

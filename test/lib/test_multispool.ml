@@ -1,7 +1,8 @@
 open Core
 open Async
 open Async_smtp
-open Expect_test_helpers
+open Expect_test_helpers_core
+open Expect_test_helpers_async
 
 module Widgetspool = Multispool.Make (struct
     include Widget

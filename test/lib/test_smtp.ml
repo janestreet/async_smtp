@@ -1,7 +1,8 @@
 open! Core
 open! Async
 open! Async_smtp.Smtp_expect_test_helper
-open! Expect_test_helpers
+open! Expect_test_helpers_core
+open! Expect_test_helpers_async
 
 let%expect_test "Smtp_expect_test_helper.smtp" =
   let%bind () = smtp [ envelope () ] in
