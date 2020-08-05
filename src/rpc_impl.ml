@@ -52,6 +52,7 @@ module Spool = struct
       Rpc.Rpc.implement Rpc_intf.Spool.Cache.config (fun spool () ->
         return
           (Client_cache.config (Spool.client_cache spool)
+           |> Resource_cache.Address_config.Stable.V2.of_v3
            |> Resource_cache.Address_config.Stable.V1.of_v2))
     ;;
 

@@ -9,6 +9,7 @@ module Stable = struct
       ; connection_cache : Resource_cache.Address_config.Stable.V1.t
                            [@default
                              Resource_cache.Address_config.default
+                             |> Resource_cache.Address_config.Stable.V2.of_v3
                              |> Resource_cache.Address_config.Stable.V1.of_v2]
       ; client : Client_config.t
       }
@@ -73,6 +74,7 @@ let default =
   ; tmp_dir = None
   ; connection_cache =
       Resource_cache.Address_config.default
+      |> Resource_cache.Address_config.Stable.V2.of_v3
       |> Resource_cache.Address_config.Stable.V1.of_v2
   ; client = Client_config.default
   ; load_balance = false

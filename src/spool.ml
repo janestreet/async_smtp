@@ -275,7 +275,9 @@ let create ~config ~log : t Deferred.Or_error.t =
       ~log
       ~component:[ "spool"; "client_cache" ]
       ~cache_config:
-        (config.connection_cache |> Resource_cache.Address_config.Stable.V1.to_v2)
+        (config.connection_cache
+         |> Resource_cache.Address_config.Stable.V1.to_v2
+         |> Resource_cache.Address_config.Stable.V2.to_v3)
       ~client_config:config.client
       ~load_balance:config.load_balance
       ()
