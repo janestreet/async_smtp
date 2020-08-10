@@ -15,10 +15,7 @@ let plugin ~login ~plain =
       include Smtp_server.Plugin.Simple.Session
 
       let greeting _ = "[SMTP TEST SERVER]"
-
-      let check username password =
-        username = valid_username && password = valid_password
-      ;;
+      let check username password = username = valid_username && password = valid_password
 
       let extensions ~state:() _ =
         List.filter_opt

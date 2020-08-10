@@ -295,9 +295,7 @@ let send_to_hops t ~log ~client_cache data_file =
     return `Try_later
   | `Ok (_hop, Ok envelope_status) ->
     (match
-       Client.Envelope_status.ok_or_error
-         ~allow_rejected_recipients:false
-         envelope_status
+       Client.Envelope_status.ok_or_error ~allow_rejected_recipients:false envelope_status
      with
      | Ok _msg_id ->
        (* Already logged by the client *)

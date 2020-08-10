@@ -31,7 +31,8 @@ val ls : t -> Message.Queue.t list -> Entry.t list Or_error.t Deferred.t
 (** The Deferred becomes determined once the messages have been synced to disk. *)
 val enqueue
   :  t
-  -> log:Mail_log.t
+  -> log:
+       Mail_log.t
   -> initial_status:Message.Status.t (** should usually be [`Send_now]*)
   -> Smtp_envelope.Routed.Batch.t
   -> flows:Mail_log.Flows.t

@@ -84,8 +84,7 @@ module Code = struct
   ;;
 
   let all =
-    lazy
-      (List.range 100 999 |> List.filter ~f:(fun i -> of_int i = `Other i) |> all_of_t_)
+    lazy (List.range 100 999 |> List.filter ~f:(fun i -> of_int i = `Other i) |> all_of_t_)
   ;;
 
   (* Check that every int maps uniquely to a code, and back to itself *)
@@ -113,10 +112,7 @@ include Sexpable.Of_sexpable
     (struct
       type nonrec t = t
 
-      let of_sexpable (code, raw_message) =
-        { code = Code.of_int code; raw_message }
-      ;;
-
+      let of_sexpable (code, raw_message) = { code = Code.of_int code; raw_message }
       let to_sexpable { code; raw_message } = Code.to_int code, raw_message
     end)
 
@@ -266,8 +262,7 @@ let of_string str =
     | s :: ss ->
       (match parse ?partial s with
        | `Partial partial -> loop ~partial ss
-       | `Done res ->
-         if List.is_empty ss then res else failwith "More than one SMTP reply")
+       | `Done res -> if List.is_empty ss then res else failwith "More than one SMTP reply")
   in
   String.split_lines str |> loop
 ;;

@@ -336,8 +336,7 @@ let%expect_test "File Behavior" =
       Widgetspool.with_entry entry ~f:(fun widget _data_file ->
         let new_widget = Widget.Metadata.Cog 42 in
         printf
-          !"Replacing '%{sexp:Widget.Metadata.t}' with '%{sexp:Widget.Metadata.t}' \
-            ...\n"
+          !"Replacing '%{sexp:Widget.Metadata.t}' with '%{sexp:Widget.Metadata.t}' ...\n"
           widget
           new_widget;
         Deferred.return (`Save (new_widget, Widget.Queue.Queue2), ()))

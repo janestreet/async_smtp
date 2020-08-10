@@ -64,8 +64,7 @@ module Spoolable = struct
       type t
 
       (** [of_string] and [to_string] are used to persist and read [t] on disk. *)
-      include
-        Stringable.S with type t := t
+      include Stringable.S with type t := t
     end
 
     (** [Spoolable.Data.t] is where the "real" data lives and it allows for data-specific
@@ -191,7 +190,8 @@ module type S = sig
       grabbed by another process (or otherwise disappears).  See [checkout] for a
       lower-level interface. *)
   val with_entry
-    :  f:(Spoolable.Metadata.t
+    :  f:
+         (Spoolable.Metadata.t
           -> Data_file.t
           -> ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a)
                Deferred.t)
@@ -202,7 +202,8 @@ module type S = sig
       race to grab an [Entry.t] and want straightforward handling.  See [checkout'] for a
       lower-level interface.*)
   val with_entry'
-    :  f:(Spoolable.Metadata.t
+    :  f:
+         (Spoolable.Metadata.t
           -> Data_file.t
           -> ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a)
                Deferred.t)
@@ -220,7 +221,8 @@ module type S = sig
         the list is exhausted. *)
     val iter
       :  ?stop:unit Deferred.t
-      -> f:(Spoolable.Metadata.t
+      -> f:
+           (Spoolable.Metadata.t
             -> Data_file.t
             -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
       -> t
@@ -229,7 +231,8 @@ module type S = sig
     (** Iterate over entries in a queue and call [f] on each, if any are available.  Do
         not wait. *)
     val iter_available
-      :  f:(Spoolable.Metadata.t
+      :  f:
+           (Spoolable.Metadata.t
             -> Data_file.t
             -> [ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] Deferred.t)
       -> t
@@ -290,8 +293,7 @@ module type S = sig
       (** Dequeue the next entry that that is available, if any.  Do not wait. *)
       val dequeue_available
         :  Queue_reader.t
-        -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ]
-            * Queue_reader.t)
+        -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ] * Queue_reader.t)
              Deferred.Or_error.t
     end
   end

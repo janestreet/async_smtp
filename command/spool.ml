@@ -216,9 +216,7 @@ module Events = struct
   ;;
 
   let command =
-    Command.rpc
-      ~summary:"view the stream of spool events"
-      (Command.Param.return dispatch)
+    Command.rpc ~summary:"view the stream of spool events" (Command.Param.return dispatch)
   ;;
 end
 

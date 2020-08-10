@@ -31,11 +31,9 @@ module Test_active_and_passive_queues = struct
               Deferred.unit
             | `Checked_out (widget_co, new_reader) ->
               let widget = Expert.Checked_out_entry.contents widget_co in
-              if print_detail
-              then printf !"Dequeued: %{Widget.Metadata} in Queue1\n" widget;
+              if print_detail then printf !"Dequeued: %{Widget.Metadata} in Queue1\n" widget;
               (match widget with
-               | Sprocket _ ->
-                 failwith "[dequeue_and_move] only supports Cogs, sorry Cosmo!"
+               | Sprocket _ -> failwith "[dequeue_and_move] only supports Cogs, sorry Cosmo!"
                | Cog num when num <> i ->
                  printf !"OUT-OF-ORDER Widget: expected %i, got %i\n" i num;
                  ()
@@ -43,8 +41,7 @@ module Test_active_and_passive_queues = struct
               let%bind () =
                 Expert.Checked_out_entry.save widget_co Widget.Queue.Queue2 >>| ok_exn
               in
-              if print_detail
-              then printf !"   Moved: %{Widget.Metadata} to Queue2\n" widget;
+              if print_detail then printf !"   Moved: %{Widget.Metadata} to Queue2\n" widget;
               loop new_reader ~timeout (i + 1))
          | `Timeout ->
            print_string "[dequeue] timed out, something is wrong.\n";

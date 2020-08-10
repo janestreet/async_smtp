@@ -359,8 +359,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       let path = checkout_dir ^/ entry.name in
       let%bind contents = load_metadata path in
       return
-        (`Ok
-           (Checked_out_entry.create entry.spool entry.queue ~name:entry.name contents))
+        (`Ok (Checked_out_entry.create entry.spool entry.queue ~name:entry.name contents))
   ;;
 
   (* Common handler for user-supplied callback functionality.  The low-level user-facing
@@ -498,10 +497,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
          | `Ok (Moved (Into _))
          | `Ok (Created _) -> Ok ()
          | `Eof ->
-           Or_error.error
-             "inotify pipe closed unexpectedly"
-             t.queue_dir
-             [%sexp_of: string])
+           Or_error.error "inotify pipe closed unexpectedly" t.queue_dir [%sexp_of: string])
     ;;
 
     let update_entry_cache t =
@@ -552,8 +548,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
            | entry :: entry_cache ->
              let entry_cache =
                match t.test_mode_last_moved_into with
-               | `Enabled (Some last_moved_into) when Entry.name entry = last_moved_into
-                 ->
+               | `Enabled (Some last_moved_into) when Entry.name entry = last_moved_into ->
                  (* TESTING ONLY.  Treat the file referenced by the most recent [Moved
                     Into] inotify event as the last cache entry so that we do not process
                     any files that appear in a queue during a traversal with readdir(3).
@@ -643,9 +638,7 @@ module Make (S : Multispool_intf.Spoolable.S) = struct
   module Queue_reader = struct
     include Queue_reader_raw
 
-    let create spool queue =
-      Queue_reader_raw.create_internal spool queue ~test_mode:false
-    ;;
+    let create spool queue = Queue_reader_raw.create_internal spool queue ~test_mode:false
   end
 end
 
@@ -870,10 +863,7 @@ module Monitor = struct
       in
       let find_queue_file_too_old queue =
         match
-          List.Assoc.find
-            t.limits.max_queue_ages
-            queue
-            ~equal:[%compare.equal: S.Queue.t]
+          List.Assoc.find t.limits.max_queue_ages queue ~equal:[%compare.equal: S.Queue.t]
         with
         | None -> Fn.id
         | Some age -> find_file_too_old (Dir.Queue queue) ~age

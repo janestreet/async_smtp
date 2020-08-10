@@ -227,10 +227,11 @@ module Message = struct
     -> ?local_ip_address:Socket.Address.Inet.t
     -> ?remote_address:Host_and_port.t
     -> ?remote_ip_address:Socket.Address.Inet.t
-    -> ?email:[ `Fingerprint of Mail_fingerprint.t
-              | `Email of Email.t
-              | `Envelope of Smtp_envelope.t
-              ]
+    -> ?email:
+         [ `Fingerprint of Mail_fingerprint.t
+         | `Email of Email.t
+         | `Envelope of Smtp_envelope.t
+         ]
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t
@@ -295,8 +296,7 @@ module Message = struct
       | Some recipients -> recipients
     in
     let tags =
-      List.map recipients ~f:(function t -> Tag.recipient, Recipient.to_string t)
-      @ tags
+      List.map recipients ~f:(function t -> Tag.recipient, Recipient.to_string t) @ tags
     in
     let sender =
       match sender with
@@ -333,11 +333,8 @@ module Message = struct
         (match email with
          | Some (`Envelope envelope) ->
            Some
-             (Smtp_envelope.email envelope
-              |> Email.raw_content
-              |> Email.Raw_content.length)
-         | Some (`Email email) ->
-           Some (Email.raw_content email |> Email.Raw_content.length)
+             (Smtp_envelope.email envelope |> Email.raw_content |> Email.Raw_content.length)
+         | Some (`Email email) -> Some (Email.raw_content email |> Email.Raw_content.length)
          | Some (`Fingerprint _) -> None
          | None -> None)
     in
@@ -368,9 +365,7 @@ module Message = struct
            Email_headers.last (Smtp_envelope.email envelope |> Email.headers) "Message-Id"
          | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
          | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
-           Email_headers.last
-             (Email_headers.of_list ~normalize:`None headers)
-             "Message-Id"
+           Email_headers.last (Email_headers.of_list ~normalize:`None headers) "Message-Id"
          | None -> None)
     in
     let tags =
@@ -409,9 +404,7 @@ module Message = struct
 
   type t = Log.Message.t [@@deriving sexp_of]
 
-  let create =
-    with_info ~f:(fun tags action -> Log.Message.create ~tags (`String action))
-  ;;
+  let create = with_info ~f:(fun tags action -> Log.Message.create ~tags (`String action))
 
   let debugf ~flows =
     with_info ~flows ~f:(fun tags fmt ->

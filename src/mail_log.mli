@@ -143,10 +143,11 @@ module Message : sig
     -> ?local_ip_address:Socket.Address.Inet.t
     -> ?remote_address:Host_and_port.t
     -> ?remote_ip_address:Socket.Address.Inet.t
-    -> ?email:[ `Fingerprint of Mail_fingerprint.t
-              | `Email of Email.t
-              | `Envelope of Smtp_envelope.t
-              ]
+    -> ?email:
+         [ `Fingerprint of Mail_fingerprint.t
+         | `Email of Email.t
+         | `Envelope of Smtp_envelope.t
+         ]
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t
@@ -262,14 +263,16 @@ val with_flow_and_component : flows:Flows.t -> component:Component.t -> t -> t
    the verbosity of our logs. *)
 
 val adjust_log_levels
-  :  ?minimum_level:Level.t
+  :  ?minimum_level:
+    Level.t
   (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
-  -> ?remap_info_to:Level.t
-  (* Rewrite messages with level [`Info] to level [remap_info_to] *)
-  -> ?remap_error_no_monitor_to:Level.t
+  -> ?remap_info_to:
+       Level.t (* Rewrite messages with level [`Info] to level [remap_info_to] *)
+  -> ?remap_error_no_monitor_to:
+       Level.t
   (* Rewrite messages with level [`Error_no_monitor] to level [remap_error_no_monitor_to] *)
-  -> ?remap_error_to:Level.t
-  (* Rewrite messages with level [`Error] to level [remap_error_to] *)
+  -> ?remap_error_to:
+       Level.t (* Rewrite messages with level [`Error] to level [remap_error_to] *)
   -> t
   -> t
 

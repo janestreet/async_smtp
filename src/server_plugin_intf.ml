@@ -106,7 +106,8 @@ module type Envelope = sig
       [Ok str] results in "250 Ok: <str>". *)
   val process
     :  state:state
-    -> log:Mail_log.t
+    -> log:
+         Mail_log.t
     -> flows:Mail_log.Flows.t
     -> session
     -> t

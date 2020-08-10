@@ -27,8 +27,7 @@ struct
   ;;
 
   let add_header ?normalize t ~name ~value =
-    modify_headers t ~f:(fun headers ->
-      Email_headers.add ?normalize headers ~name ~value)
+    modify_headers t ~f:(fun headers -> Email_headers.add ?normalize headers ~name ~value)
   ;;
 
   let add_headers ?normalize t ts =
@@ -36,8 +35,7 @@ struct
   ;;
 
   let set_header ?normalize t ~name ~value =
-    modify_headers t ~f:(fun headers ->
-      Email_headers.set ?normalize headers ~name ~value)
+    modify_headers t ~f:(fun headers -> Email_headers.set ?normalize headers ~name ~value)
   ;;
 
   let add_header_at_bottom ?normalize t ~name ~value =
@@ -68,9 +66,7 @@ struct
       Email_headers.smash_and_add ?normalize headers ~name ~value)
   ;;
 
-  let subject_decoded t =
-    last_header t "Subject" ~normalize:`Whitespace_and_encoded_words
-  ;;
+  let subject_decoded t = last_header t "Subject" ~normalize:`Whitespace_and_encoded_words
 end
 
 module Make_with_info (S : sig

@@ -58,8 +58,7 @@ module Envelope_status = struct
            ~ok:""
            ~err:" but rejected recipients: "
            rejected_recipients)
-    | Error (`Rejected_sender reject) ->
-      sprintf !"Rejected sender (%{Smtp_reply})" reject
+    | Error (`Rejected_sender reject) -> sprintf !"Rejected sender (%{Smtp_reply})" reject
     | Error (`No_recipients rejected_recipients) ->
       rejected_recipients_to_string
         ~ok:"No Recipients"
@@ -173,9 +172,7 @@ module Expert = struct
         ~how:`Sequential
         (Smtp_envelope.Info.recipients envelope_info)
         ~f:(fun recipient ->
-          let command =
-            Smtp_command.Recipient (recipient |> Email_address.to_string)
-          in
+          let command = Smtp_command.Recipient (recipient |> Email_address.to_string) in
           send_receive
             t
             ~log
@@ -448,8 +445,7 @@ module Tcp = struct
        with
        | Error error ->
          Deferred.Or_error.error_s
-           [%message
-             "Failed to resolve hostname" (smtp_server : string) (error : Error.t)]
+           [%message "Failed to resolve hostname" (smtp_server : string) (error : Error.t)]
        | Ok None ->
          Deferred.Or_error.error_s
            [%message "Failed to resolve hostname" (smtp_server : string) "Not Found"]

@@ -70,9 +70,7 @@ let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reade
 let read_data ~max_size ~close_started ~timeouts reader =
   let max_size = max_size |> Byte_units.bytes_int_exn in
   let rec loop ~is_first accum =
-    let add_string s =
-      Option.iter accum ~f:(fun accum -> Bigbuffer.add_string accum s)
-    in
+    let add_string s = Option.iter accum ~f:(fun accum -> Bigbuffer.add_string accum s) in
     let return () =
       match accum with
       | Some accum -> return (`Ok accum)
@@ -870,11 +868,7 @@ module Make (Cb : Plugin.S) = struct
            "CONNECTED"));
     match%bind
       protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
-        Cb.Session.connect
-          ~state
-          ~log
-          ~local:local_ip_address
-          ~remote:remote_ip_address)
+        Cb.Session.connect ~state ~log ~local:local_ip_address ~remote:remote_ip_address)
     with
     | Error err ->
       on_plugin_error

@@ -10,10 +10,7 @@ let error ?reject ~here error =
 let exn ?reject ~here exn = error ?reject ~here (Error.of_exn exn)
 let error_string ?reject ~here str = error ?reject ~here (Error.of_string str)
 let errorf ?reject ~here fmt = ksprintf (error_string ?reject ~here) fmt
-
-let reject ~here reject =
-  Deferred.return (Error (Reject_or_error.of_reject ~here reject))
-;;
+let reject ~here reject = Deferred.return (Error (Reject_or_error.of_reject ~here reject))
 
 module Sync = struct
   let tag ~tag ?here t = Result.map_error t ~f:(Reject_or_error.tag ~tag ?here)

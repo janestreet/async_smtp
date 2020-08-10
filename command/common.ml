@@ -64,8 +64,7 @@ end = struct
       in
       let rpc_server =
         match rpc_server, server_config, spool_config with
-        | Some v, (_ : Smtp_server.Config.t option), (_ : Smtp_spool.Config.t option) ->
-          v
+        | Some v, (_ : Smtp_server.Config.t option), (_ : Smtp_spool.Config.t option) -> v
         | None, None, None ->
           failwith
             "At least one of (-rpc-server) or (-server-config and -spool-config) required"

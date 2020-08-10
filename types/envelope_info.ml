@@ -122,10 +122,7 @@ let of_email email =
     match Email_headers.find_all headers "From" with
     | [ sender ] -> Sender.of_string sender
     | _ ->
-      Or_error.error
-        "Email contains no sender or multiple senders."
-        email
-        Email.sexp_of_t
+      Or_error.error "Email contains no sender or multiple senders." email Email.sexp_of_t
   in
   let%bind recipients =
     Or_error.try_with (fun () ->

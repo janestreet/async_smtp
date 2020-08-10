@@ -49,17 +49,14 @@ module Bodies = struct
           |> Bigstring_shared.to_string
         in
         let rewritten_content_str =
-          List.fold
-            t.rewrites
-            ~init:content_str
-            ~f:(fun content_str (re, rewrite_to) ->
-              if Re2.matches re content_str
-              then (
-                match rewrite_to with
-                | `Rewrite_entire_body_to content_str -> content_str
-                | `Rewrite_all_matches_to template ->
-                  Re2.rewrite_exn re ~template content_str)
-              else content_str)
+          List.fold t.rewrites ~init:content_str ~f:(fun content_str (re, rewrite_to) ->
+            if Re2.matches re content_str
+            then (
+              match rewrite_to with
+              | `Rewrite_entire_body_to content_str -> content_str
+              | `Rewrite_all_matches_to template ->
+                Re2.rewrite_exn re ~template content_str)
+            else content_str)
         in
         if String.equal content_str rewritten_content_str
         then email

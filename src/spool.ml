@@ -363,9 +363,7 @@ let rec enqueue ?don't_retry ?at t spooled_msg =
        async job was scheduled and the time it gets run, the status of the message
        can change. We make sure not to try to send if we have manually intervened,
        causing a permanent status change. *)
-    Or_error.errorf
-      !"Not attempting delivery for status %{sexp: Message.Status.t}"
-      status
+    Or_error.errorf !"Not attempting delivery for status %{sexp: Message.Status.t}" status
     |> return
   | `Send_now | `Send_at _ ->
     (match%bind
@@ -568,8 +566,7 @@ let quarantine t ~reason ~flows ~original_msg envelope_batches =
 
 let kill_and_flush ?(timeout = Deferred.never ()) t =
   t.is_killed <- true;
-  if Hashtbl.length t.active_send_jobs = 0
-  then Ivar.fill_if_empty t.killed_and_flushed ();
+  if Hashtbl.length t.active_send_jobs = 0 then Ivar.fill_if_empty t.killed_and_flushed ();
   let finished =
     Deferred.all_unit
       [ Client_cache.close_and_flush t.client_cache; Ivar.read t.killed_and_flushed ]
@@ -639,8 +636,7 @@ let remove t ids =
          with_spooled_message t spooled_msg ~f:(fun () ->
            Message_spool.remove spooled_msg ~log:t.log)
        | `Send_at _ | `Send_now | `Sending | `Delivered | `Removed | `Quarantined _ ->
-         Error
-           (Error.of_string "Cannot remove a message that is not currently frozen")
+         Error (Error.of_string "Cannot remove a message that is not currently frozen")
          |> return)
       >>=? fun () ->
       remove_message t spooled_msg;
@@ -769,8 +765,7 @@ module Status = struct
     let msg_to_string msg =
       let frozen_text =
         match S.status msg with
-        | `Send_at _ | `Send_now | `Sending | `Delivered | `Removed | `Quarantined _ ->
-          ""
+        | `Send_at _ | `Send_now | `Sending | `Delivered | `Removed | `Quarantined _ -> ""
         | `Frozen -> "*** frozen ***"
       in
       let time = S.time_on_spool msg |> Time.Span.to_short_string in
@@ -861,8 +856,7 @@ module Status = struct
               |> String.concat ~sep:", ")
           in
           let time_on_spool =
-            Column.create_attr "time on spool" (fun a ->
-              display_span (S.time_on_spool a))
+            Column.create_attr "time on spool" (fun a -> display_span (S.time_on_spool a))
           in
           [ id; sender; recipients; time_on_spool; next_attempt; next_hop ]
         in

@@ -3,8 +3,7 @@ open Async
 open Async_smtp
 
 let log =
-  Lazy.force Async.Log.Global.log
-  |> Smtp_mail_log.adjust_log_levels ~remap_info_to:`Debug
+  Lazy.force Async.Log.Global.log |> Smtp_mail_log.adjust_log_levels ~remap_info_to:`Debug
 ;;
 
 module Config = struct

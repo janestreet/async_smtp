@@ -39,8 +39,7 @@ include Comparable.Make_plain (T)
 
 let of_string_with_arguments ?default_domain ~allowed_extensions str =
   let%bind mail_from =
-    Or_error.try_with (fun () ->
-      Mail_from_lexer.parse_mail_from (Lexing.from_string str))
+    Or_error.try_with (fun () -> Mail_from_lexer.parse_mail_from (Lexing.from_string str))
     |> Or_error.tag ~tag:(sprintf "Failed to parse [Sender.t] from \"%s\"" str)
   in
   let%bind all_args =
@@ -63,8 +62,7 @@ let of_string ?default_domain str =
 ;;
 
 let to_string_with_arguments (sender, args) =
-  to_string sender :: List.map args ~f:Sender_argument.to_string
-  |> String.concat ~sep:" "
+  to_string sender :: List.map args ~f:Sender_argument.to_string |> String.concat ~sep:" "
 ;;
 
 let map t ~f =

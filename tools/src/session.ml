@@ -6,9 +6,7 @@ module Message = Smtp_mail_log.Message
 module Flows = Smtp_mail_log.Flows
 
 let get_flow_id ~type_ message =
-  List.find
-    (Message.flows message :> Flows.Id.t list)
-    ~f:(fun id -> Flows.Id.is id type_)
+  List.find (Message.flows message :> Flows.Id.t list) ~f:(fun id -> Flows.Id.is id type_)
 ;;
 
 let value_exn x =

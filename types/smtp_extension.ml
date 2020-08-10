@@ -17,10 +17,7 @@ let of_string str =
     match String.uppercase str |> String.split ~on:' ' with
     | [ "STARTTLS" ] -> Start_tls
     | "AUTH" :: mechs ->
-      mechs
-      |> List.map ~f:String.strip
-      |> List.filter ~f:(Fn.non String.is_empty)
-      |> Auth
+      mechs |> List.map ~f:String.strip |> List.filter ~f:(Fn.non String.is_empty) |> Auth
     | [ "8BITMIME" ] -> Mime_8bit_transport
     | _ -> Other str
   in

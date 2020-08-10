@@ -4,8 +4,7 @@ open Async_smtp_types
 
 module Envelopes : sig
   type t =
-    { sort : [ `Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers ] list
-    }
+    { sort : [ `Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers ] list }
   [@@deriving sexp]
 end
 

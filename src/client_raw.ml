@@ -318,9 +318,7 @@ let do_quit t ~log ~component =
              (Error.of_string "Unexpected EOF during QUIT")));
       Deferred.Or_error.return Smtp_reply.closing_connection_221
     in
-    match%bind
-      send_receive ~on_eof t ~log ~component ~here:[%here] Smtp_command.Quit
-    with
+    match%bind send_receive ~on_eof t ~log ~component ~here:[%here] Smtp_command.Quit with
     | Error e ->
       let error = Error.tag e ~tag:"Error sending QUIT" in
       Log.info
@@ -332,8 +330,7 @@ let do_quit t ~log ~component =
        | `Bsmtp -> return (Ok ())
        | `Received { Smtp_reply.code = `Closing_connection_221; _ } -> return (Ok ())
        | `Received reply ->
-         return
-           (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Smtp_reply}" reply))))
+         return (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Smtp_reply}" reply))))
 ;;
 
 let cleanup t =
@@ -411,8 +408,7 @@ let do_start_tls t ~log ~component tls_options =
   let component = component @ [ "starttls" ] in
   match t.mode with
   | `Bsmtp _ -> failwith "do_start_tls: Cannot switch from bsmtp to TLS"
-  | `Tls _ | `Emulate_tls_for_test _ ->
-    failwith "do_start_tls: TLS is already negotiated"
+  | `Tls _ | `Emulate_tls_for_test _ -> failwith "do_start_tls: TLS is already negotiated"
   | `Plain plain ->
     Log.debug
       log
@@ -462,9 +458,7 @@ let do_start_tls t ~log ~component tls_options =
     let remote_address = Peer_info.remote_address (Plain.info plain) in
     let local_ip_address = Peer_info.local_ip_address (Plain.info plain) in
     let remote_ip_address = Peer_info.remote_ip_address (Plain.info plain) in
-    let info =
-      Peer_info.create ~remote_address ~local_ip_address ~remote_ip_address ()
-    in
+    let info = Peer_info.create ~remote_address ~local_ip_address ~remote_ip_address () in
     t.mode <- `Tls (Tls.create ~reader:new_reader ~writer:new_writer ~tls ~info);
     do_ehlo t ~log ~component
 ;;
@@ -487,8 +481,7 @@ let check_tls_security t =
      | Some tls ->
        (match Config.Tls.mode tls with
         | `Always_try | `If_available -> Ok ()
-        | `Required ->
-          Or_error.errorf "TLS Required for %s:%d but not negotiated" host port))
+        | `Required -> Or_error.errorf "TLS Required for %s:%d but not negotiated" host port))
   | `Emulate_tls_for_test _emulate_tls ->
     Ok ()
   | `Tls tls ->
