@@ -88,7 +88,8 @@ let%expect_test "Dot encoded headers and body" =
     .C: D\n
     \n
     Line1\n
-    .Line2 |}]
+    .Line2 |}];
+  return ()
 ;;
 
 let%expect_test "Last body line ends in a new line" =
@@ -106,7 +107,8 @@ let%expect_test "Last body line ends in a new line" =
     ----------------
     A: B\n
     \n
-    Line1\n |}]
+    Line1\n |}];
+  return ()
 ;;
 
 let%expect_test "Empty body" =
@@ -120,7 +122,8 @@ let%expect_test "Empty body" =
 
     Loaded contents:
     ----------------
-    A: B\n |}]
+    A: B\n |}];
+  return ()
 ;;
 
 let%expect_test "No body" =
@@ -134,5 +137,6 @@ let%expect_test "No body" =
 
     Loaded contents:
     ----------------
-    A: B\n |}]
+    A: B\n |}];
+  return ()
 ;;

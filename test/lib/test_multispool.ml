@@ -49,7 +49,8 @@ let%expect_test "Spool Creation Fails" =
     [%expect
       {|
       (Error ("dir is not empty while creating new spool" (dir ${TMPDIR}/spool)))
-    |}])
+    |}];
+    return ())
 ;;
 
 let print_checkouts_unsafe spool (queue : Widget.Queue.t) =
@@ -65,9 +66,8 @@ let%expect_test "File Behavior" =
   with_temp_dir (fun tmp_dir ->
     let%bind spool = chdir_create_and_open_spool ~tmp_dir in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         spool
         spool/.data
         spool/.registry
@@ -78,9 +78,7 @@ let%expect_test "File Behavior" =
         spool/queue2/.checkout
         spool/queue3
         spool/queue3/.checkout
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     (* Enqueue a file, check its path(s) at various steps, and then remove it *)
     let data =
       Widget.Data.Fields.create ~serial_number:12345 ~customer:"Acme Incorporated"
@@ -91,9 +89,8 @@ let%expect_test "File Behavior" =
     in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File exists in registry and queue *)
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         spool
         spool/.data
         spool/.data/q1_co_test_000000
@@ -107,15 +104,12 @@ let%expect_test "File Behavior" =
         spool/queue2/.checkout
         spool/queue3
         spool/queue3/.checkout
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind file_co = Widgetspool.Expert.checkout entry in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File exists in registry and checkout area *)
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         spool
         spool/.data
         spool/.data/q1_co_test_000000
@@ -129,21 +123,18 @@ let%expect_test "File Behavior" =
         spool/queue2/.checkout
         spool/queue3
         spool/queue3/.checkout
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = print_checkouts_unsafe spool Queue2 in
-    let%bind () = [%expect {| |}] |> Deferred.ok in
+    [%expect {| |}];
     let%bind () = print_checkouts_unsafe spool Queue1 in
-    let%bind () = [%expect {|
+    [%expect {|
         q1_co_test_000000
-      |}] |> Deferred.ok in
+      |}];
     let%bind () = Widgetspool.Expert.Checked_out_entry.remove file_co in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File no longer exists *)
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         spool
         spool/.data
         spool/.registry
@@ -154,9 +145,7 @@ let%expect_test "File Behavior" =
         spool/queue2/.checkout
         spool/queue3
         spool/queue3/.checkout
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     (* Enqueue some files and test nextname functionality *)
     let enqueue ~sn ~cust (queue : Widget.Queue.t) prefix text =
       let data = Widget.Data.Fields.create ~serial_number:sn ~customer:cust in
@@ -214,9 +203,8 @@ let%expect_test "File Behavior" =
         ~cust:"XYZ Co."
     in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         spool
         spool/.data
         spool/.data/q1prefix1_000000
@@ -245,9 +233,7 @@ let%expect_test "File Behavior" =
         spool/queue2/q2prefix2_000000
         spool/queue3
         spool/queue3/.checkout
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     (* List files *)
     let%bind fentries1 = Widgetspool.list spool Queue1 in
     let%bind fentries2 = Widgetspool.list spool Queue2 in
@@ -255,24 +241,20 @@ let%expect_test "File Behavior" =
     let entries2 = List.map fentries2 ~f:(fun entry -> Widgetspool.Entry.name entry) in
     print_s ~tmp_dir [%message "queue1 entries" (entries1 : string list)];
     print_s ~tmp_dir [%message "queue2 entries" (entries2 : string list)];
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ("queue1 entries" (
           entries1 (q1prefix1_000000 q1prefix1_000001 q1prefix2_000000)))
         ("queue2 entries" (
           entries2 (q2prefix1_000000 q2prefix1_000001 q2prefix2_000000)))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     (* Checkout a file and move to a different queue *)
     let entry = Widgetspool.Entry.create spool Queue1 ~name:"q1prefix1_000000" in
     let%bind file_co = Widgetspool.Expert.checkout entry in
     let%bind () = Widgetspool.Expert.Checked_out_entry.save file_co Queue2 in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         spool
         spool/.data
         spool/.data/q1prefix1_000000
@@ -301,9 +283,7 @@ let%expect_test "File Behavior" =
         spool/queue2/q2prefix2_000000
         spool/queue3
         spool/queue3/.checkout
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     (* Use iter_exn to visit each file in queue2 in turn *)
     let%bind reader2 = Widgetspool.Queue_reader.create spool Queue2 in
     let%bind () =
@@ -316,9 +296,8 @@ let%expect_test "File Behavior" =
         printf !"    Data: %{Widget.Data}\n" contents;
         return (`Save (widget, Widget.Queue.Queue2)))
     in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         (Sprocket "Hello, world 1! q1prefix1_000000")
             Data: ((serial_number 1000000) (customer "Acme Corporation"))
         (Sprocket "Hello, world 4! q2prefix1_000000")
@@ -327,9 +306,7 @@ let%expect_test "File Behavior" =
             Data: ((serial_number 4444444) (customer "XYZ Co."))
         (Sprocket "Hello, world 5! q2prefix2_000000")
             Data: ((serial_number 2000002) (customer "ABC Co."))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     (* Update a Sprocket *)
     let entry = Widgetspool.Entry.create spool Queue2 ~name:"q2prefix1_000000" in
     let%bind () =
@@ -347,17 +324,14 @@ let%expect_test "File Behavior" =
         print_s ~tmp_dir ([%sexp_of: Widget.Metadata.t] widget);
         Deferred.return (`Save (widget, Widget.Queue.Queue2)))
     in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         Replacing '(Sprocket "Hello, world 4! q2prefix1_000000")' with '(Cog 42)' ...
         (Sprocket "Hello, world 1! q1prefix1_000000")
         (Cog 42)
         (Sprocket "Hello, world 6! q2prefix1_000001")
         (Sprocket "Hello, world 5! q2prefix2_000000")
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -427,7 +401,8 @@ let%expect_test "Monitor: Empty" =
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = run_once_and_print_problems monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -437,7 +412,8 @@ let%expect_test "Monitor: Queue entry, no issues" =
     let%bind () = touch Registry "foo" in
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -447,7 +423,8 @@ let%expect_test "Monitor: Checkout entry, no issues" =
     let%bind () = touch Registry "foo" in
     let%bind () = touch (Queue_checkout Queue1) "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -458,7 +435,8 @@ let%expect_test "Monitor: Queue entry with temporary file, no issues" =
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" in
     let%bind () = touch Tmp "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -466,20 +444,18 @@ let%expect_test "Monitor: No entries for registered file" =
   let open Deferred.Or_error.Let_syntax in
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch Registry "foo" ~monitor in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ((
           Orphaned
           ((filename foo)
            (mtime    <omitted>))
           Registry))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = rm Registry "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -489,19 +465,17 @@ let%expect_test "Monitor: Duplicate entries for registered file" =
     let%bind () = touch Registry "foo" in
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" in
     let%bind () = touch (Queue Widget.Queue.Queue2) "foo" ~monitor in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ((
           Duplicated
           ((filename foo)    (mtime <omitted>))
           ((Queue    Queue1) (Queue Queue2))))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = rm (Queue Widget.Queue.Queue2) "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -509,20 +483,18 @@ let%expect_test "Monitor: Temporary file not registered" =
   let open Deferred.Or_error.Let_syntax in
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch Tmp "foo" ~monitor in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ((
           Orphaned
           ((filename foo)
            (mtime    <omitted>))
           Tmp))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = rm Tmp "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -530,20 +502,18 @@ let%expect_test "Monitor: Checkout entry not registered" =
   let open Deferred.Or_error.Let_syntax in
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch (Queue_checkout Queue1) "foo" ~monitor in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ((
           Orphaned
           ((filename foo)
            (mtime    <omitted>))
           (Queue_checkout Queue1)))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = rm (Queue_checkout Queue1) "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -551,20 +521,18 @@ let%expect_test "Monitor: Data file not registered" =
   let open Deferred.Or_error.Let_syntax in
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch Data "foo" ~monitor in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ((
           Orphaned
           ((filename foo)
            (mtime    <omitted>))
           Data))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = rm Data "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -572,20 +540,18 @@ let%expect_test "Monitor: Queue entry not registered" =
   let open Deferred.Or_error.Let_syntax in
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
-    let%bind () =
-      [%expect
-        {|
+    [%expect
+      {|
         ((
           Orphaned
           ((filename foo)
            (mtime    <omitted>))
           (Queue Queue1)))
-      |}]
-      |> Deferred.ok
-    in
+      |}];
     let%bind () = rm (Queue Widget.Queue.Queue1) "foo" ~monitor in
     [%expect {|
-      () |}] |> Deferred.ok)
+      () |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -601,8 +567,8 @@ let%expect_test "Monitor: Checked out entry too old" =
            ((filename foo)
             (mtime    <omitted>))
            (Queue_checkout Queue1)))
-       |}]
-    |> Deferred.ok)
+       |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -619,8 +585,8 @@ let%expect_test "Monitor: Temporary file too old" =
            ((filename foo)
             (mtime    <omitted>))
            Tmp))
-       |}]
-    |> Deferred.ok)
+       |}];
+    return ())
   |> Deferred.Or_error.ok_exn
 ;;
 
@@ -638,7 +604,7 @@ let%expect_test "Monitor: Queue entry too old" =
            ((filename foo)
             (mtime    <omitted>))
            (Queue Queue1)))
-       |}]
-       |> Deferred.ok)
+       |}];
+       return ())
   |> Deferred.Or_error.ok_exn
 ;;

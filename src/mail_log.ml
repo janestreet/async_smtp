@@ -679,9 +679,9 @@ let%expect_test "with_flow_and_component" =
     Log.flushed log
   in
   let%bind () = info log ~component:[ "1"; "2" ] in
-  let%bind () = [%expect {| Component: 1/2 |}] in
+  [%expect {| Component: 1/2 |}];
   let log = with_flow_and_component log ~flows:[] ~component:[ "1"; "2" ] in
   let%bind () = info log ~component:[ "3" ] in
-  let%bind () = [%expect {| Component: 1/2/3 |}] in
+  [%expect {| Component: 1/2/3 |}];
   Deferred.unit
 ;;

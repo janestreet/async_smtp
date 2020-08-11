@@ -43,8 +43,8 @@ let ensure_parses config =
 
 let%expect_test _ =
   let%bind () = ensure_parses v1 in
-  let%bind () = [%expect {| Ok |}] in
+  [%expect {| Ok |}];
   let%bind () = ensure_parses v2 in
-  let%bind () = [%expect {| Ok |}] in
+  [%expect {| Ok |}];
   Deferred.unit
 ;;

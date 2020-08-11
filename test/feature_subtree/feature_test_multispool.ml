@@ -96,7 +96,8 @@ module Test_active_and_passive_queues = struct
       [%expect {|
         Stopping [dequeue]...
         Stopped.
-      |}])
+      |}];
+      return ())
   ;;
 
   let%expect_test "Queue Iteration" =
@@ -124,7 +125,8 @@ module Test_active_and_passive_queues = struct
             (Cog 7)
             (Cog 8)
             (Cog 9)
-      |}])
+      |}];
+      return ())
   ;;
 
   let%expect_test "Queue Ordering" =
@@ -138,6 +140,7 @@ module Test_active_and_passive_queues = struct
       let%bind () = pipeline in
       [%expect {|
         Dequeued and moved all expected widgets.
-      |}])
+      |}];
+      return ())
   ;;
 end

@@ -116,7 +116,8 @@ let%expect_test "cowardly refuse to authenticate because of insecure transport" 
     > QUIT
     < 221 closing connection
     client_ERROR: ("No common auth mechanism available and ANON authentication not allowed by client"
-     ((client_mechs ()) (server_mechs (PLAIN LOGIN)))) |}]
+     ((client_mechs ()) (server_mechs (PLAIN LOGIN)))) |}];
+  return ()
 ;;
 
 let%expect_test "fail if no supported authentication mechanisms are found" =
@@ -136,7 +137,8 @@ let%expect_test "fail if no supported authentication mechanisms are found" =
     > QUIT
     < 221 closing connection
     client_ERROR: ("No common auth mechanism available and ANON authentication not allowed by client"
-     ((client_mechs (PLAIN LOGIN)) (server_mechs ()))) |}]
+     ((client_mechs (PLAIN LOGIN)) (server_mechs ()))) |}];
+  return ()
 ;;
 
 let%expect_test "ANON doesn't require mechanisms" =
@@ -154,7 +156,8 @@ let%expect_test "ANON doesn't require mechanisms" =
     < 250-Ok: Continue, extensions follow:
     < 250 8BITMIME
     > QUIT
-    < 221 closing connection |}]
+    < 221 closing connection |}];
+  return ()
 ;;
 
 let%expect_test "AUTH LOGIN success with correct credentials" =
@@ -179,7 +182,8 @@ let%expect_test "AUTH LOGIN success with correct credentials" =
     > cGFzc3dvcmQ=
     < 235 Authentication successful
     > QUIT
-    < 221 closing connection |}]
+    < 221 closing connection |}];
+  return ()
 ;;
 
 let%expect_test "AUTH LOGIN rejected with invalid credentials" =
@@ -206,7 +210,8 @@ let%expect_test "AUTH LOGIN rejected with invalid credentials" =
     > QUIT
     < 221 closing connection
     client_ERROR: (monitor.ml.Error "AUTH failed: 535 Authentication credentials invalid"
-     ("<backtrace elided in test>")) |}]
+     ("<backtrace elided in test>")) |}];
+  return ()
 ;;
 
 let%expect_test "AUTH PLAIN success with correct credentials" =
@@ -227,7 +232,8 @@ let%expect_test "AUTH PLAIN success with correct credentials" =
     > AUTH PLAIN AHVzZXJuYW1lAHBhc3N3b3Jk
     < 235 Authentication successful
     > QUIT
-    < 221 closing connection |}]
+    < 221 closing connection |}];
+  return ()
 ;;
 
 let%expect_test "AUTH PLAIN rejected with invalid credentials" =
@@ -250,7 +256,8 @@ let%expect_test "AUTH PLAIN rejected with invalid credentials" =
     > QUIT
     < 221 closing connection
     client_ERROR: (monitor.ml.Error "AUTH failed: 535 Authentication credentials invalid"
-     ("<backtrace elided in test>")) |}]
+     ("<backtrace elided in test>")) |}];
+  return ()
 ;;
 
 let%expect_test "prefer AUTH PLAIN" =
@@ -271,7 +278,8 @@ let%expect_test "prefer AUTH PLAIN" =
     > AUTH PLAIN AHVzZXJuYW1lAHBhc3N3b3Jk
     < 235 Authentication successful
     > QUIT
-    < 221 closing connection |}]
+    < 221 closing connection |}];
+  return ()
 ;;
 
 let%expect_test "AUTH PLAIN with delegation" =
@@ -292,7 +300,8 @@ let%expect_test "AUTH PLAIN with delegation" =
     > AUTH PLAIN Ym9iAHVzZXJuYW1lAHBhc3N3b3Jk
     < 235 Authentication successful
     > QUIT
-    < 221 closing connection |}]
+    < 221 closing connection |}];
+  return ()
 ;;
 
 let%expect_test "AUTH LOGIN does not allow delegation" =
@@ -313,7 +322,8 @@ let%expect_test "AUTH LOGIN does not allow delegation" =
     > QUIT
     < 221 closing connection
     client_ERROR: ("No common auth mechanism available and ANON authentication not allowed by client"
-     ((client_mechs (PLAIN)) (server_mechs (LOGIN)))) |}]
+     ((client_mechs (PLAIN)) (server_mechs (LOGIN)))) |}];
+  return ()
 ;;
 
 let%expect_test "perfer AUTH over ANON" =
@@ -334,7 +344,8 @@ let%expect_test "perfer AUTH over ANON" =
     > AUTH PLAIN AHVzZXJuYW1lAHBhc3N3b3Jk
     < 235 Authentication successful
     > QUIT
-    < 221 closing connection |}]
+    < 221 closing connection |}];
+  return ()
 ;;
 
 let%expect_test "use ANON if no supported AUTH methods" =
@@ -354,7 +365,8 @@ let%expect_test "use ANON if no supported AUTH methods" =
     < 250 AUTH LOGIN
     > QUIT
     < 221 closing connection
-    |}]
+    |}];
+  return ()
 ;;
 
 let%expect_test "ANON does not bypass invalid credential failure" =
@@ -378,7 +390,8 @@ let%expect_test "ANON does not bypass invalid credential failure" =
     < 221 closing connection
     client_ERROR: (monitor.ml.Error "AUTH failed: 535 Authentication credentials invalid"
      ("<backtrace elided in test>"))
-    |}]
+    |}];
+  return ()
 ;;
 
 let%expect_test "AUTH LOGIN with client going first" =
