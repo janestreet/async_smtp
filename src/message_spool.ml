@@ -193,7 +193,10 @@ let remove t ~log =
 let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_file =
   let send_data client =
     let socket_fd = Writer.fd (Client_raw.writer client) in
-    Async_sendfile.sendfile ~socket_fd ~file:(On_disk_spool.Data_file.path data_file) ()
+    Async_sendfile.sendfile
+      ~fd:socket_fd
+      ~file:(On_disk_spool.Data_file.path data_file)
+      ()
   in
   Client.Expert.send_envelope client ~log ~flows ~component ~send_data envelope_info
 ;;
