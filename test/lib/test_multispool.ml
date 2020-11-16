@@ -9,8 +9,19 @@ module Widgetspool = Multispool.Make (struct
     module Name_generator = Common.Test_name_generator
   end)
 
-let chdir_or_error dir = Deferred.Or_error.try_with (fun () -> Sys.chdir dir)
-let system_or_error cmd = Deferred.Or_error.try_with (fun () -> system cmd)
+let chdir_or_error dir =
+  Deferred.Or_error.try_with
+    ~run:`Schedule
+    ~rest:`Log
+    (fun () -> Sys.chdir dir)
+;;
+
+let system_or_error cmd =
+  Deferred.Or_error.try_with
+    ~run:`Schedule
+    ~rest:`Log
+    (fun () -> system cmd)
+;;
 
 let string_filter_tmp_dir ~tmp_dir string =
   String.substr_replace_all string ~pattern:tmp_dir ~with_:"${TMPDIR}"

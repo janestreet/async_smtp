@@ -166,8 +166,11 @@ module Make (Cb : Plugin.S) = struct
   let protect_plugin ~log ~here ~flows ~component ~plugin f =
     let component = component @ [ "PLUGIN"; plugin ] in
     match%map
-      Monitor.try_with (fun () ->
-        f ~log:(Log.with_flow_and_component log ~flows ~component))
+      Monitor.try_with
+        ~run:
+          `Schedule
+        ~rest:`Log
+        (fun () -> f ~log:(Log.with_flow_and_component log ~flows ~component))
     with
     | Ok (Ok res) -> Ok res
     | Ok (Error err) -> Error (`Reject (Reject_or_error.tag ~here ~tag:plugin err))
@@ -459,6 +462,9 @@ module Make (Cb : Plugin.S) = struct
         in
         let plugin = "Tls.upgrade_to_tls" in
         Monitor.protect
+          ~run:
+            `Schedule
+          ~rest:`Log
           (fun () ->
              match%bind
                protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
@@ -922,6 +928,9 @@ module Make (Cb : Plugin.S) = struct
                 ~tags:[ "greeting", greeting ]
                 "Session.connect:accepted"));
          Monitor.protect
+           ~run:
+             `Schedule
+           ~rest:`Log
            (fun () ->
               let%bind () =
                 write_reply'
@@ -1000,23 +1009,27 @@ module Make (Cb : Plugin.S) = struct
              |> Option.value ~default:local_ip_address
            in
            let session_flows = Log.Flows.create `Server_session in
-           Deferred.Or_error.try_with (fun () ->
-             start_session
-               ~state:server_state
-               ~log
-               ~server_events
-               ~tls_options:config.Config.tls_options
-               ~emulate_tls_for_test:false
-               ~malformed_emails:config.Config.malformed_emails
-               ~max_message_size:config.Config.max_message_size
-               ~session_flows
-               ~reader
-               ~raw_writer:writer
-               ~local_ip_address
-               ~remote_ip_address
-               ~close_started
-               ~timeouts:config.timeouts
-               ())
+           Deferred.Or_error.try_with
+             ~run:
+               `Schedule
+             ~rest:`Log
+             (fun () ->
+                start_session
+                  ~state:server_state
+                  ~log
+                  ~server_events
+                  ~tls_options:config.Config.tls_options
+                  ~emulate_tls_for_test:false
+                  ~malformed_emails:config.Config.malformed_emails
+                  ~max_message_size:config.Config.max_message_size
+                  ~session_flows
+                  ~reader
+                  ~raw_writer:writer
+                  ~local_ip_address
+                  ~remote_ip_address
+                  ~close_started
+                  ~timeouts:config.timeouts
+                  ())
            >>| Result.iter_error ~f:(fun err ->
              Log.error
                log

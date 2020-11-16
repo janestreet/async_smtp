@@ -40,12 +40,21 @@ let stdout_log ~tag ~level () =
 
 let with_stdout_log ~tag ~level (f : log:Log.t -> 'a Deferred.t) : 'a Deferred.t =
   let log = stdout_log ~tag ~level () in
-  Monitor.protect (fun () -> f ~log) ~finally:(fun () -> Log.close log)
+  Monitor.protect
+    ~run:`Schedule
+    ~rest:`Log
+    (fun () -> f ~log)
+    ~finally:(fun () -> Log.close log)
 ;;
 
 let drain_and_closed r =
   Deferred.all_unit
-    [ Monitor.try_with (fun () -> Reader.lines r |> Pipe.drain) >>| ignore
+    [ Monitor.try_with
+        ~run:
+          `Schedule
+        ~rest:`Log
+        (fun () -> Reader.lines r |> Pipe.drain)
+      >>| ignore
     ; Reader.close_finished r
     ]
 ;;
@@ -81,7 +90,14 @@ let rec mk_pipe ?echo here desc =
 ;;
 
 let print_and_ignore_exn identity f =
-  match%map Monitor.try_with ~extract_exn:true f with
+  match%map
+    Monitor.try_with
+      ~run:
+        `Schedule
+      ~rest:`Log
+      ~extract_exn:true
+      f
+  with
   | Ok () -> ()
   | Error exn ->
     Ref.set_temporarily Backtrace.elide true ~f:(fun () ->
@@ -125,13 +141,17 @@ let run ~echo ~client ~server =
   let shutdown_later () =
     don't_wait_for (Clock.after (Time.Span.of_sec 1.) >>= shutdown_now)
   in
-  Monitor.protect ~finally:shutdown_now (fun () ->
-    Deferred.all_unit
-      [ print_and_ignore_exn "client" (fun () -> client client_r client_w)
-        >>| shutdown_later
-      ; print_and_ignore_exn "server" (fun () -> server server_r server_w)
-        >>| shutdown_later
-      ])
+  Monitor.protect
+    ~run:`Schedule
+    ~rest:`Log
+    ~finally:shutdown_now
+    (fun () ->
+       Deferred.all_unit
+         [ print_and_ignore_exn "client" (fun () -> client client_r client_w)
+           >>| shutdown_later
+         ; print_and_ignore_exn "server" (fun () -> server server_r server_w)
+           >>| shutdown_later
+         ])
 ;;
 
 module Default_plugin : Server.Plugin.S with type State.t = unit = struct

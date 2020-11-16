@@ -162,17 +162,21 @@ let send ~config ~client_config envelope =
   let host = Config.host config in
   don't_wait_for
     (Throttle.enqueue !throttle (fun () ->
-       Deferred.Or_error.try_with_join (fun () ->
-         Smtp_client.Tcp.with_
-           ~log:(Lazy.force Log.Global.log)
-           (Host_and_port.create ~host ~port)
-           ~config:client_config
-           ~f:(fun client ->
-             Smtp_client.send_envelope client ~log envelope
-             >>|? Smtp_client.Envelope_status.ok_or_error
-                    ~allow_rejected_recipients:false
-             >>| Or_error.join
-             >>|? ignore)))
+       Deferred.Or_error.try_with_join
+         ~run:
+           `Schedule
+         ~rest:`Log
+         (fun () ->
+            Smtp_client.Tcp.with_
+              ~log:(Lazy.force Log.Global.log)
+              (Host_and_port.create ~host ~port)
+              ~config:client_config
+              ~f:(fun client ->
+                Smtp_client.send_envelope client ~log envelope
+                >>|? Smtp_client.Envelope_status.ok_or_error
+                       ~allow_rejected_recipients:false
+                >>| Or_error.join
+                >>|? ignore)))
      >>| Result.iter_error ~f:(Log.Global.error !"buh???: %{Error#hum}"))
 ;;
 

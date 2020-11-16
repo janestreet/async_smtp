@@ -262,14 +262,21 @@ module Data = struct
   let of_email = map_email ~encode_or_decode:`Encode
 
   let load path =
-    Deferred.Or_error.try_with (fun () ->
-      let%bind contents = Reader.file_contents path in
-      return (Email.of_string contents))
+    Deferred.Or_error.try_with
+      ~run:
+        `Schedule
+      ~rest:`Log
+      (fun () ->
+         let%bind contents = Reader.file_contents path in
+         return (Email.of_string contents))
   ;;
 
   let save ?temp_file t path =
-    Deferred.Or_error.try_with (fun () ->
-      Email.save ?temp_file ~fsync:true ~eol_except_raw_content:`CRLF t path)
+    Deferred.Or_error.try_with
+      ~run:
+        `Schedule
+      ~rest:`Log
+      (fun () -> Email.save ?temp_file ~fsync:true ~eol_except_raw_content:`CRLF t path)
   ;;
 end
 

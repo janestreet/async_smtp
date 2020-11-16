@@ -209,7 +209,10 @@ let read_reply ?on_eof reader =
        | Some on_eof -> on_eof ?partial ()
        | None -> Deferred.Or_error.error_string "Unexpected EOF")
   in
-  Deferred.Or_error.try_with_join (fun () -> loop None)
+  Deferred.Or_error.try_with_join
+    ~run:`Schedule
+    ~rest:`Log
+    (fun () -> loop None)
 ;;
 
 (* entry point *)
@@ -262,11 +265,14 @@ let send_gen ?command t ~log ?flows ~component ~here str =
     | None -> t.flows
     | Some flows -> Log.Flows.union t.flows flows
   in
-  Deferred.Or_error.try_with_join (fun () ->
-    Log.debug log (lazy (Log.Message.create ~here ~flows ~component ?command "->"));
-    Writer.write (writer t) str;
-    Writer.write (writer t) "\r\n";
-    writer_flushed_or_consumer_left str (writer t))
+  Deferred.Or_error.try_with_join
+    ~run:`Schedule
+    ~rest:`Log
+    (fun () ->
+       Log.debug log (lazy (Log.Message.create ~here ~flows ~component ?command "->"));
+       Writer.write (writer t) str;
+       Writer.write (writer t) "\r\n";
+       writer_flushed_or_consumer_left str (writer t))
 ;;
 
 let send_string t ~log ?flows ~component ~here str =
@@ -610,15 +616,18 @@ let do_auth t ~log ~component (module Auth : Auth.Client) =
     | Some response -> return response
     | None -> Deferred.Or_error.errorf "AUTH flow incomplete"
   in
-  Deferred.Or_error.try_with (fun () ->
-    Auth.negotiate
-      ~log:
-        (Log.with_flow_and_component
-           log
-           ~flows:t.flows
-           ~component:(component @ [ "authenticate" ]))
-      ~remote:(remote_address t)
-      ~send_response_and_expect_challenge)
+  Deferred.Or_error.try_with
+    ~run:`Schedule
+    ~rest:`Log
+    (fun () ->
+       Auth.negotiate
+         ~log:
+           (Log.with_flow_and_component
+              log
+              ~flows:t.flows
+              ~component:(component @ [ "authenticate" ]))
+         ~remote:(remote_address t)
+         ~send_response_and_expect_challenge)
   >>=? finish
 ;;
 
@@ -654,7 +663,11 @@ let with_quit t ~log ~component ~f =
         log
         (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
   in
-  Monitor.protect f ~finally:(fun () -> quit_and_cleanup_with_log t)
+  Monitor.protect
+    ~run:`Schedule
+    ~rest:`Log
+    f
+    ~finally:(fun () -> quit_and_cleanup_with_log t)
 ;;
 
 (* Entry point *)

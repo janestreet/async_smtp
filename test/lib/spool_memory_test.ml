@@ -55,7 +55,9 @@ let command =
         let gc_stat = Gc.stat () in
         let%map result =
           with_temp_dir (fun tmp_dir ->
-            Monitor.try_with_or_error (fun () -> main ~tmp_dir ~iterations ~msg_size))
+            Monitor.try_with_or_error
+              ~rest:`Log
+              (fun () -> main ~tmp_dir ~iterations ~msg_size))
         in
         let () = ok_exn result in
         let gc_stat' = Gc.stat () in

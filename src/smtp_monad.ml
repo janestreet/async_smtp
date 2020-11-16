@@ -26,11 +26,23 @@ let return_or_error ?tag ~here t = Deferred.return (Sync.of_or_error ?tag ~here 
 let of_or_error ?tag ~here t = t >>| Sync.of_or_error ?tag ~here
 let tag ~tag ?here t = t >>| Sync.tag ~tag ?here
 let tag' ?tag ?here t = t >>| Sync.tag' ?tag ?here
-let try_with ?tag ~here f = Deferred.Or_error.try_with f >>| Sync.of_or_error ?tag ~here
+
+let try_with ?tag ~here f =
+  Deferred.Or_error.try_with
+    ~run:`Schedule
+    ~rest:`Log
+    f
+  >>| Sync.of_or_error ?tag ~here
+;;
+
 let try_with_join ?tag ~here f = try_with ?tag ~here f >>| Result.join
 
 let try_with_or_error ?tag ~here f =
-  Deferred.Or_error.try_with_join f >>| Sync.of_or_error ?tag ~here
+  Deferred.Or_error.try_with_join
+    ~run:`Schedule
+    ~rest:`Log
+    f
+  >>| Sync.of_or_error ?tag ~here
 ;;
 
 include (Deferred.Result : Monad.S2 with type ('a, 'e) t := ('a, 'e) Deferred.Result.t)
