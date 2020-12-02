@@ -1,3 +1,4 @@
+#+UUID: a48d130b-8f0e-3a3d-e471-ec4331606cb0
 ~async_smtp~ is a library that implements SMTP (Simple Mail Transport Protocol), with
 functionality for acting as a client or server. In combination with the ~email_message~
 library, it is used as the core of Jane Street's internal MTA (Message Transfer Agent, aka
