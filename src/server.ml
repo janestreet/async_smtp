@@ -332,25 +332,25 @@ module Make (Cb : Plugin.S) = struct
         | Smtp_command.Auth (meth, initial_resp) ->
           top_auth ~flows ~session ~meth ~initial_resp
         | Smtp_command.Start_tls ->
-          ((* We assume that [Cb.Session.extensions] only changes after a protocol
-              upgrade. *)
-            match
-              Cb.Session.extensions ~state session
-              |> List.find_map ~f:(function
-                | Plugin.Extension.Start_tls cb ->
-                  Option.map tls_options ~f:(fun opts -> opts, cb)
-                | _ -> None)
-            with
-            | None ->
-              let%bind () =
-                command_not_implemented
-                  ~here:[%here]
-                  ~flows
-                  ~component
-                  Smtp_command.Start_tls
-              in
-              top ~session
-            | Some (tls_options, cbs) -> top_start_tls ~session ~flows tls_options cbs)
+          (* We assume that [Cb.Session.extensions] only changes after a protocol
+             upgrade. *)
+          (match
+             Cb.Session.extensions ~state session
+             |> List.find_map ~f:(function
+               | Plugin.Extension.Start_tls cb ->
+                 Option.map tls_options ~f:(fun opts -> opts, cb)
+               | _ -> None)
+           with
+           | None ->
+             let%bind () =
+               command_not_implemented
+                 ~here:[%here]
+                 ~flows
+                 ~component
+                 Smtp_command.Start_tls
+             in
+             top ~session
+           | Some (tls_options, cbs) -> top_start_tls ~session ~flows tls_options cbs)
         | Smtp_command.Sender sender -> top_envelope ~flows ~session sender
         | (Smtp_command.Recipient _ | Smtp_command.Data) as cmd ->
           let%bind () = bad_sequence_of_commands ~here:[%here] ~flows ~component cmd in

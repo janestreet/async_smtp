@@ -105,7 +105,8 @@ type t =
   }
 [@@deriving bin_io]
 
-include Sexpable.Of_sexpable
+include
+  Sexpable.Of_sexpable
     (struct
       type t = int * string list [@@deriving sexp]
     end)
