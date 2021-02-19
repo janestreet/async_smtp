@@ -100,7 +100,9 @@ module Flows : sig
 end
 
 module Component : sig
-  include Identifiable with type t = string list
+  type t = string list
+
+  include Stringable.S with type t := t
 
   val parts : t -> string list
   val join : t -> t -> t

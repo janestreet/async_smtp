@@ -126,18 +126,10 @@ module Flows = struct
 end
 
 module Component = struct
-  module T = struct
-    let module_name = "Async_smtp.Smtp_mail_log.Component"
+  type t = string list [@@deriving sexp, bin_io, compare, hash]
 
-    type t = string list [@@deriving sexp, bin_io, compare, hash]
-
-    let to_string = String.concat ~sep:"/"
-    let of_string = String.split ~on:'/'
-  end
-
-  include T
-  include Identifiable.Make (T)
-
+  let to_string = String.concat ~sep:"/"
+  let of_string = String.split ~on:'/'
   let parts t = t
   let join a b = a @ b
 
