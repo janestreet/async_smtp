@@ -6,9 +6,9 @@ module Stable = struct
       type t =
         (* When adding to this type, don't forget to add to examples below. *)
         [ Email_message.Email_selector.Stable.Base.V1.t
-        | `envelope_sender of Re2_serializable.Stable.V1.t
-        | `exists_envelope_recipient of Re2_serializable.Stable.V1.t
-        | `all_envelope_recipients of Re2_serializable.Stable.V1.t
+        | `envelope_sender of Re2.Stable.V1.t
+        | `exists_envelope_recipient of Re2.Stable.V1.t
+        | `all_envelope_recipients of Re2.Stable.V1.t
         ]
       [@@deriving bin_shape, sexp]
 

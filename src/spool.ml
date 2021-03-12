@@ -1,6 +1,7 @@
 module Stable = struct
   open Core.Core_stable
   open Async_smtp_types.Async_smtp_types_stable
+  module Time = Time_unix.Stable
   module Message = Message.Stable
   module Quarantine_reason = Quarantine_reason.Stable
   module Message_id = Message.Id

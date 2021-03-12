@@ -1,5 +1,6 @@
 module Stable = struct
   open Core.Core_stable
+  module Time = Time_unix.Stable
 
   module V1 = struct
     type t = Time.Span.V2.t [@@deriving sexp]

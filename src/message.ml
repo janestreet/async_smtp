@@ -2,6 +2,7 @@ module Stable = struct
   open Core.Core_stable
   open Email_message.Email_message_stable
   open Async_smtp_types.Async_smtp_types_stable
+  module Time = Time_unix.Stable
   module Unstable_mail_log = Mail_log
   module Mail_log = Mail_log.Stable
   module Retry_interval = Smtp_envelope.Retry_interval

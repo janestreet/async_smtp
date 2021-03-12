@@ -21,13 +21,12 @@ depends: [
   "email_message"
   "ppx_jane"
   "re2"
-  "re2_serializable"
   "resource_cache"
   "sexp_macro"
   "textutils"
-  "base64"           {>= "3.4.0"}
+  "base64"         {>= "3.4.0"}
   "cryptokit"
-  "dune"             {>= "2.0.0"}
+  "dune"           {>= "2.0.0"}
 ]
 synopsis: "SMTP client and server"
 description: "
