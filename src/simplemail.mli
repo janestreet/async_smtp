@@ -4,6 +4,13 @@ open Async_smtp_types
 module Envelope_status = Client.Envelope_status
 
 module Expert : sig
+  val send_envelope
+    :  ?log:Log.t
+    -> ?credentials:Credentials.t
+    -> ?server:Host_and_port.t
+    -> Smtp_envelope.t
+    -> Envelope_status.t Deferred.Or_error.t
+
   val send'
     :  ?log:Mail_log.t
     -> ?credentials:Credentials.t

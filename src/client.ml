@@ -389,6 +389,7 @@ module Tcp = struct
         ?reader_buffer_size
         ?writer_buffer_size
         ?timeout
+        ?time_source
         ?(config = Config.default)
         ?(credentials = Credentials.anon)
         ~log
@@ -446,6 +447,7 @@ module Tcp = struct
            ?reader_buffer_size
            ?writer_buffer_size
            ?timeout
+           ?time_source
            (Tcp.Where_to_connect.of_inet_address socket_address)
            f)
   ;;
@@ -477,6 +479,7 @@ module Tcp = struct
         ?reader_buffer_size
         ?writer_buffer_size
         ?timeout
+        ?time_source
         ?config
         ?credentials
         ~log
@@ -505,6 +508,7 @@ module Tcp = struct
                ?reader_buffer_size
                ?writer_buffer_size
                ?timeout
+               ?time_source
                ?config
                ?credentials
                ~log

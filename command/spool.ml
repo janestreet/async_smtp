@@ -2,6 +2,7 @@ open Core
 open Async
 open Async_smtp
 open Common
+module Time = Time_unix
 
 let msgid = Command.Param.Arg_type.create Smtp_spool.Stable.Message_id.V1.of_string
 

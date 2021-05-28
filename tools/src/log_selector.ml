@@ -28,11 +28,11 @@ module Mail_fingerprint = Smtp_mail_log.Mail_fingerprint
 
 module Base = struct
   type t =
-    [ `envelope_sender of Regex.t
-    | `envelope_recipient of Regex.t
-    | `recipient of Regex.t
-    | `subject of Regex.t
-    | `rfc822_id of Regex.t
+    [ `envelope_sender of Regex.Stable.V1_no_options.t
+    | `envelope_recipient of Regex.Stable.V1_no_options.t
+    | `recipient of Regex.Stable.V1_no_options.t
+    | `subject of Regex.Stable.V1_no_options.t
+    | `rfc822_id of Regex.Stable.V1_no_options.t
     | `flows of Smtp_mail_log.Stable.Flows.V1.t
     ]
   [@@deriving sexp]

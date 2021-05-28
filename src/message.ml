@@ -149,6 +149,7 @@ end
 open Core
 open Async
 open Async_smtp_types
+module Time = Time_unix
 
 (* Includes parent id and an incrementing counter. *)
 module Id = struct

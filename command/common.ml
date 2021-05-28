@@ -45,12 +45,12 @@ end = struct
       and server_config_path =
         flag
           "server-config"
-          (optional Filename.arg_type)
+          (optional Filename_unix.arg_type)
           ~doc:"CONFIG Async_smtp server config file"
       and spool_config_path =
         flag
           "spool-config"
-          (optional Filename.arg_type)
+          (optional Filename_unix.arg_type)
           ~doc:"CONFIG Async_smtp spool config file"
       in
       let server_config =

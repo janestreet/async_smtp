@@ -2,6 +2,7 @@ open Core
 open Poly
 open! Async
 open Async_smtp
+module Time = Time_unix
 module Message = Smtp_mail_log.Message
 module Flows = Smtp_mail_log.Flows
 

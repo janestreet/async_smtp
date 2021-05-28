@@ -59,7 +59,7 @@ module Smtp_client_config = struct
       let config_file =
         flag
           "-smtp-config"
-          (optional Filename.arg_type)
+          (optional Filename_unix.arg_type)
           ~doc:
             "File with config for the mailcore smtp client (defaults to ./.js-smtp.sexp \
              or ~/.js-smtp.sexp or system defaults)"

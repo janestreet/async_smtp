@@ -16,15 +16,17 @@ let client_log =
 module Expert = struct
   include Email.Simple.Expert
 
-  let send'
+  let send_envelope
         ?(log = Lazy.force client_log)
         ?credentials
         ?(server = default_server)
-        ~sender
-        ?sender_args
-        ~recipients
-        email
+        envelope
     =
+    Client.Tcp.with_ ?credentials server ~log ~f:(fun client ->
+      Client.send_envelope client ~log envelope)
+  ;;
+
+  let send' ?log ?credentials ?server ~sender ?sender_args ~recipients email =
     let message =
       Smtp_envelope.create
         ~sender
@@ -34,8 +36,7 @@ module Expert = struct
         ~email
         ()
     in
-    Client.Tcp.with_ ?credentials server ~log ~f:(fun client ->
-      Client.send_envelope client ~log message)
+    send_envelope ?log ?credentials ?server message
   ;;
 
   let send ?log ?credentials ?server ~sender ?sender_args ~recipients email =

@@ -12,6 +12,8 @@ module Stable = struct
 end
 
 open! Core
+module Unix = Core_unix
+module Time = Time_unix
 
 include (
   String :

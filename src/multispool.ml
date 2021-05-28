@@ -2,6 +2,7 @@ open Core
 open Poly
 open Async
 open Common
+module Time = Time_unix
 
 (* Various shared utility functions *)
 module Utils = struct

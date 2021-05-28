@@ -3,6 +3,7 @@ open Poly
 open Async
 open Async_smtp
 
+let () = Backtrace.elide := true
 let valid_username = "username"
 let valid_password = "password"
 

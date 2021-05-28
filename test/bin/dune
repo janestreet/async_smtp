@@ -1,2 +1,3 @@
 (executables (names spool_memory_test test_spool)
- (libraries test_async_smtp async_smtp core) (preprocess (pps ppx_jane)))
+ (libraries test_async_smtp async_smtp core.command_unix core)
+ (preprocess (pps ppx_jane)))

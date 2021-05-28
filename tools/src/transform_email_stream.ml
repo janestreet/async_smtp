@@ -26,7 +26,8 @@ end
 module Bodies = struct
   module Rewrite = struct
     type t =
-      Re2.t * [ `Rewrite_entire_body_to of string | `Rewrite_all_matches_to of string ]
+      Re2.Stable.V1_no_options.t
+      * [ `Rewrite_entire_body_to of string | `Rewrite_all_matches_to of string ]
     [@@deriving sexp]
   end
 

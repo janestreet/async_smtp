@@ -300,7 +300,7 @@ let command =
         flag "-dir" (optional string) ~doc:" Working dir"
         |> map ~f:(function
           | Some dir -> dir
-          | None -> Core.Unix.mkdtemp "/tmp/stress-test-")
+          | None -> Core_unix.mkdtemp "/tmp/stress-test-")
       and host =
         flag
           "-host"

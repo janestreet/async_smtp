@@ -29,6 +29,7 @@ module Tcp_options = struct
     ; reader_buffer_size : int option
     ; writer_buffer_size : int option
     ; timeout : Time.Span.t option
+    ; time_source : Time_source.t option
     }
 
   let create
@@ -37,9 +38,16 @@ module Tcp_options = struct
         ?reader_buffer_size
         ?writer_buffer_size
         ?timeout
+        ?time_source
         ()
     =
-    { buffer_age_limit; interrupt; reader_buffer_size; writer_buffer_size; timeout }
+    { buffer_age_limit
+    ; interrupt
+    ; reader_buffer_size
+    ; writer_buffer_size
+    ; timeout
+    ; time_source
+    }
   ;;
 end
 
@@ -171,6 +179,7 @@ let init
       ?reader_buffer_size
       ?writer_buffer_size
       ?timeout
+      ?time_source
       ?component
       ~log
       ~cache_config
@@ -186,6 +195,7 @@ let init
       ?reader_buffer_size
       ?writer_buffer_size
       ?timeout
+      ?time_source
       ()
   in
   let args = Resource.Common_args.create ~component ~tcp_options ~log ~client_config in

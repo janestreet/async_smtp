@@ -77,4 +77,4 @@ let command =
     [ "create", Create.command; "fsck", Fsck.command ]
 ;;
 
-let () = Command.run command
+let () = Command_unix.run command

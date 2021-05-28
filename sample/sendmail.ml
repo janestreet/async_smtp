@@ -23,7 +23,7 @@ let command =
         flag
           "attachment"
           ~doc:"FILE to include as an attachment"
-          (listed Filename.arg_type)
+          (listed Filename_unix.arg_type)
       and content_type =
         Simplemail.(
           flag
@@ -59,4 +59,4 @@ let command =
           content]
 ;;
 
-let () = Command.run command
+let () = Command_unix.run command

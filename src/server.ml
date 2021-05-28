@@ -1002,9 +1002,9 @@ module Make (Cb : Plugin.S) = struct
         (fun remote_ip_address reader writer ->
            let local_ip_address =
              Option.try_with (fun () ->
-               match Writer.fd writer |> Fd.file_descr_exn |> Core.Unix.getsockname with
-               | Core.Unix.ADDR_UNIX _ -> assert false
-               | Core.Unix.ADDR_INET (host, port) ->
+               match Writer.fd writer |> Fd.file_descr_exn |> Core_unix.getsockname with
+               | Core_unix.ADDR_UNIX _ -> assert false
+               | Core_unix.ADDR_INET (host, port) ->
                  Socket.Address.Inet.create host ~port)
              |> Option.value ~default:local_ip_address
            in

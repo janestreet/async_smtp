@@ -94,6 +94,7 @@ open Core
 open Poly
 open Async
 open Async_smtp_types
+module Time = Time_unix
 
 
 module Config = Spool_config
