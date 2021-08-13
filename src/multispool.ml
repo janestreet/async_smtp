@@ -482,10 +482,10 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       let lazy_inotify_pipe =
         lazy
           (let open Deferred.Let_syntax in
-           let%bind inotify, _ =
+           let%bind _, _, pipe =
              Async_inotify.create queue_dir ~modify_event_selector:`Closed_writable_fd
            in
-           return (Async_inotify.pipe inotify))
+           return pipe)
       in
       let test_mode_last_moved_into =
         match test_mode with

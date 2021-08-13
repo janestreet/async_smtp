@@ -15,8 +15,10 @@ let command =
       and from = flag "from" ~doc:"EMAIL sender of the email" (optional email_address)
       and subject = flag "subject" ~doc:"STRING subject of the email" (required string)
       and to_ =
-        flag "to" ~doc:"EMAIL recipients of the message" (one_or_more email_address)
-        |> map ~f:(fun (l, ls) -> l :: ls)
+        flag
+          "to"
+          ~doc:"EMAIL recipients of the message"
+          (one_or_more_as_list email_address)
       and cc = flag "cc" ~doc:"EMAIL CC'd recipient" (listed email_address)
       and bcc = flag "bcc" ~doc:"EMAIL BCC'd recipient" (listed email_address)
       and attachments =
