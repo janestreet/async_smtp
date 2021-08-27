@@ -214,9 +214,8 @@ let sort_envelope_recipients message =
 
 let dedup_headers conds =
   let equal (name1, value1) (name2, value2) =
-    if
-      match_header conds ~name:name1 ~value:value1
-      && match_header conds ~name:name2 ~value:value2
+    if match_header conds ~name:name1 ~value:value1
+    && match_header conds ~name:name2 ~value:value2
     then Email_headers.Name.equal name1 name2
     else false
   in

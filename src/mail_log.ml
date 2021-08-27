@@ -612,16 +612,14 @@ let adjust_log_levels
   =
   let log_level = Level.of_async_log_level (Log.level t) in
   let minimum_level = Level.max log_level minimum_level in
-  if
-    Level.( < ) remap_info_to minimum_level
-    && Level.( < ) remap_error_no_monitor_to minimum_level
-    && Level.( < ) remap_error_to minimum_level
+  if Level.( < ) remap_info_to minimum_level
+  && Level.( < ) remap_error_no_monitor_to minimum_level
+  && Level.( < ) remap_error_to minimum_level
   then force null_log
-  else if
-    minimum_level = log_level
-    && remap_info_to = `Info
-    && remap_error_no_monitor_to = `Error_no_monitor
-    && remap_error_to = `Error
+  else if minimum_level = log_level
+       && remap_info_to = `Info
+       && remap_error_no_monitor_to = `Error_no_monitor
+       && remap_error_to = `Error
   then t
   else
     Log.create
