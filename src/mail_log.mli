@@ -52,16 +52,22 @@ module Flows : sig
       | `Outbound_envelope
       | `Cached_connection
       ]
-    [@@deriving sexp_of]
+    [@@deriving sexp_of, equal]
   end
 
   module Id : sig
     type t = private string [@@deriving sexp_of]
 
     val is : t -> Kind.t -> bool
+    val kind : t -> Kind.t option
 
+    include Stringable.S with type t := t
     include Comparable.S_plain with type t := t
     include Hashable.S_plain with type t := t
+
+    module For_test : sig
+      val create : Kind.t -> int -> t
+    end
   end
 
   (* Represents a set of opaque flow ids.
@@ -71,10 +77,12 @@ module Flows : sig
   type t = private Id.t list [@@deriving sexp_of]
 
   val of_list : Id.t list -> t
+  val to_list : t -> Id.t list
 
   (* Should be used with care, but appropriate on some global state messages *)
 
   val none : t
+  val is_none : t -> bool
 
   (* The [Kind.t] is only informational and is included in the sexp for information only.
      It is not recoverable and not intended for machine processing.
@@ -97,6 +105,7 @@ module Flows : sig
      [ are_related x x && (are_related x y = are_related y x) ] *)
 
   val are_related : t -> t -> bool
+  val dedup : t -> t
 end
 
 module Component : sig

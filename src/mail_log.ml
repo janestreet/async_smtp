@@ -89,23 +89,26 @@ module Flows = struct
       | `Outbound_envelope
       | `Cached_connection
       ]
-    [@@deriving sexp_of]
+    [@@deriving sexp_of, enumerate, equal]
+
+    let to_string = function
+      | `Server_session -> "srv"
+      | `Client_session -> "cli"
+      | `Inbound_envelope -> "in"
+      | `Outbound_envelope -> "out"
+      | `Cached_connection -> "conn"
+    ;;
   end
 
   module Id = struct
     module T = struct
       type t = string [@@deriving sexp_of, compare, hash]
 
-      let tag = function
-        | `Server_session -> "srv#"
-        | `Client_session -> "cli#"
-        | `Inbound_envelope -> "in#"
-        | `Outbound_envelope -> "out#"
-        | `Cached_connection -> "conn#"
-      ;;
-
-      let create kind = sprintf !"%s#%{Uuid}" (tag kind) (Uuid_unix.create ())
-      let is t kind = String.is_prefix t ~prefix:(tag kind)
+      let create kind = sprintf !"%{Kind}##%{Uuid}" kind (Uuid_unix.create ())
+      let is t kind = String.is_prefix t ~prefix:(Kind.to_string kind ^ "##")
+      let kind t = List.find Kind.all ~f:(is t)
+      let to_string = Fn.id
+      let of_string = Fn.id
     end
 
     include T
@@ -113,16 +116,23 @@ module Flows = struct
     include Comparable.Make_plain (T)
 
     let equal = String.equal
+
+    module For_test = struct
+      let create kind i = sprintf !"%{Kind}##%04d" kind i
+    end
   end
 
   type t = Id.t list [@@deriving sexp_of]
 
   let none = []
   let of_list = Fn.id
+  let to_list = Fn.id
   let create kind = [ Id.create kind ]
   let union = ( @ )
   let extend t kind = Id.create kind :: t
   let are_related a = List.exists ~f:(List.mem a ~equal:Id.equal)
+  let dedup = List.dedup_and_sort ~compare:Id.compare
+  let is_none = List.is_empty
 end
 
 module Component = struct
@@ -435,7 +445,7 @@ module Message = struct
       if k = tag then Option.try_with (fun () -> f v) else None)
   ;;
 
-  let find_tag = find_tag' ~f:ident
+  let find_tag = find_tag' ~f:Fn.id
   let is_error_no_monitor t = find_tag t ~tag:Tag.error_no_monitor |> Option.is_some
 
   let remove_error_no_monitor_tag t =

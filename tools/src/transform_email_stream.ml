@@ -41,7 +41,7 @@ module Bodies = struct
 
   let mask_body t =
     match t.rewrites with
-    | [] -> ident
+    | [] -> Fn.id
     | _ ->
       Envelope.modify_email ~f:(fun email ->
         let content_str =
@@ -71,7 +71,7 @@ module Bodies = struct
 
   let hash_body t =
     match t.hash with
-    | None -> ident
+    | None -> Fn.id
     | Some `parts ->
       let hash_data octet_stream =
         let module Encoding = Octet_stream.Encoding in

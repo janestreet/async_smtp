@@ -202,7 +202,7 @@ module Expert = struct
                    ~reply
                    "send rejected"));
             Second (recipient, reply))
-      >>|? List.partition_map ~f:ident
+      >>|? List.partition_map ~f:Fn.id
       >>|? (function
         | [], rejected_recipients -> Error (`No_recipients rejected_recipients)
         | accepted_recipients, rejected_recipients ->
