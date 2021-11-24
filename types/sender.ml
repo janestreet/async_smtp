@@ -61,6 +61,8 @@ let of_string ?default_domain str =
   | _, _ :: _ -> failwithf "impossible, unexpected extension arguments" ()
 ;;
 
+let of_string_exn ?default_domain str = of_string ?default_domain str |> Or_error.ok_exn
+
 let to_string_with_arguments (sender, args) =
   to_string sender :: List.map args ~f:Sender_argument.to_string |> String.concat ~sep:" "
 ;;

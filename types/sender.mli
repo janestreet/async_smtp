@@ -20,6 +20,7 @@ type t =
 [@@deriving compare, hash, sexp_of]
 
 val of_string : ?default_domain:string -> string -> t Or_error.t
+val of_string_exn : ?default_domain:string -> string -> t
 
 val of_string_with_arguments
   :  ?default_domain:string
