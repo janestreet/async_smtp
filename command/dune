@@ -1,4 +1,3 @@
 (library (name async_smtp_command) (public_name async_smtp.command)
- (libraries async core_kernel.core email_message async_smtp
-  core.filename_unix)
+ (libraries async core email_message async_smtp core_unix.filename_unix)
  (preprocess (pps ppx_jane)))
