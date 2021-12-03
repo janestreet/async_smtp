@@ -18,7 +18,7 @@ depends: [
   "async_shell"
   "async_ssl"
   "core"
-  "core_kernel"
+  "core_unix"
   "email_message"
   "ppx_jane"
   "re2"

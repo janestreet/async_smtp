@@ -1,4 +1,4 @@
 (library (name feature_test_async_smtp)
- (libraries core_kernel.core async async_smtp expect_test_helpers_async
+ (libraries core async async_smtp expect_test_helpers_async
   expect_test_helpers_core test_async_smtp)
  (preprocess (pps ppx_jane)))
