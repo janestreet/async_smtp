@@ -569,4 +569,29 @@ module Bsmtp = struct
              >>| Envelope_status.ok_exn ~allow_rejected_recipients:false
              >>| (ignore : string -> unit))))
   ;;
+
+  let to_string ?skip_prelude_and_prologue ?log ?flows ?component envelopes =
+    let open Deferred.Or_error.Let_syntax in
+    let%bind `Reader reader, `Writer writer =
+      Deferred.Or_error.try_with (fun () ->
+        Unix.pipe (Info.create_s [%message "Async_smtp.Client.Bsmtp.to_string"]))
+    in
+    let reader = Reader.create reader in
+    let writer = Writer.create writer in
+    let%map () =
+      let%bind () =
+        write
+          ?skip_prelude_and_prologue
+          ?log
+          ?flows
+          ?component
+          writer
+          (Pipe.of_list envelopes)
+      in
+      let%bind () = Deferred.Or_error.try_with (fun () -> Writer.flushed writer) in
+      let%bind () = Deferred.Or_error.try_with (fun () -> Writer.close writer) in
+      return ()
+    and string = Deferred.Or_error.try_with (fun () -> Reader.contents reader) in
+    string
+  ;;
 end

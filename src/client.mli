@@ -127,4 +127,12 @@ module Bsmtp : sig
     -> Writer.t
     -> Smtp_envelope.t Pipe.Reader.t
     -> unit Deferred.Or_error.t
+
+  val to_string
+    :  ?skip_prelude_and_prologue:bool
+    -> ?log:Mail_log.t (* = Mail_log.quiet *)
+    -> ?flows:Mail_log.Flows.t
+    -> ?component:Mail_log.Component.t
+    -> Smtp_envelope.t list
+    -> string Deferred.Or_error.t
 end
