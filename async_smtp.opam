@@ -1,4 +1,5 @@
 opam-version: "2.0"
+version: "v0.15.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/async_smtp"
@@ -10,21 +11,21 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml" {>= "4.12.0"}
-  "async"
-  "async_extra"
-  "async_inotify"
-  "async_sendfile"
-  "async_shell"
-  "async_ssl"
-  "core"
-  "core_unix"
-  "email_message"
-  "ppx_jane"
-  "re2"
-  "resource_cache"
-  "sexp_macro"
-  "textutils"
+  "ocaml"          {>= "4.12.0"}
+  "async"          {>= "v0.15" & < "v0.16"}
+  "async_extra"    {>= "v0.15" & < "v0.16"}
+  "async_inotify"  {>= "v0.15" & < "v0.16"}
+  "async_sendfile" {>= "v0.15" & < "v0.16"}
+  "async_shell"    {>= "v0.15" & < "v0.16"}
+  "async_ssl"      {>= "v0.15" & < "v0.16"}
+  "core"           {>= "v0.15" & < "v0.16"}
+  "core_unix"      {>= "v0.15" & < "v0.16"}
+  "email_message"  {>= "v0.15" & < "v0.16"}
+  "ppx_jane"       {>= "v0.15" & < "v0.16"}
+  "re2"            {>= "v0.15" & < "v0.16"}
+  "resource_cache" {>= "v0.15" & < "v0.16"}
+  "sexp_macro"     {>= "v0.15" & < "v0.16"}
+  "textutils"      {>= "v0.15" & < "v0.16"}
   "base64"         {>= "3.4.0"}
   "cryptokit"
   "dune"           {>= "2.0.0"}
