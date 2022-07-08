@@ -26,7 +26,7 @@ depends: [
   "sexp_macro"
   "textutils"
   "base64"         {>= "3.4.0"}
-  "cryptokit"
+  "cryptokit"      {>= "1.16" & < "1.17"}
   "dune"           {>= "2.0.0"}
 ]
 synopsis: "SMTP client and server"

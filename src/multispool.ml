@@ -2,7 +2,7 @@ open Core
 open Poly
 open Async
 open Common
-module Time = Time_unix
+module Time = Time_float_unix
 
 (* Various shared utility functions *)
 module Utils = struct
@@ -17,8 +17,7 @@ module Utils = struct
 
   let open_creat_excl_wronly ?perm path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> Unix.openfile path ?perm ~mode:[ `Creat; `Excl; `Wronly ])
     >>| replace_unix_error ~error:EEXIST ~replacement:`Exists
@@ -26,8 +25,7 @@ module Utils = struct
 
   let touch path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () ->
          let tod = Unix.gettimeofday () in
@@ -36,16 +34,14 @@ module Utils = struct
 
   let unlink path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> Unix.unlink path)
   ;;
 
   let stat_or_notfound path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> Unix.stat path)
     >>| replace_unix_error ~error:ENOENT ~replacement:`Not_found
@@ -53,8 +49,7 @@ module Utils = struct
 
   let ls dir =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> Sys.ls_dir dir)
   ;;
@@ -163,8 +158,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
   let load_metadata path =
     S.Throttle.enqueue (fun () ->
       Deferred.Or_error.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () ->
            let%bind contents = Reader.file_contents path in
@@ -174,8 +168,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
   let save_metadata ?temp_file ~contents path =
     S.Throttle.enqueue (fun () ->
       Deferred.Or_error.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () -> Writer.save path ?temp_file ~contents ~fsync:true))
   ;;
@@ -193,8 +186,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
 
     let stat t =
       Deferred.Or_error.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () ->
            S.Throttle.enqueue (fun () -> Unix.stat (data_dir_of t.spool ^/ t.name)))
@@ -229,8 +221,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
         Utils.touch src
         >>=? fun () ->
         Deferred.Or_error.try_with
-          ~run:
-            `Schedule
+          ~run:`Schedule
           ~rest:`Log
           (fun () -> Unix.rename ~src ~dst))
     ;;
@@ -303,8 +294,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       let rec try_name ~attempt =
         let%bind name =
           Deferred.Or_error.try_with
-            ~run:
-              `Schedule
+            ~run:`Schedule
             ~rest:`Log
             (fun () -> Deferred.return (S.Name_generator.next opaque ~attempt))
         in
@@ -314,8 +304,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
         | `Ok fd ->
           let%bind () =
             Deferred.Or_error.try_with
-              ~run:
-                `Schedule
+              ~run:`Schedule
               ~rest:`Log
               (fun () -> Unix.close fd)
           in
@@ -338,8 +327,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     let data_path = data_dir_of t ^/ name in
     match%bind
       Deferred.Or_error.try_with_join
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () ->
            save_metadata temp_path ~contents:meta
@@ -348,8 +336,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
            >>=? fun () ->
            S.Throttle.enqueue (fun () ->
              Deferred.Or_error.try_with
-               ~run:
-                 `Schedule
+               ~run:`Schedule
                ~rest:`Log
                (fun () -> Unix.rename ~src:temp_path ~dst:meta_path)))
     with

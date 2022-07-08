@@ -14,7 +14,7 @@ end
 module Status : sig
   type t =
     [ `Send_now
-    | `Send_at of Time.t
+    | `Send_at of Time_float.t
     | `Sending
     | `Frozen
     | `Removed
@@ -45,10 +45,10 @@ val spool_dir : t -> string
 val id : t -> Id.t
 val flows : t -> Mail_log.Flows.t
 val parent_id : t -> Smtp_envelope.Id.t
-val spool_date : t -> Time.t
+val spool_date : t -> Time_float.t
 val next_hop_choices : t -> Host_and_port.t list
 val envelope_info : t -> Smtp_envelope.Info.t
-val time_on_spool : t -> Time.Span.t
+val time_on_spool : t -> Time_float.Span.t
 val status : t -> Status.t
 val set_status : t -> Status.t -> unit
 
@@ -72,9 +72,9 @@ val set_failed_recipients : t -> Email_address.t list -> unit
 val move_failed_recipients_to_remaining_recipients : t -> unit
 
 
-val relay_attempts : t -> (Time.t * Error.t) list
-val add_relay_attempt : t -> Time.t * Error.t -> unit
-val last_relay_attempt : t -> (Time.t * Error.t) option
+val relay_attempts : t -> (Time_float.t * Error.t) list
+val add_relay_attempt : t -> Time_float.t * Error.t -> unit
+val last_relay_attempt : t -> (Time_float.t * Error.t) option
 
 (** [Data.t] is an on-disk [Email.t]. The type is abstract because we store a dot-encoded
     email on disk. *)
@@ -91,9 +91,9 @@ val of_envelope_batch
   :  Smtp_envelope.Routed.Batch.t
   -> gen_id:(unit -> Id.t Deferred.Or_error.t)
   -> spool_dir:string
-  -> spool_date:Time.t
+  -> spool_date:Time_float.t
   -> failed_recipients:Email_address.t list
-  -> relay_attempts:(Time.t * Error.t) list
+  -> relay_attempts:(Time_float.t * Error.t) list
   -> parent_id:Smtp_envelope.Id.t
   -> status:Status.t
   -> flows:Mail_log.Flows.t

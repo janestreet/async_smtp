@@ -50,8 +50,7 @@ let with_stdout_log ~tag ~level (f : log:Log.t -> 'a Deferred.t) : 'a Deferred.t
 let drain_and_closed r =
   Deferred.all_unit
     [ Monitor.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () -> Reader.lines r |> Pipe.drain)
       >>| ignore
@@ -92,8 +91,7 @@ let rec mk_pipe ?echo here desc =
 let print_and_ignore_exn identity f =
   match%map
     Monitor.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       ~extract_exn:true
       f
@@ -139,7 +137,7 @@ let run ~echo ~client ~server =
   in
   (* Hack to ensure the tests terminate in case of protocol errors *)
   let shutdown_later () =
-    don't_wait_for (Clock.after (Time.Span.of_sec 1.) >>= shutdown_now)
+    don't_wait_for (Clock.after (Time_float.Span.of_sec 1.) >>= shutdown_now)
   in
   Monitor.protect
     ~run:`Schedule
@@ -301,8 +299,8 @@ let client_impl
         ~config:
           { Client_config.greeting = Some client_greeting
           ; tls = []
-          ; send_receive_timeout = `This (Time.Span.of_sec 1.)
-          ; final_ok_timeout = `This (Time.Span.of_sec 1.)
+          ; send_receive_timeout = `This (Time_float.Span.of_sec 1.)
+          ; final_ok_timeout = `This (Time_float.Span.of_sec 1.)
           }
         ?credentials
         ~log
@@ -322,13 +320,13 @@ let client_impl
 let gen_impl ~f r w =
   let send msg =
     Writer.write_line w msg;
-    match%map Clock.with_timeout (Time.Span.of_sec 1.0) (Writer.flushed w) with
+    match%map Clock.with_timeout (Time_float.Span.of_sec 1.0) (Writer.flushed w) with
     | `Timeout ->
       failwith "Failed to flush in time, maybe you should read something first"
     | `Result () -> ()
   in
   let receive msg =
-    match%map Clock.with_timeout (Time.Span.of_sec 1.0) (Reader.read_line r) with
+    match%map Clock.with_timeout (Time_float.Span.of_sec 1.0) (Reader.read_line r) with
     | `Timeout ->
       failwithf
         !"Expected %{sexp:string} but got timeout, maybe you need to send something \

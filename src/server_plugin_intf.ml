@@ -237,7 +237,7 @@ end = struct
       sprintf
         "%s ocaml/mailcore 0.2 %s"
         (Unix.gethostname ())
-        (Time.now () |> Time.to_string_abs ~zone:Time.Zone.utc)
+        (Time_float.now () |> Time_float.to_string_abs ~zone:Time_float.Zone.utc)
     ;;
 
     let extensions ~state:_ _ = []

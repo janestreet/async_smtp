@@ -2,7 +2,7 @@ module Stable = struct
   open Core.Core_stable
   open Email_message.Email_message_stable
   open Async_smtp_types.Async_smtp_types_stable
-  module Time = Time_unix.Stable
+  module Time = Time_float_unix.Stable
   module Unstable_mail_log = Mail_log
   module Mail_log = Mail_log.Stable
   module Retry_interval = Smtp_envelope.Retry_interval
@@ -149,7 +149,7 @@ end
 open Core
 open Async
 open Async_smtp_types
-module Time = Time_unix
+module Time = Time_float_unix
 
 (* Includes parent id and an incrementing counter. *)
 module Id = struct
@@ -265,8 +265,7 @@ module Data = struct
 
   let load path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () ->
          let%bind contents = Reader.file_contents path in
@@ -275,8 +274,7 @@ module Data = struct
 
   let save ?temp_file t path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> Email.save ?temp_file ~fsync:true ~eol_except_raw_content:`CRLF t path)
   ;;

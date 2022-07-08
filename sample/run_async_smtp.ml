@@ -51,7 +51,7 @@ module Server = Smtp_server.Make (struct
       let next_hop_choices = [ Host_and_port.create ~host:"localhost" ~port:25 ]
 
       let retry_intervals =
-        let minute x = Smtp_envelope.Retry_interval.create (Time.Span.of_min x) in
+        let minute x = Smtp_envelope.Retry_interval.create (Time_float.Span.of_min x) in
         [ minute 1.; minute 2.; minute 2.; minute 5. ]
       ;;
 

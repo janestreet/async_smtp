@@ -133,8 +133,8 @@ module Config = struct
     let client =
       { Smtp_client.Config.greeting = Some "stress-test"
       ; tls = Option.value_map ~f:snd tls_options ~default:[]
-      ; send_receive_timeout = `This (Time.Span.of_sec 2.)
-      ; final_ok_timeout = `This (Time.Span.of_sec 5.)
+      ; send_receive_timeout = `This (Time_float.Span.of_sec 2.)
+      ; final_ok_timeout = `This (Time_float.Span.of_sec 5.)
       }
     in
     let server =
@@ -163,8 +163,7 @@ let send ~config ~client_config envelope =
   don't_wait_for
     (Throttle.enqueue !throttle (fun () ->
        Deferred.Or_error.try_with_join
-         ~run:
-           `Schedule
+         ~run:`Schedule
          ~rest:`Log
          (fun () ->
             Smtp_client.Tcp.with_

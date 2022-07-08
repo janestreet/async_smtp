@@ -24,8 +24,7 @@ module Data = struct
 
   let save ?temp_file t path =
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> Writer.save_sexp ?temp_file ~hum:true path (sexp_of_t t))
   ;;

@@ -46,8 +46,8 @@ module Timeouts : sig
       timeout. This can be set to a time span smaller than [receive] to speed up server
       shutdown. *)
   type t =
-    { receive : Time.Span.t
-    ; receive_after_close : Time.Span.t
+    { receive : Time_float.Span.t
+    ; receive_after_close : Time_float.Span.t
     }
   [@@deriving sexp]
 

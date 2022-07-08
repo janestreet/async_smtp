@@ -80,7 +80,7 @@ module Tcp : sig
        -> Host_and_port.t
        -> f:(t -> 'a Deferred.Or_error.t)
        -> 'a Deferred.Or_error.t)
-        Tcp.with_connect_options
+        Tcp.Aliases.with_connect_options
 end
 
 module Expert : sig

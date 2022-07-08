@@ -122,7 +122,7 @@ module Gc = struct
   let stat_pipe =
     Rpc.Pipe_rpc.implement Rpc_intf.Gc.stat_pipe (fun () () ->
       let r, w = Pipe.create () in
-      Clock.every' ~stop:(Pipe.closed w) (Time.Span.of_sec 15.) (fun () ->
+      Clock.every' ~stop:(Pipe.closed w) (Time_float.Span.of_sec 15.) (fun () ->
         Pipe.write w (Gc.quick_stat ()));
       return (Ok r))
   ;;

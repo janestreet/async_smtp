@@ -33,8 +33,8 @@ module Domain_suffix = String
 type t =
   { greeting : string option [@sexp.option]
   ; tls : (Domain_suffix.t * Tls.t) list
-  ; send_receive_timeout : [ `Default | `This of Time.Span.t ]
-  ; final_ok_timeout : [ `Default | `This of Time.Span.t ]
+  ; send_receive_timeout : [ `Default | `This of Time_float.Span.t ]
+  ; final_ok_timeout : [ `Default | `This of Time_float.Span.t ]
   }
 [@@deriving sexp, fields]
 
@@ -58,11 +58,11 @@ let has_tls t = not (List.is_empty t.tls)
 let send_receive_timeout t =
   match t.send_receive_timeout with
   | `This send_receive_timeout -> send_receive_timeout
-  | `Default -> Time.Span.of_sec 300.
+  | `Default -> Time_float.Span.of_sec 300.
 ;;
 
 let final_ok_timeout t =
   match t.final_ok_timeout with
   | `This final_ok_timeout -> final_ok_timeout
-  | `Default -> Time.Span.scale (send_receive_timeout t) 2.
+  | `Default -> Time_float.Span.scale (send_receive_timeout t) 2.
 ;;

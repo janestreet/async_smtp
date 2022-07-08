@@ -92,7 +92,7 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
     envelope_batch
     ~gen_id:(fun () -> On_disk_spool.Unique_name.reserve spool original_msg)
     ~spool_dir:(On_disk_spool.dir spool)
-    ~spool_date:(Time.now ())
+    ~spool_date:(Time_float.now ())
     ~failed_recipients:[]
     ~relay_attempts:[]
     ~parent_id
@@ -217,7 +217,7 @@ let send_to_hops t ~log ~client_cache data_file =
          "attempting delivery"));
   match%bind
     Client_cache.Tcp.with_'
-      ~give_up:(Clock.after (Time.Span.of_min 2.))
+      ~give_up:(Clock.after (Time_float.Span.of_min 2.))
       ~cache:client_cache
       (Message.next_hop_choices t)
       ?route:(Smtp_envelope.Info.route (Message.envelope_info t))
@@ -251,7 +251,7 @@ let send_to_hops t ~log ~client_cache data_file =
            ~spool_id:(Message.Id.to_string (Message.id t))
            ~remote_address:hop
            e));
-    Message.add_relay_attempt t (Time.now (), e);
+    Message.add_relay_attempt t (Time_float.now (), e);
     return `Try_later
   | `Error_opening_all_addresses hops_and_errors ->
     List.iter hops_and_errors ~f:(fun (hop, e) ->
@@ -267,7 +267,7 @@ let send_to_hops t ~log ~client_cache data_file =
              ~remote_address:hop
              e)));
     let e = Error.createf "No hops available" in
-    Message.add_relay_attempt t (Time.now (), e);
+    Message.add_relay_attempt t (Time_float.now (), e);
     return `Try_later
   | `Gave_up_waiting_for_address ->
     let e = Error.createf "Gave up waiting for client" in
@@ -281,7 +281,7 @@ let send_to_hops t ~log ~client_cache data_file =
            ~spool_id:(Message.Id.to_string (Message.id t))
            ~tags:[ "hops", hops_tag ]
            e));
-    Message.add_relay_attempt t (Time.now (), e);
+    Message.add_relay_attempt t (Time_float.now (), e);
     return `Try_later
   | `Cache_is_closed ->
     (* Shutdown is initiated, so stop trying to resend. *)
@@ -308,7 +308,7 @@ let send_to_hops t ~log ~client_cache data_file =
           from one hop, we assume that we would get the same error from the remaining
           hops. *)
        (* Already logged by the client *)
-       Message.add_relay_attempt t (Time.now (), e);
+       Message.add_relay_attempt t (Time_float.now (), e);
        (match envelope_status with
         | Ok (_ (* envelope_id *), rejected_recipients)
         | Error (`No_recipients rejected_recipients) ->
@@ -356,7 +356,10 @@ let do_send t ~log ~client_cache =
          let delivery_failure = last_relay_error t in
          Message.set_status
            t
-           (`Send_at (Time.add (Time.now ()) (Smtp_envelope.Retry_interval.to_span r)));
+           (`Send_at
+              (Time_float.add
+                 (Time_float.now ())
+                 (Smtp_envelope.Retry_interval.to_span r)));
          Message.set_retry_intervals t rs;
          Ok (`Sync_meta, `Failed delivery_failure)))
 ;;

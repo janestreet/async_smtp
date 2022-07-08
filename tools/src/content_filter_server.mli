@@ -18,7 +18,7 @@ val start_exn : Smtp_server.Config.t -> log:Log.t -> t Deferred.t
     the same headers as [message] so it can recognized as a response. *)
 val send_receive
   :  t
-  -> ?timeout:Time.Span.t (** defaults to 10 seconds *)
+  -> ?timeout:Time_float.Span.t (** defaults to 10 seconds *)
   -> Host_and_port.t
   -> Smtp_envelope.t
   -> Smtp_envelope.t Or_error.t Deferred.t

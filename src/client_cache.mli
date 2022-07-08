@@ -39,7 +39,7 @@ val init
      -> load_balance:bool
      -> unit
      -> t)
-      Tcp.with_connect_options
+      Tcp.Aliases.with_connect_options
 
 val close_and_flush : t -> unit Deferred.t
 val close_started : t -> bool

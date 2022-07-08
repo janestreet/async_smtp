@@ -24,11 +24,11 @@ module Config = Resource_cache.Address_config
 
 module Tcp_options = struct
   type t =
-    { buffer_age_limit : [ `At_most of Time.Span.t | `Unlimited ] option
+    { buffer_age_limit : [ `At_most of Time_float.Span.t | `Unlimited ] option
     ; interrupt : unit Deferred.t option
     ; reader_buffer_size : int option
     ; writer_buffer_size : int option
-    ; timeout : Time.Span.t option
+    ; timeout : Time_float.Span.t option
     ; time_source : Time_source.t option
     }
 

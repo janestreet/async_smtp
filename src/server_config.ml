@@ -87,14 +87,16 @@ end
 
 module Timeouts = struct
   type t =
-    { receive : Time.Span.t
-    ; receive_after_close : Time.Span.t
+    { receive : Time_float.Span.t
+    ; receive_after_close : Time_float.Span.t
     }
   [@@deriving sexp]
 
   let default =
     (* Recommendation from RFC 5321 section 4.5.3.2.7 *)
-    { receive = Time.Span.of_min 5.; receive_after_close = Time.Span.of_sec 10. }
+    { receive = Time_float.Span.of_min 5.
+    ; receive_after_close = Time_float.Span.of_sec 10.
+    }
   ;;
 end
 

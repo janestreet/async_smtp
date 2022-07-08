@@ -40,7 +40,7 @@ end
 
 
 let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reader =
-  let start = Time.now () in
+  let start = Time_float.now () in
   let read_result =
     match%map Reader.read_line reader with
     | `Eof -> `Eof
@@ -56,9 +56,9 @@ let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reade
   | `Result (`Read_result result) -> return result
   | `Timeout -> return `Timeout
   | `Result `Close_started ->
-    let idle_for = Time.(diff (now ()) start) in
-    let remaining_timeout = Time.Span.(timeouts.receive_after_close - idle_for) in
-    if Time.Span.(remaining_timeout > zero)
+    let idle_for = Time_float.(diff (now ()) start) in
+    let remaining_timeout = Time_float.Span.(timeouts.receive_after_close - idle_for) in
+    if Time_float.Span.(remaining_timeout > zero)
     then (
       match%map Clock.with_timeout remaining_timeout read_result with
       | `Result result -> result
@@ -167,8 +167,7 @@ module Make (Cb : Plugin.S) = struct
     let component = component @ [ "PLUGIN"; plugin ] in
     match%map
       Monitor.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () -> f ~log:(Log.with_flow_and_component log ~flows ~component))
     with
@@ -415,8 +414,7 @@ module Make (Cb : Plugin.S) = struct
           ?ca_path:tls_options.Config.Tls_options.ca_path
           ~allowed_ciphers:tls_options.Config.Tls_options.allowed_ciphers
           ~crt_file:tls_options.Config.Tls_options.crt_file
-          ~key_file:
-            tls_options.Config.Tls_options.key_file
+          ~key_file:tls_options.Config.Tls_options.key_file
           (* Closing ssl connection will close the pipes which will in turn close
              the readers. *)
           ~net_to_ssl:(Reader.pipe old_reader)
@@ -462,8 +460,7 @@ module Make (Cb : Plugin.S) = struct
         in
         let plugin = "Tls.upgrade_to_tls" in
         Monitor.protect
-          ~run:
-            `Schedule
+          ~run:`Schedule
           ~rest:`Log
           (fun () ->
              match%bind
@@ -928,8 +925,7 @@ module Make (Cb : Plugin.S) = struct
                 ~tags:[ "greeting", greeting ]
                 "Session.connect:accepted"));
          Monitor.protect
-           ~run:
-             `Schedule
+           ~run:`Schedule
            ~rest:`Log
            (fun () ->
               let%bind () =
@@ -1010,8 +1006,7 @@ module Make (Cb : Plugin.S) = struct
            in
            let session_flows = Log.Flows.create `Server_session in
            Deferred.Or_error.try_with
-             ~run:
-               `Schedule
+             ~run:`Schedule
              ~rest:`Log
              (fun () ->
                 start_session

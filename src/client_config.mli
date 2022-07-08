@@ -48,7 +48,7 @@ type t =
   ; tls : (Domain_suffix.t * Tls.t) list
   (* Timeout for sending each SMTP command or message block and for receiving
      each SMTP reply. Default: 5min *)
-  ; send_receive_timeout : [ `Default | `This of Time.Span.t ]
+  ; send_receive_timeout : [ `Default | `This of Time_float.Span.t ]
   (* Timeout for the message delivery to complete, after all data has been transmitted.
      Default: timeout * 2 ~ 10m
 
@@ -60,7 +60,7 @@ type t =
 
      Another option would be to have a session timeout. However this is not
      practical since a session may take [O(number of recepients)] to complete. *)
-  ; final_ok_timeout : [ `Default | `This of Time.Span.t ]
+  ; final_ok_timeout : [ `Default | `This of Time_float.Span.t ]
   }
 [@@deriving sexp, fields]
 
@@ -68,5 +68,5 @@ val default : t
 val load_exn : string -> t Deferred.t
 val match_tls_domain : t -> string -> Tls.t option
 val has_tls : t -> bool
-val send_receive_timeout : t -> Time.Span.t
-val final_ok_timeout : t -> Time.Span.t
+val send_receive_timeout : t -> Time_float.Span.t
+val final_ok_timeout : t -> Time_float.Span.t

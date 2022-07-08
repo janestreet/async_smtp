@@ -123,15 +123,15 @@ module Spooled_message_info : sig
   type t [@@deriving sexp_of]
 
   val id : t -> Message_id.t
-  val spool_date : t -> Time.t
-  val last_relay_attempt : t -> (Time.t * Error.t) option
+  val spool_date : t -> Time_float.t
+  val last_relay_attempt : t -> (Time_float.t * Error.t) option
   val parent_id : t -> Smtp_envelope.Id.t
   val envelope_info : t -> Smtp_envelope.Info.t
 
   val status
     :  t
     -> [ `Send_now
-       | `Send_at of Time.t
+       | `Send_at of Time_float.t
        | `Sending
        | `Frozen
        | `Removed
@@ -187,7 +187,7 @@ module Event : sig
     * Smtp_envelope.Info.t
   [@@deriving sexp_of]
 
-  type t = Time.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of]
+  type t = Time_float.t * [ `Spool_event of spool_event | `Ping ] [@@deriving sexp_of]
 
   include Comparable.S_plain with type t := t
 

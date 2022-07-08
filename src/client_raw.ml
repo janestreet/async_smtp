@@ -238,7 +238,7 @@ let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
          (lazy (Log.Message.of_error ~here ~flows ~component e));
        Error e
      | `Timeout ->
-       let e = Error.createf !"Timeout %{Time.Span} waiting for reply" timeout in
+       let e = Error.createf !"Timeout %{Time_float.Span} waiting for reply" timeout in
        Log.error
          ~dont_send_to_monitor:()
          log
@@ -433,14 +433,12 @@ let do_start_tls t ~log ~component tls_options =
       ?options:tls_options.Config.Tls.options
       ?name:tls_options.Config.Tls.name
       ?ca_file:tls_options.Config.Tls.ca_file
-      ?ca_path:
-        tls_options.Config.Tls.ca_path
+      ?ca_path:tls_options.Config.Tls.ca_path
       (* This is set to [Verify_none] to allow [check_tls_security] to do its job below,
          which (depending on configuration) may allow the connection to succeed in spite
          of a certificate that OpenSSL would consider invalid. *)
       ~verify_modes:[ Verify_none ]
-      ~allowed_ciphers:
-        tls_options.Config.Tls.allowed_ciphers
+      ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
       (* Closing ssl connection will close the pipes which will in turn close
          the readers. *)
       ~net_to_ssl:(Reader.pipe old_reader)

@@ -66,7 +66,7 @@ val send
 
 val receive
   :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
-  -> ?timeout:Time.Span.t
+  -> ?timeout:Time_float.Span.t
   -> ?flows:Mail_log.Flows.t
   -> t
   -> log:Mail_log.t
@@ -76,7 +76,7 @@ val receive
 
 val send_receive
   :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
-  -> ?timeout:Time.Span.t
+  -> ?timeout:Time_float.Span.t
   -> t
   -> log:Mail_log.t
   -> ?flows:Mail_log.Flows.t
@@ -96,7 +96,7 @@ val send_string
 
 val send_receive_string
   :  ?on_eof:(?partial:Smtp_reply.partial -> unit -> Smtp_reply.t Deferred.Or_error.t)
-  -> ?timeout:Time.Span.t
+  -> ?timeout:Time_float.Span.t
   -> t
   -> log:Mail_log.t
   -> ?flows:Mail_log.Flows.t

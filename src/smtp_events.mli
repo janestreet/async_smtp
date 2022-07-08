@@ -16,7 +16,7 @@ module Event : sig
     [@@deriving sexp, bin_io]
   end
 
-  type t = Time.t * [ `Envelope_received of Envelope_received.t ]
+  type t = Time_float.t * [ `Envelope_received of Envelope_received.t ]
   [@@deriving sexp, bin_io]
 end
 

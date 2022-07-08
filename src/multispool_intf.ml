@@ -309,7 +309,7 @@ module Monitor = struct
     module File_with_mtime : sig
       type t =
         { filename : string
-        ; mtime : Time.t
+        ; mtime : Time_float.t
         }
       [@@deriving sexp_of]
     end
@@ -337,8 +337,8 @@ module Monitor = struct
 
     module Event : sig
       type t =
-        | Start of Time.t * Problem.t
-        | End of Time.t * Problem.t
+        | Start of Time_float.t * Problem.t
+        | End of Time_float.t * Problem.t
       [@@deriving sexp_of, compare]
 
       include Comparable.S_plain with type t := t
@@ -346,16 +346,16 @@ module Monitor = struct
 
     module Limits : sig
       type t =
-        { max_checked_out_age : Time.Span.t (* default: 10 minutes *)
-        ; max_tmp_file_age : Time.Span.t (* default: 10 minutes *)
-        ; max_queue_ages : (Spoolable.Queue.t * Time.Span.t) list
+        { max_checked_out_age : Time_float.Span.t (* default: 10 minutes *)
+        ; max_tmp_file_age : Time_float.Span.t (* default: 10 minutes *)
+        ; max_queue_ages : (Spoolable.Queue.t * Time_float.Span.t) list
         }
       [@@deriving sexp]
 
       val create
-        :  ?max_checked_out_age:Time.Span.t
-        -> ?max_tmp_file_age:Time.Span.t
-        -> ?max_queue_ages:(Spoolable.Queue.t * Time.Span.t) list
+        :  ?max_checked_out_age:Time_float.Span.t
+        -> ?max_tmp_file_age:Time_float.Span.t
+        -> ?max_queue_ages:(Spoolable.Queue.t * Time_float.Span.t) list
         -> unit
         -> t
     end
@@ -380,11 +380,11 @@ module Monitor = struct
       type monitor = t
 
       type t =
-        { check_every : Time.Span.t (* default: 15 seconds *)
+        { check_every : Time_float.Span.t (* default: 15 seconds *)
         ; alert_after_cycles : int (* default: 2 cycles   *)
         }
 
-      val create : ?check_every:Time.Span.t -> ?alert_after_cycles:int -> unit -> t
+      val create : ?check_every:Time_float.Span.t -> ?alert_after_cycles:int -> unit -> t
       val param : t Command.Param.t
       val start : t -> monitor:monitor -> f:(Event.t -> unit Deferred.t) -> unit
     end

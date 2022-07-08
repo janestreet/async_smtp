@@ -1,7 +1,7 @@
 open! Core
 open! Async
 open Async_smtp_types
-module Time = Time_unix
+module Time = Time_float_unix
 
 module Event = struct
   module Envelope_received = struct

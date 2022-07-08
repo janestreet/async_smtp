@@ -353,8 +353,8 @@ module Widgetspool_monitor = Multispool.Monitor.Make (struct
   end)
 
 let create_spool_and_monitor
-      ?(max_checked_out_age = Time.Span.of_day 1.)
-      ?(max_tmp_file_age = Time.Span.of_day 1.)
+      ?(max_checked_out_age = Time_float.Span.of_day 1.)
+      ?(max_tmp_file_age = Time_float.Span.of_day 1.)
       ?(max_queue_ages = [])
       ~tmp_dir
       ()

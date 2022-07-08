@@ -83,7 +83,7 @@ let%test_module _ =
       let%bind () =
         match%map
           Clock.with_timeout
-            (Time.Span.of_sec 10.)
+            (Time_float.Span.of_sec 10.)
             (Deferred.all_unit
                [ Client.Tcp.with_
                    ~log

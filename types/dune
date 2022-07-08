@@ -1,5 +1,4 @@
 (library (name async_smtp_types) (public_name async_smtp.types)
- (libraries async base64 core email_message core_unix.time_unix)
- (preprocess (pps ppx_jane)))
+ (libraries async base64 core email_message) (preprocess (pps ppx_jane)))
 
 (ocamllex mail_from_lexer)

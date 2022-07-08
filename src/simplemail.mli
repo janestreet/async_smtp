@@ -53,7 +53,7 @@ val send'
   -> subject:string
   -> ?id:string
   -> ?in_reply_to:string
-  -> ?date:Time.t
+  -> ?date:Time_float.t
   -> ?auto_generated:unit
   -> ?extra_headers:(Email_headers.Name.t * Email_headers.Value.t) list
   -> ?attachments:(attachment_name * Email.Simple.Content.t) list
@@ -77,7 +77,7 @@ val send
   -> subject:string
   -> ?id:string
   -> ?in_reply_to:string
-  -> ?date:Time.t
+  -> ?date:Time_float.t
   -> ?auto_generated:unit
   -> ?extra_headers:(Email_headers.Name.t * Email_headers.Value.t) list
   -> ?attachments:(attachment_name * Email.Simple.Content.t) list

@@ -185,7 +185,7 @@ module Message : sig
   (* Utility accessors for the standard info tags *)
 
   val level : t -> Level.t
-  val time : t -> Time.t
+  val time : t -> Time_float.t
 
   (** Encoded as one tag 'flow' for each Flow id *)
   val flows : t -> Flows.t

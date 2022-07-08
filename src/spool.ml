@@ -1,7 +1,7 @@
 module Stable = struct
   open Core.Core_stable
   open Async_smtp_types.Async_smtp_types_stable
-  module Time = Time_unix.Stable
+  module Time = Time_float_unix.Stable
   module Message = Message.Stable
   module Quarantine_reason = Quarantine_reason.Stable
   module Message_id = Message.Id
@@ -94,7 +94,7 @@ open Core
 open Poly
 open Async
 open Async_smtp_types
-module Time = Time_unix
+module Time = Time_float_unix
 
 
 module Config = Spool_config

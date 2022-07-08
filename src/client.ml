@@ -17,8 +17,7 @@ let with_reset t ~log ~flows ~component ~f =
   in
   let%bind result =
     Deferred.Or_error.try_with_join
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () -> f t)
   in
@@ -118,7 +117,8 @@ let ( >>=?? ) = Smtp_monad.( >>= )
 
 let flush_writer_with_timeout ~timeout ~writer =
   match%map Clock.with_timeout timeout (Writer.flushed writer) with
-  | `Timeout -> Or_error.errorf !"Timeout %{Time.Span} waiting for data to flush" timeout
+  | `Timeout ->
+    Or_error.errorf !"Timeout %{Time_float.Span} waiting for data to flush" timeout
   | `Result () -> Ok ()
 ;;
 
@@ -237,8 +237,7 @@ module Expert = struct
                   (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
       >>=?? fun () ->
       Deferred.Or_error.try_with_join
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () ->
            Log.debug
@@ -437,8 +436,7 @@ module Tcp = struct
       |> with_session ~log ~component ~credentials ~f
     in
     Deferred.Or_error.try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () ->
          Tcp.with_connection
@@ -458,8 +456,7 @@ module Tcp = struct
     | exception _not_an_ip ->
       (match%bind
          Deferred.Or_error.try_with
-           ~run:
-             `Schedule
+           ~run:`Schedule
            ~rest:`Log
            (fun () -> Unix.Host.getbyname smtp_server)
        with
@@ -530,8 +527,8 @@ module Bsmtp = struct
   let config =
     { Config.tls = []
     ; greeting = Some "bsmtp"
-    ; send_receive_timeout = `This (Time.Span.of_sec 5.)
-    ; final_ok_timeout = `This (Time.Span.of_sec 5.)
+    ; send_receive_timeout = `This (Time_float.Span.of_sec 5.)
+    ; final_ok_timeout = `This (Time_float.Span.of_sec 5.)
     }
   ;;
 
@@ -558,8 +555,7 @@ module Bsmtp = struct
     =
     with_ ?skip_prelude_and_prologue writer ~log ~component ~f:(fun client ->
       Deferred.Or_error.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () ->
            Pipe.iter envelopes ~f:(fun envelope ->
