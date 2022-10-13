@@ -17,7 +17,5 @@ val list_of_string
   -> t list Or_error.t
 
 module Stable : sig
-  module V1 : sig
-    type nonrec t = t [@@deriving bin_io, sexp]
-  end
+  module V1 : Stable_without_comparator with type t = t
 end

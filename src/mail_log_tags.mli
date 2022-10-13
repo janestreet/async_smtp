@@ -3,7 +3,6 @@ open! Core
 val command : string
 val component : string
 val email_fingerprint : string
-val error_no_monitor : string
 val flow : string
 val local_id : string
 val local_ip_address : string

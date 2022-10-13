@@ -65,6 +65,7 @@ let send'
       ?auto_generated
       ?extra_headers
       ?attachments
+      ?no_tracing_headers
       content
   =
   let email =
@@ -80,6 +81,7 @@ let send'
       ?auto_generated
       ?extra_headers
       ?attachments
+      ?no_tracing_headers
       content
   in
   let recipients = to_ @ cc @ bcc in
@@ -105,6 +107,7 @@ let send
       ?auto_generated
       ?extra_headers
       ?attachments
+      ?no_tracing_headers
       content
   =
   send'
@@ -125,6 +128,7 @@ let send
     ?auto_generated
     ?extra_headers
     ?attachments
+    ?no_tracing_headers
     content
   >>|? Envelope_status.ok_or_error ~allow_rejected_recipients:false
   >>| Or_error.join

@@ -28,7 +28,7 @@ module Stable = struct
       ; route : string option
       ; id : Envelope_id.Stable.V1.t
       }
-    [@@deriving bin_io, sexp]
+    [@@deriving bin_io, sexp, compare]
 
     let of_v1 (v1 : V1.t) =
       { sender = v1.sender

@@ -19,37 +19,22 @@ open Async
 open Async_smtp_types
 
 module Level = struct
-  type t =
-    [ Log.Level.t
-    | `Error_no_monitor
-    ]
-  [@@deriving sexp]
+  module T = struct
+    include Log.Level
 
-  let severity = function
-    | `Debug -> 0
-    | `Info -> 1
-    | `Error_no_monitor -> 2
-    | `Error -> 3
-  ;;
+    (* Stable comparison functions as [Log.Level.compare] doesn't compare s..t [`Debug <
+       `Info < `Error] *)
+    let severity = function
+      | `Debug -> 0
+      | `Info -> 1
+      | `Error -> 2
+    ;;
 
-  let of_async_log_level = function
-    | `Debug -> `Debug
-    | `Info -> `Info
-    | `Error -> `Error
-  ;;
+    let compare = Comparable.lift [%compare: int] ~f:severity
+  end
 
-  let to_async_log_level = function
-    | `Debug -> `Debug
-    | `Info -> `Info
-    | `Error_no_monitor -> `Error
-    | `Error -> `Error
-  ;;
-
-  include Comparable.Make (struct
-      type nonrec t = t [@@deriving sexp]
-
-      let compare a b = Int.compare (severity a) (severity b)
-    end)
+  include T
+  include Comparable.Make (T)
 end
 
 module Mail_fingerprint = struct
@@ -359,16 +344,23 @@ module Message = struct
       | None -> tags
     in
     let rfc822_id =
-      match rfc822_id with
-      | Some _ -> rfc822_id
-      | None ->
-        (match email with
-         | Some (`Envelope envelope) ->
-           Email_headers.last (Smtp_envelope.email envelope |> Email.headers) "Message-Id"
-         | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
-         | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
-           Email_headers.last (Email_headers.of_list ~normalize:`None headers) "Message-Id"
-         | None -> None)
+      let rfc822_id =
+        match rfc822_id with
+        | Some _ -> rfc822_id
+        | None ->
+          (match email with
+           | Some (`Envelope envelope) ->
+             Email_headers.last
+               (Smtp_envelope.email envelope |> Email.headers)
+               "Message-Id"
+           | Some (`Email email) -> Email_headers.last (Email.headers email) "Message-Id"
+           | Some (`Fingerprint { Mail_fingerprint.headers; _ }) ->
+             Email_headers.last
+               (Email_headers.of_list ~normalize:`None headers)
+               "Message-Id"
+           | None -> None)
+      in
+      Option.map rfc822_id ~f:String.strip
     in
     let tags =
       match rfc822_id with
@@ -446,46 +438,8 @@ module Message = struct
   ;;
 
   let find_tag = find_tag' ~f:Fn.id
-  let is_error_no_monitor t = find_tag t ~tag:Tag.error_no_monitor |> Option.is_some
-
-  let remove_error_no_monitor_tag t =
-    if is_error_no_monitor t
-    then (
-      let tags =
-        Log.Message.tags t
-        |> List.filter ~f:(fun (tag, _) -> not (String.equal tag Tag.error_no_monitor))
-      in
-      Log.Message.create
-        ?level:(Log.Message.level t)
-        ~time:(Log.Message.time t)
-        ~tags
-        (Log.Message.raw_message t))
-    else t
-  ;;
-
-  let add_error_no_monitor_tag t =
-    match find_tag t ~tag:Tag.error_no_monitor with
-    | None -> Log.Message.add_tags t [ Tag.error_no_monitor, "" ]
-    | Some (_ : string) -> t
-  ;;
-
-  let set_level t level =
-    let t, level =
-      match level with
-      | `Error_no_monitor -> add_error_no_monitor_tag t, `Error
-      | _ as level -> remove_error_no_monitor_tag t, Level.to_async_log_level level
-    in
-    Log.Message.set_level t (Some level)
-  ;;
-
-  let level t =
-    Log.Message.level t
-    |> Option.value_map ~f:Level.of_async_log_level ~default:`Info
-    |> function
-    | `Error -> if is_error_no_monitor t then `Error_no_monitor else `Error
-    | _ as level -> level
-  ;;
-
+  let set_level t level = Log.Message.set_level t (Some level)
+  let level t = Log.Message.level t |> Option.value ~default:`Info
   let time = Log.Message.time
   let action = Log.Message.message
   let tags = Log.Message.tags
@@ -544,10 +498,8 @@ end
 
 type t = Log.t
 
-let error_no_monitor_tag = Message.Tag.error_no_monitor, ""
-
 let message' t ~level msg =
-  let log_level = Level.of_async_log_level (Log.level t) in
+  let log_level = Log.level t in
   let message_level = Message.level msg in
   if Level.( <= ) log_level level
   then (
@@ -556,7 +508,7 @@ let message' t ~level msg =
 ;;
 
 let message t ~level msg =
-  let log_level = Level.of_async_log_level (Log.level t) in
+  let log_level = Log.level t in
   if Level.( <= ) log_level level
   then (
     let msg = Lazy.force msg in
@@ -567,12 +519,7 @@ let message t ~level msg =
 
 let debug = message ~level:`Debug
 let info = message ~level:`Info
-
-let error ?dont_send_to_monitor =
-  if Option.is_some dont_send_to_monitor
-  then message ~level:`Error_no_monitor
-  else message ~level:`Error
-;;
+let error = message ~level:`Error
 
 let null_log =
   lazy
@@ -592,7 +539,7 @@ let with_flow_and_component ~flows ~component t =
           (fun msgs ->
              Queue.iter msgs ~f:(fun msg ->
                let level = Message.level msg in
-               let log_level = Level.of_async_log_level (Log.level t) in
+               let log_level = Log.level t in
                if Level.( <= ) log_level level
                then
                  message
@@ -616,24 +563,18 @@ let with_flow_and_component ~flows ~component t =
 let adjust_log_levels
       ?(minimum_level = `Debug)
       ?(remap_info_to = `Info)
-      ?(remap_error_no_monitor_to = `Error_no_monitor)
       ?(remap_error_to = `Error)
       t
   =
-  let log_level = Level.of_async_log_level (Log.level t) in
+  let log_level = Log.level t in
   let minimum_level = Level.max log_level minimum_level in
-  if Level.( < ) remap_info_to minimum_level
-  && Level.( < ) remap_error_no_monitor_to minimum_level
-  && Level.( < ) remap_error_to minimum_level
+  if Level.( < ) remap_info_to minimum_level && Level.( < ) remap_error_to minimum_level
   then force null_log
-  else if minimum_level = log_level
-       && remap_info_to = `Info
-       && remap_error_no_monitor_to = `Error_no_monitor
-       && remap_error_to = `Error
+  else if minimum_level = log_level && remap_info_to = `Info && remap_error_to = `Error
   then t
   else
     Log.create
-      ~level:(Level.to_async_log_level minimum_level)
+      ~level:minimum_level
       ~output:
         [ Log.Output.create
             ~flush:(fun () -> if Log.is_closed t then Deferred.unit else Log.flushed t)
@@ -643,7 +584,6 @@ let adjust_log_levels
                    match Message.level msg with
                    | `Debug -> `Debug
                    | `Info -> remap_info_to
-                   | `Error_no_monitor -> remap_error_no_monitor_to
                    | `Error -> remap_error_to
                  in
                  if Level.( <= ) minimum_level level then message' ~level t msg);

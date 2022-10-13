@@ -232,17 +232,11 @@ let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
        Log.debug log (lazy (Log.Message.create ~here ~flows ~component ~reply:v "<-"));
        Ok (`Received v)
      | `Result (Error e) ->
-       Log.error
-         ~dont_send_to_monitor:()
-         log
-         (lazy (Log.Message.of_error ~here ~flows ~component e));
+       Log.error log (lazy (Log.Message.of_error ~here ~flows ~component e));
        Error e
      | `Timeout ->
        let e = Error.createf !"Timeout %{Time_float.Span} waiting for reply" timeout in
-       Log.error
-         ~dont_send_to_monitor:()
-         log
-         (lazy (Log.Message.of_error ~here ~flows ~component e));
+       Log.error log (lazy (Log.Message.of_error ~here ~flows ~component e));
        Error e)
 ;;
 
@@ -657,7 +651,6 @@ let with_quit t ~log ~component ~f =
     | Ok () -> ()
     | Error err ->
       Log.error
-        ~dont_send_to_monitor:()
         log
         (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
   in

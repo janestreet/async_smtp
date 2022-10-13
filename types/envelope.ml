@@ -15,7 +15,7 @@ module Stable = struct
       { info : Envelope_info.Stable.V2.t
       ; email : Email.V1.t
       }
-    [@@deriving bin_io, sexp]
+    [@@deriving bin_io, sexp, compare]
 
     let of_v1 (v1 : V1.t) =
       { info = Envelope_info.Stable.V2.of_v1 v1.info; email = v1.email }

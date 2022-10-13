@@ -131,16 +131,6 @@ module Session_marker : sig
     ]
 end
 
-(** Augment [Log.Level] with [`Error_no_monitor] which are errors that are not
-    reported by the RPC [Monitor.errors]. It should be thought of as having severity
-    between that of [`Info] and [`Error] *)
-module Level : sig
-  type t =
-    [ Log.Level.t
-    | `Error_no_monitor
-    ]
-end
-
 (** Wrapper arround Log.Message.t that allows access to various standardised tag names. *)
 module Message : sig
   module Action : Identifiable with type t = string
@@ -184,7 +174,7 @@ module Message : sig
 
   (* Utility accessors for the standard info tags *)
 
-  val level : t -> Level.t
+  val level : t -> Log.Level.t
   val time : t -> Time_float.t
 
   (** Encoded as one tag 'flow' for each Flow id *)
@@ -256,10 +246,6 @@ end
 
 type t = Log.t
 
-(** A tag that can be included on [`Error] messages when using [Async.Log] directly to
-    prevent reporting to the smtp monitor *)
-val error_no_monitor_tag : string * string
-
 (** [with_flow_and_component] - Add additional component and flow ids to log messages.
 
     The "component" tag (if present) will be prepended or added if missing with
@@ -275,15 +261,12 @@ val with_flow_and_component : flows:Flows.t -> component:Component.t -> t -> t
 
 val adjust_log_levels
   :  ?minimum_level:
-    Level.t
+    Log.Level.t
   (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
   -> ?remap_info_to:
-       Level.t (* Rewrite messages with level [`Info] to level [remap_info_to] *)
-  -> ?remap_error_no_monitor_to:
-       Level.t
-  (* Rewrite messages with level [`Error_no_monitor] to level [remap_error_no_monitor_to] *)
+       Log.Level.t (* Rewrite messages with level [`Info] to level [remap_info_to] *)
   -> ?remap_error_to:
-       Level.t (* Rewrite messages with level [`Error] to level [remap_error_to] *)
+       Log.Level.t (* Rewrite messages with level [`Error] to level [remap_error_to] *)
   -> t
   -> t
 
@@ -299,9 +282,9 @@ val adjust_log_levels
  * If [t] has information attached to it via [with_flow_and_component],
     add that information to the message.
 *)
-val message : t -> level:Level.t -> Message.t Lazy.t -> unit
+val message : t -> level:Log.Level.t -> Message.t Lazy.t -> unit
 
-val message' : t -> level:Level.t -> Message.t -> unit
+val message' : t -> level:Log.Level.t -> Message.t -> unit
 
 (** [info] is shorthand for [message ~level:`Info]. *)
 val info : t -> Message.t Lazy.t -> unit
@@ -309,9 +292,8 @@ val info : t -> Message.t Lazy.t -> unit
 (** [debug] is shorthand for [message ~level:`Debug]. *)
 val debug : t -> Message.t Lazy.t -> unit
 
-(** [error] is shorthand for [message ~level:`Error_no_monitor]
-    or [message ~level:`Error] *)
-val error : ?dont_send_to_monitor:unit -> t -> Message.t Lazy.t -> unit
+(** [error] is shorthand for [message ~level:`Error] *)
+val error : t -> Message.t Lazy.t -> unit
 
 module Stable : sig
   module Flows : sig

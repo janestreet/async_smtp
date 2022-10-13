@@ -5,7 +5,7 @@ module Stable = struct
     type t =
       | Auth of Email_address.Stable.V1.t option
       | Body of [ `Mime_8bit | `Mime_7bit ]
-    [@@deriving bin_io, sexp]
+    [@@deriving bin_io, sexp, compare]
 
     let%expect_test _ =
       print_endline [%bin_digest: t];

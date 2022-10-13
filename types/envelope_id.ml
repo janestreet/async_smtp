@@ -2,7 +2,7 @@ module Stable = struct
   open Core.Core_stable
 
   module V1 = struct
-    type t = string [@@deriving bin_io, sexp]
+    type t = string [@@deriving bin_io, sexp, compare]
 
     let%expect_test _ =
       print_endline [%bin_digest: t];

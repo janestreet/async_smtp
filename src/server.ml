@@ -424,10 +424,7 @@ module Make (Cb : Plugin.S) = struct
           ()
       with
       | Error e ->
-        Log.error
-          ~dont_send_to_monitor:()
-          log
-          (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e));
+        Log.error log (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e));
         return ()
       | Ok tls ->
         let%bind new_reader = Reader.of_pipe (Info.of_string "SMTP/TLS") reader_pipe_r in
@@ -452,7 +449,6 @@ module Make (Cb : Plugin.S) = struct
             Ssl.Connection.closed tls
             >>| Result.iter_error ~f:(fun e ->
               Log.error
-                ~dont_send_to_monitor:()
                 log
                 (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e)))
           in
@@ -767,7 +763,6 @@ module Make (Cb : Plugin.S) = struct
              | Ok email -> Ok email
              | Error error ->
                Log.error
-                 ~dont_send_to_monitor:()
                  log
                  (lazy (Log.Message.of_error ~here:[%here] ~flows ~component error));
                (match malformed_emails with
@@ -985,7 +980,6 @@ module Make (Cb : Plugin.S) = struct
                 (* Silence the [inner_monitor] errors *)
                 Log.error
                   log
-                  ~dont_send_to_monitor:()
                   (lazy
                     (Log.Message.of_error
                        ~here:[%here]

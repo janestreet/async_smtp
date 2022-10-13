@@ -38,7 +38,7 @@ module Stable : sig
   end
 
   module V2 : sig
-    type nonrec t = t [@@deriving bin_io, sexp]
+    include Stable_without_comparator with type t = t
 
     val of_v1 : V1.t -> t
   end

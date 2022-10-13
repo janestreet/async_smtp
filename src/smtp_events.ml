@@ -29,7 +29,7 @@ let envelope_received t envelope =
 
 let create () =
   let event_stream =
-    Bus.create
+    Bus.create_exn
       [%here]
       Arity1
       ~on_subscription_after_first_write:Allow

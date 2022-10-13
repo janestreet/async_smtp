@@ -57,6 +57,7 @@ val send'
   -> ?auto_generated:unit
   -> ?extra_headers:(Email_headers.Name.t * Email_headers.Value.t) list
   -> ?attachments:(attachment_name * Email.Simple.Content.t) list
+  -> ?no_tracing_headers:[ `Because_not_using_standard_email_infra ]
   -> Email.Simple.Content.t
   -> Envelope_status.t Deferred.Or_error.t
 
@@ -81,5 +82,6 @@ val send
   -> ?auto_generated:unit
   -> ?extra_headers:(Email_headers.Name.t * Email_headers.Value.t) list
   -> ?attachments:(attachment_name * Email.Simple.Content.t) list
+  -> ?no_tracing_headers:[ `Because_not_using_standard_email_infra ]
   -> Email.Simple.Content.t
   -> unit Deferred.Or_error.t
