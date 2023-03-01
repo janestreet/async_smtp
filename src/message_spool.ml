@@ -12,7 +12,8 @@ let create = On_disk_spool.create
 let load str = On_disk_spool.load str
 
 let ls t queues =
-  Deferred.Or_error.List.concat_map queues ~f:(fun queue -> On_disk_spool.list t queue)
+  Deferred.Or_error.List.concat_map ~how:`Sequential queues ~f:(fun queue ->
+    On_disk_spool.list t queue)
 ;;
 
 let uncheckout_from_queue t queue =
@@ -31,7 +32,8 @@ let uncheckout_from_queue t queue =
 
 let uncheckout_all_entries t =
   let%bind recovered, errors =
-    Deferred.List.map Message.Queue.all ~f:(uncheckout_from_queue t) >>| List.unzip
+    Deferred.List.map ~how:`Sequential Message.Queue.all ~f:(uncheckout_from_queue t)
+    >>| List.unzip
   in
   let recovered, errors = List.concat recovered, List.concat errors in
   let errors =
@@ -99,9 +101,12 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
     ~status:initial_status
     ~flows
   >>=? fun messages_with_data ->
-  Deferred.Or_error.List.map messages_with_data ~f:(fun (meta, data, envelope) ->
-    let id = Message.id meta in
-    enqueue spool queue ~meta ~id ~data >>|? fun () -> meta, envelope)
+  Deferred.Or_error.List.map
+    ~how:`Sequential
+    messages_with_data
+    ~f:(fun (meta, data, envelope) ->
+      let id = Message.id meta in
+      enqueue spool queue ~meta ~id ~data >>|? fun () -> meta, envelope)
 ;;
 
 let with_file

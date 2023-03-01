@@ -67,4 +67,5 @@ let command =
             ""
               ~minor_words:(get Gc.Stat.minor_words : float)
               ~major_words:(get Gc.Stat.major_words : float)]]
+    ~behave_nicely_in_pipeline:false
 ;;

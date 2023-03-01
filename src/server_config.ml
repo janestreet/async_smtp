@@ -120,7 +120,7 @@ let default =
   ; timeouts = Timeouts.default
   ; rpc_port = 0
   ; malformed_emails = `Reject
-  ; max_message_size = Byte_units.of_megabytes 24.
+  ; max_message_size = Byte_units.of_megabytes 35.
   ; tls_options = None
   ; tcp_options = None
   }

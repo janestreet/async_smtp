@@ -880,7 +880,7 @@ let status_from_disk config =
   Message_spool.ls spool [ Message_queue.Active; Message_queue.Frozen ]
   >>=? fun entries ->
   let%map msgs =
-    Deferred.List.map entries ~f:(fun entry ->
+    Deferred.List.map ~how:`Sequential entries ~f:(fun entry ->
       Message_spool.Entry.size entry
       >>=? fun file_size ->
       Message_spool.Entry.to_message_with_envelope entry

@@ -338,6 +338,7 @@ let of_envelope_batch
   (* We make sure to only map the email body once. *)
   let data_raw_content = Data.map_raw_content email_body ~encode_or_decode:`Encode in
   Deferred.Or_error.List.map
+    ~how:`Sequential
     (Smtp_envelope.Routed.Batch.envelopes envelope_batch)
     ~f:(fun envelope ->
       let headers =

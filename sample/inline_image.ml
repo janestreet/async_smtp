@@ -42,6 +42,8 @@ let command =
           ~to_:[ to_ ]
           ~subject:"email with an inline image"
           (email ~png_file)]
+    ~behave_nicely_in_pipeline:false
 ;;
+
 
 let () = Command_unix.run command

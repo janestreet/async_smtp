@@ -177,7 +177,7 @@ let compare_message_by = function
   | `Headers -> compare_message_headers
 ;;
 
-let compare_message seq = List.map seq ~f:compare_message_by |> Compare.seq
+let compare_message seq x y = Compare.seq (List.map seq ~f:compare_message_by) x y
 
 let transform_without_sort config message =
   message
@@ -192,5 +192,5 @@ let sort config pipe =
     Pipe.create_reader ~close_on_exception:true (fun out ->
       Pipe.to_list pipe
       >>| List.stable_sort ~compare:(compare_message order)
-      >>= Deferred.List.iter ~f:(Pipe.write out))
+      >>= Deferred.List.iter ~how:`Sequential ~f:(Pipe.write out))
 ;;

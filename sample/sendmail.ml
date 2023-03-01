@@ -44,7 +44,7 @@ let command =
       fun () ->
         let open Deferred.Let_syntax in
         let%bind attachments =
-          Deferred.List.map attachments ~f:(fun file ->
+          Deferred.List.map ~how:`Sequential attachments ~f:(fun file ->
             let%map content = Simplemail.Content.of_file file in
             Filename.basename file, content)
         in
@@ -59,6 +59,8 @@ let command =
           ~attachments
           ~extra_headers
           content]
+    ~behave_nicely_in_pipeline:false
 ;;
+
 
 let () = Command_unix.run command

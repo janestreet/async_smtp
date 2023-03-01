@@ -30,7 +30,7 @@ module Level = struct
       | `Error -> 2
     ;;
 
-    let compare = Comparable.lift [%compare: int] ~f:severity
+    let compare a b = Comparable.lift [%compare: int] ~f:severity a b
   end
 
   include T
@@ -45,23 +45,25 @@ module Mail_fingerprint = struct
     }
   [@@deriving sexp, fields]
 
-  let rec of_email email =
+  let rec of_email email ~compute_md5 =
     let headers = Email_headers.to_list (Email.headers email) in
-    match Email.Content.parse email with
-    | Ok (Email.Content.Data _) | Error _ ->
-      { headers
-      ; md5 =
-          Some
-            (Email.raw_content email
-             |> Email.Raw_content.to_bigstring_shared
-             |> Bigstring_shared.to_string
-             |> Md5.digest_string
-             |> Md5.to_hex)
-      ; parts = []
-      }
-    | Ok (Email.Content.Message email) -> of_email email
-    | Ok (Email.Content.Multipart { Email.Content.Multipart.parts; _ }) ->
-      { headers; md5 = None; parts = List.map parts ~f:of_email }
+    match compute_md5 with
+    | false -> { headers; md5 = None; parts = [] }
+    | true ->
+      (match Email.Content.parse email with
+       | Ok (Email.Content.Data _) | Error _ ->
+         let md5 =
+           Some
+             (Email.raw_content email
+              |> Email.Raw_content.to_bigstring_shared
+              |> Bigstring_shared.to_string
+              |> Md5.digest_string
+              |> Md5.to_hex)
+         in
+         { headers; md5; parts = [] }
+       | Ok (Email.Content.Message email) -> of_email email ~compute_md5
+       | Ok (Email.Content.Multipart { Email.Content.Multipart.parts; _ }) ->
+         { headers; md5 = None; parts = List.map parts ~f:(of_email ~compute_md5) })
   ;;
 end
 
@@ -219,6 +221,7 @@ module Message = struct
          | `Email of Email.t
          | `Envelope of Smtp_envelope.t
          ]
+    -> ?compute_body_fingerprint_hash:bool
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t
@@ -240,6 +243,7 @@ module Message = struct
         ?remote_address
         ?remote_ip_address
         ?email
+        ?(compute_body_fingerprint_hash = false)
         ?message_size
         ?rfc822_id
         ?local_id
@@ -301,8 +305,12 @@ module Message = struct
     let email_fingerprint =
       match email with
       | Some (`Envelope envelope) ->
-        Some (Mail_fingerprint.of_email (Smtp_envelope.email envelope))
-      | Some (`Email email) -> Some (Mail_fingerprint.of_email email)
+        Some
+          (Mail_fingerprint.of_email
+             (Smtp_envelope.email envelope)
+             ~compute_md5:compute_body_fingerprint_hash)
+      | Some (`Email email) ->
+        Some (Mail_fingerprint.of_email email ~compute_md5:compute_body_fingerprint_hash)
       | Some (`Fingerprint fingerprint) -> Some fingerprint
       | None -> None
     in

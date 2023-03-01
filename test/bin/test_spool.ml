@@ -24,6 +24,7 @@ module Fsck = struct
             List.iter problems ~f:(fun p ->
               printf !"%{sexp:Widget_monitor.Problem.t}\n" p);
             Deferred.Or_error.ok_unit]
+        ~behave_nicely_in_pipeline:false
     ;;
   end
 
@@ -42,6 +43,7 @@ module Fsck = struct
               printf !"%{sexp:Widget_monitor.Event.t}\n" event;
               Deferred.unit);
             Deferred.never ()]
+        ~behave_nicely_in_pipeline:false
     ;;
   end
 
@@ -68,6 +70,7 @@ module Create = struct
         fun () ->
           Widget_spool.create spool_dir
           >>=? fun (_ : Widget_spool.t) -> Deferred.Or_error.ok_unit]
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 

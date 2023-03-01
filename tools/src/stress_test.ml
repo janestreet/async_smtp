@@ -367,4 +367,5 @@ let command =
           ~server_allowed_ciphers
           ~key_type
           ()]
+    ~behave_nicely_in_pipeline:false
 ;;

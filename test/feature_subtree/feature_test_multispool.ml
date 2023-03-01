@@ -76,7 +76,7 @@ let%test_module _ =
     let print_queue spool queue =
       let%bind entries = list spool queue >>| ok_exn in
       printf "Contents of %s:\n" (Widget.Queue.to_dirname queue);
-      Deferred.List.iter entries ~f:(fun entry ->
+      Deferred.List.iter ~how:`Sequential entries ~f:(fun entry ->
         let%bind widget = Entry.Direct.contents entry >>| ok_exn in
         printf !"    %{Widget.Metadata}\n" widget;
         Deferred.unit)

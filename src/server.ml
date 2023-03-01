@@ -793,6 +793,7 @@ module Make (Cb : Plugin.S) = struct
                      ~flows
                      ~component
                      ~email:(`Envelope original_msg)
+                     ~compute_body_fingerprint_hash:true
                      ~session_marker:`Data
                      "DATA"));
               let component = [ "smtp-server"; "session"; "envelope"; "routing" ] in

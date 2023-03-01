@@ -85,7 +85,9 @@ end = struct
         let main = main
         and rpc_server, _server_config, _spool_config = rpc_server_or_configs_flag in
         fun () -> rpc_client_command0 ~host_and_port:rpc_server ~f:main]
+      ~behave_nicely_in_pipeline:false
   ;;
+
 
   let configs_or_rpc ~summary ?readme main =
     let open Command.Let_syntax in
@@ -105,5 +107,6 @@ end = struct
           | _ ->
             (* Other cases should be prevented in rpc_server_or_configs_flag *)
             assert false]
+      ~behave_nicely_in_pipeline:false
   ;;
 end

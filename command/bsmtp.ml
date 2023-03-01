@@ -18,6 +18,8 @@ let parse =
   Command.async
     ~summary:"Parse BSMTP from stdin and output as sexp"
     (Command.Param.return main)
+    ~behave_nicely_in_pipeline:false
 ;;
+
 
 let command : Command.t = Command.group ~summary:"BSMTP tools" [ "parse", parse ]

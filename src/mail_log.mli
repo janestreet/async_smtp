@@ -10,7 +10,7 @@ module Mail_fingerprint : sig
     }
   [@@deriving sexp, fields]
 
-  val of_email : Email.t -> t
+  val of_email : Email.t -> compute_md5:bool -> t
 end
 
 (* A flow is a causal chain of events. If an event B is caused by an event A
@@ -149,6 +149,7 @@ module Message : sig
          | `Email of Email.t
          | `Envelope of Smtp_envelope.t
          ]
+    -> ?compute_body_fingerprint_hash:bool
     -> ?message_size:int
     -> ?rfc822_id:string
     -> ?local_id:Smtp_envelope.Id.t

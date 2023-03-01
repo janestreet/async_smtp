@@ -95,7 +95,7 @@ module Shared = struct
 
   let visit_queues ?create_if_missing dir queue_dirnames =
     let open Deferred.Or_error.Let_syntax in
-    Deferred.Or_error.List.iter queue_dirnames ~f:(fun queue_dirname ->
+    Deferred.Or_error.List.iter ~how:`Sequential queue_dirnames ~f:(fun queue_dirname ->
       let queue_dir = dir ^/ queue_dirname in
       let%bind () = is_accessible_directory ?create_if_missing queue_dir in
       let%bind () =
@@ -448,7 +448,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     let open Deferred.Or_error.Let_syntax in
     let checkout_dir = co_dir_of spool (S.Queue.to_dirname queue) in
     let%bind entries = S.Throttle.enqueue (fun () -> Utils.ls_sorted checkout_dir) in
-    Deferred.Or_error.List.map entries ~f:(fun name ->
+    Deferred.Or_error.List.map ~how:`Sequential entries ~f:(fun name ->
       let%map metadata = load_metadata (checkout_dir ^/ name) in
       Checked_out_entry.create spool queue metadata ~name)
   ;;
@@ -698,7 +698,7 @@ module Monitor = struct
         [@@deriving sexp_of, compare]
 
         let sexp_of_t t =
-          if am_running_inline_test
+          if Ppx_inline_test_lib.am_running
           then [%sexp { filename = (t.filename : string); mtime = "<omitted>" }]
           else sexp_of_t t
         ;;
@@ -864,22 +864,25 @@ module Monitor = struct
       let collect spool : t Deferred.Or_error.t =
         let open Deferred.Or_error.Let_syntax in
         let%bind dir_alist =
-          Deferred.Or_error.List.map Dir.all ~f:(fun dir ->
+          Deferred.Or_error.List.map ~how:`Sequential Dir.all ~f:(fun dir ->
             let path = spool ^/ Dir.name_on_disk dir in
             let%bind files = Utils.ls path in
             let%bind filename_alist =
-              Deferred.Or_error.List.filter_map files ~f:(fun filename ->
-                match%map Utils.stat_or_notfound (path ^/ filename) with
-                | `Not_found -> None
-                | `Ok stats ->
-                  (* Checkout directories live within queue directories. We want to skip
-                     over these. *)
-                  if String.equal filename checkout
-                  then None
-                  else (
-                    let mtime = Unix.Stats.mtime stats in
-                    let fwm = { File_with_mtime.filename; mtime } in
-                    Some (filename, fwm)))
+              Deferred.Or_error.List.filter_map
+                ~how:`Sequential
+                files
+                ~f:(fun filename ->
+                  match%map Utils.stat_or_notfound (path ^/ filename) with
+                  | `Not_found -> None
+                  | `Ok stats ->
+                    (* Checkout directories live within queue directories. We want to skip
+                       over these. *)
+                    if String.equal filename checkout
+                    then None
+                    else (
+                      let mtime = Unix.Stats.mtime stats in
+                      let fwm = { File_with_mtime.filename; mtime } in
+                      Some (filename, fwm)))
             in
             let filename_map = String.Map.of_alist_exn filename_alist in
             return (dir, filename_map))
@@ -1034,7 +1037,7 @@ module Monitor = struct
           let%bind events =
             fsck_and_eventify monitor ~alert_after_cycles |> Deferred.Or_error.ok_exn
           in
-          Deferred.List.iter events ~f:(fun e -> f e))
+          Deferred.List.iter ~how:`Sequential events ~f:(fun e -> f e))
       ;;
     end
   end

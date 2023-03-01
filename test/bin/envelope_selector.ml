@@ -85,6 +85,8 @@ let command =
         | false ->
           printf "The selector DOES NOT match the envelope\n";
           exit 1]
+    ~behave_nicely_in_pipeline:false
 ;;
+
 
 let () = Command_unix.run command
