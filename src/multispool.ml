@@ -98,9 +98,7 @@ module Shared = struct
     Deferred.Or_error.List.iter ~how:`Sequential queue_dirnames ~f:(fun queue_dirname ->
       let queue_dir = dir ^/ queue_dirname in
       let%bind () = is_accessible_directory ?create_if_missing queue_dir in
-      let%bind () =
-        is_accessible_directory ?create_if_missing (queue_dir ^/ checkout)
-      in
+      let%bind () = is_accessible_directory ?create_if_missing (queue_dir ^/ checkout) in
       return ())
   ;;
 
@@ -540,7 +538,10 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
          | `Ok (Moved (Into _))
          | `Ok (Created _) -> Ok ()
          | `Eof ->
-           Or_error.error "inotify pipe closed unexpectedly" t.queue_dir [%sexp_of: string])
+           Or_error.error
+             "inotify pipe closed unexpectedly"
+             t.queue_dir
+             [%sexp_of: string])
     ;;
 
     let update_entry_cache t =
@@ -591,7 +592,8 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
            | entry :: entry_cache ->
              let entry_cache =
                match t.test_mode_last_moved_into with
-               | `Enabled (Some last_moved_into) when Entry.name entry = last_moved_into ->
+               | `Enabled (Some last_moved_into) when Entry.name entry = last_moved_into
+                 ->
                  (* TESTING ONLY.  Treat the file referenced by the most recent [Moved
                     Into] inotify event as the last cache entry so that we do not process
                     any files that appear in a queue during a traversal with readdir(3).
@@ -805,8 +807,8 @@ module Monitor = struct
                    (optional Time.Span.arg_type)
                    ~doc:
                      (sprintf
-                        "SPAN alert if file in queue `%s' reaches age SPAN (default: \
-                         No limit)"
+                        "SPAN alert if file in queue `%s' reaches age SPAN (default: No \
+                         limit)"
                         dirname)
                  |> map ~f:(fun span -> queue, span)))
           in
@@ -868,21 +870,18 @@ module Monitor = struct
             let path = spool ^/ Dir.name_on_disk dir in
             let%bind files = Utils.ls path in
             let%bind filename_alist =
-              Deferred.Or_error.List.filter_map
-                ~how:`Sequential
-                files
-                ~f:(fun filename ->
-                  match%map Utils.stat_or_notfound (path ^/ filename) with
-                  | `Not_found -> None
-                  | `Ok stats ->
-                    (* Checkout directories live within queue directories. We want to skip
-                       over these. *)
-                    if String.equal filename checkout
-                    then None
-                    else (
-                      let mtime = Unix.Stats.mtime stats in
-                      let fwm = { File_with_mtime.filename; mtime } in
-                      Some (filename, fwm)))
+              Deferred.Or_error.List.filter_map ~how:`Sequential files ~f:(fun filename ->
+                match%map Utils.stat_or_notfound (path ^/ filename) with
+                | `Not_found -> None
+                | `Ok stats ->
+                  (* Checkout directories live within queue directories. We want to skip
+                     over these. *)
+                  if String.equal filename checkout
+                  then None
+                  else (
+                    let mtime = Unix.Stats.mtime stats in
+                    let fwm = { File_with_mtime.filename; mtime } in
+                    Some (filename, fwm)))
             in
             let filename_map = String.Map.of_alist_exn filename_alist in
             return (dir, filename_map))
@@ -944,9 +943,7 @@ module Monitor = struct
       List.fold S.Queue.all ~init ~f:(fun problems queue ->
         problems
         |> find_queue_file_too_old queue
-        |> find_file_too_old
-             (Dir.Queue_checkout queue)
-             ~age:t.limits.max_checked_out_age
+        |> find_file_too_old (Dir.Queue_checkout queue) ~age:t.limits.max_checked_out_age
         |> find_file_without_registry_file (Dir.Queue queue)
         |> find_file_without_registry_file (Dir.Queue_checkout queue))
       |> find_orphaned_registry_file_and_duplicates

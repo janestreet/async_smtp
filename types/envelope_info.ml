@@ -115,7 +115,7 @@ let create
   Fields.create ~sender ~sender_args ~recipients ~rejected_recipients ~route ~id
 ;;
 
-let of_email email =
+let of_email ?(ignore_unparseable_recipient_header = false) email =
   let open Or_error.Let_syntax in
   let headers = Email.headers email in
   let%bind sender =
@@ -134,7 +134,11 @@ let of_email email =
              (String.filter ~f:(function
                 | '\n' | '\r' -> false
                 | _ -> true))
-      |> List.concat_map ~f:Email_address.list_of_string_exn)
+      |> List.concat_map ~f:(fun emails ->
+        match Email_address.list_of_string emails with
+        | Ok result -> result
+        | Error error ->
+          if ignore_unparseable_recipient_header then [] else Error.raise error))
   in
   Ok (create ~sender ~recipients ~rejected_recipients:[] ())
 ;;

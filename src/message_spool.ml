@@ -22,9 +22,7 @@ let uncheckout_from_queue t queue =
   | Error e -> return ([], [ e ])
   | Ok checked_out_entries ->
     List.map checked_out_entries ~f:(fun checked_out_entry ->
-      Checked_out_entry.save
-        checked_out_entry
-        (Checked_out_entry.queue checked_out_entry)
+      Checked_out_entry.save checked_out_entry (Checked_out_entry.queue checked_out_entry)
       >>| Result.map ~f:(fun () -> Checked_out_entry.name checked_out_entry))
     |> Deferred.List.all
     >>| List.partition_result
@@ -111,8 +109,7 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
 
 let with_file
       t
-      (f :
-         On_disk_spool.Data_file.t -> ([ `Sync_meta | `Unlink ] * 'a) Or_error.t Deferred.t)
+      (f : On_disk_spool.Data_file.t -> ([ `Sync_meta | `Unlink ] * 'a) Or_error.t Deferred.t)
   : 'a Or_error.t Deferred.t
   =
   entry t
@@ -362,9 +359,7 @@ let do_send t ~log ~client_cache =
          Message.set_status
            t
            (`Send_at
-              (Time_float.add
-                 (Time_float.now ())
-                 (Smtp_envelope.Retry_interval.to_span r)));
+              (Time_float.add (Time_float.now ()) (Smtp_envelope.Retry_interval.to_span r)));
          Message.set_retry_intervals t rs;
          Ok (`Sync_meta, `Failed delivery_failure)))
 ;;

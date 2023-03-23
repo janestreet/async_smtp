@@ -128,9 +128,8 @@ let add_event t message =
       Inbound_envelope.add_event in_ message)
   | Some inbound_id, Some outbound_id ->
     Option.iter (find_inbound_envelope t inbound_id) ~f:(fun in_ ->
-      Option.iter
-        (Inbound_envelope.find_outbound_envelope in_ outbound_id)
-        ~f:(fun out -> Outbound_envelope.add_event out message))
+      Option.iter (Inbound_envelope.find_outbound_envelope in_ outbound_id) ~f:(fun out ->
+        Outbound_envelope.add_event out message))
   | None, Some _ -> failwiths ~here:[%here] "invalid log entry" message Message.sexp_of_t
 ;;
 

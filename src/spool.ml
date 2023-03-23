@@ -624,8 +624,7 @@ let send_msgs ?(retry_intervals = []) t ids =
            queued, so we will attempt to deliver twice. It's ok,
            [Message.send] can deal with this. *)
         do_send msg
-      | `Sending | `Delivered | `Send_now | `Removed | `Quarantined _ ->
-        return (Ok ()))
+      | `Sending | `Delivered | `Send_now | `Removed | `Quarantined _ -> return (Ok ()))
     >>| Or_error.tag ~tag:(Message_id.to_string id))
   >>| Or_error.combine_errors_unit
 ;;

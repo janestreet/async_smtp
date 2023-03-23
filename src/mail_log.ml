@@ -328,8 +328,11 @@ module Message = struct
         (match email with
          | Some (`Envelope envelope) ->
            Some
-             (Smtp_envelope.email envelope |> Email.raw_content |> Email.Raw_content.length)
-         | Some (`Email email) -> Some (Email.raw_content email |> Email.Raw_content.length)
+             (Smtp_envelope.email envelope
+              |> Email.raw_content
+              |> Email.Raw_content.length)
+         | Some (`Email email) ->
+           Some (Email.raw_content email |> Email.Raw_content.length)
          | Some (`Fingerprint _) -> None
          | None -> None)
     in

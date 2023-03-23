@@ -95,7 +95,8 @@ let send_receive log ?(timeout = sec 10.) address envelope =
        let error = Error.of_string "Timed out hearing back from relay" in
        Log.info
          log
-         (lazy (Log.Message.of_error ~here:[%here] ~flows:Log.Flows.none ~component error));
+         (lazy
+           (Log.Message.of_error ~here:[%here] ~flows:Log.Flows.none ~component error));
        Error error
      | `Result envelope' ->
        Hashtbl.remove messages id;

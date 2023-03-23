@@ -263,7 +263,8 @@ let of_string str =
     | s :: ss ->
       (match parse ?partial s with
        | `Partial partial -> loop ~partial ss
-       | `Done res -> if List.is_empty ss then res else failwith "More than one SMTP reply")
+       | `Done res ->
+         if List.is_empty ss then res else failwith "More than one SMTP reply")
   in
   String.split_lines str |> loop
 ;;
@@ -309,7 +310,6 @@ let%test_module _ =
     let%test_unit _ = check (start_authentication_input_334 "")
     let%test_unit _ = check (start_authentication_input_334 "abc")
     let%test_unit _ = check (start_authentication_input_334 "abc\ndef")
-
     let check_multiline a b = [%test_eq: t] b (of_string a)
 
     let%test_unit _ =

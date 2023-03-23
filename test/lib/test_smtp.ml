@@ -42,9 +42,7 @@ let%test_unit "Smtp_expect_test_helper.manual_client" =
       let%bind () = client "RCPT TO: <recipient@example.com>" in
       let%bind () = server "250 Ok: continue" in
       let%bind () = client "DATA" in
-      let%bind () =
-        server "354 Enter message, ending with \".\" on a line by itself"
-      in
+      let%bind () = server "354 Enter message, ending with \".\" on a line by itself" in
       let%bind () = client "." in
       let%bind () = server "250 Ok: id=SENT-1" in
       let%bind () = client "QUIT" in

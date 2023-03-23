@@ -172,8 +172,7 @@ let send ~config ~client_config envelope =
               ~config:client_config
               ~f:(fun client ->
                 Smtp_client.send_envelope client ~log envelope
-                >>|? Smtp_client.Envelope_status.ok_or_error
-                       ~allow_rejected_recipients:false
+                >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
                 >>| Or_error.join
                 >>|? ignore)))
      >>| Result.iter_error ~f:(Log.Global.error !"buh???: %{Error#hum}"))
@@ -284,8 +283,7 @@ let key_type =
     | [ "rsa"; bits ] -> `rsa (Int.of_string bits)
     | [ "dsa"; bits ] -> `dsa (Int.of_string bits)
     | [ "ecdsa"; curve ] -> `ecdsa curve
-    | _ ->
-      failwith "not a recognized key type. Supported rsa:BITS, dsa:BITS, ecdsa:CURVE")
+    | _ -> failwith "not a recognized key type. Supported rsa:BITS, dsa:BITS, ecdsa:CURVE")
 ;;
 
 let command =

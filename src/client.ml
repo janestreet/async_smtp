@@ -158,8 +158,7 @@ module Expert = struct
         command
       >>=? (function
         | `Bsmtp -> return (Ok (Ok ()))
-        | `Received { Smtp_reply.code = `Ok_completed_250; _ } ->
-          return (Ok (Ok ()))
+        | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
         | `Received reply ->
           Log.info
             log
@@ -209,13 +208,7 @@ module Expert = struct
           Ok (accepted_recipients, rejected_recipients))
       >>=?? fun (accepted_recipients, rejected_recipients) ->
       let command = Smtp_command.Data in
-      send_receive
-        t
-        ~log
-        ~flows
-        ~component:(component @ [ "data" ])
-        ~here:[%here]
-        command
+      send_receive t ~log ~flows ~component:(component @ [ "data" ]) ~here:[%here] command
       >>=? (function
         | `Bsmtp -> return (Ok (Ok ()))
         | `Received { Smtp_reply.code = `Start_mail_input_354; _ } ->
@@ -233,8 +226,7 @@ module Expert = struct
                  "send rejected"));
           return
             (Ok
-               (Error
-                  (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
+               (Error (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
       >>=?? fun () ->
       Deferred.Or_error.try_with_join
         ~run:`Schedule
@@ -462,7 +454,8 @@ module Tcp = struct
        with
        | Error error ->
          Deferred.Or_error.error_s
-           [%message "Failed to resolve hostname" (smtp_server : string) (error : Error.t)]
+           [%message
+             "Failed to resolve hostname" (smtp_server : string) (error : Error.t)]
        | Ok None ->
          Deferred.Or_error.error_s
            [%message "Failed to resolve hostname" (smtp_server : string) "Not Found"]

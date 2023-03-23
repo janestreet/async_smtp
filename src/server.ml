@@ -179,8 +179,8 @@ module Make (Cb : Plugin.S) = struct
   let extensions (type session) ~tls_options (plugins : session Plugin.Extension.t list) =
     let auth_extensions =
       List.filter_map plugins ~f:(function
-        | Plugin.Extension.Auth (module Auth : Plugin.Auth with type session = session)
-          -> Some Auth.mechanism
+        | Plugin.Extension.Auth (module Auth : Plugin.Auth with type session = session) ->
+          Some Auth.mechanism
         | _ -> None)
       |> function
       | [] -> []
@@ -326,8 +326,7 @@ module Make (Cb : Plugin.S) = struct
           let%bind () = ok_continue ~here:[%here] ~flows ~component () in
           top ~session
         | Smtp_command.Hello helo -> top_helo ~extended:false ~flows ~session helo
-        | Smtp_command.Extended_hello helo ->
-          top_helo ~extended:true ~flows ~session helo
+        | Smtp_command.Extended_hello helo -> top_helo ~extended:true ~flows ~session helo
         | Smtp_command.Auth (meth, initial_resp) ->
           top_auth ~flows ~session ~meth ~initial_resp
         | Smtp_command.Start_tls ->
@@ -487,8 +486,8 @@ module Make (Cb : Plugin.S) = struct
         Cb.Session.extensions ~state session
         |> List.find_map ~f:(function
           | Plugin.Extension.Auth
-              ((module Auth : Plugin.Auth with type session = Cb.Session.t) as auth)
-            -> Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
+              ((module Auth : Plugin.Auth with type session = Cb.Session.t) as auth) ->
+            Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
           | _ -> None)
       with
       | None ->
@@ -995,8 +994,7 @@ module Make (Cb : Plugin.S) = struct
              Option.try_with (fun () ->
                match Writer.fd writer |> Fd.file_descr_exn |> Core_unix.getsockname with
                | Core_unix.ADDR_UNIX _ -> assert false
-               | Core_unix.ADDR_INET (host, port) ->
-                 Socket.Address.Inet.create host ~port)
+               | Core_unix.ADDR_INET (host, port) -> Socket.Address.Inet.create host ~port)
              |> Option.value ~default:local_ip_address
            in
            let session_flows = Log.Flows.create `Server_session in

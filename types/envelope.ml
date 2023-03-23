@@ -73,8 +73,10 @@ let set ?sender ?sender_args ?recipients ?rejected_recipients ?route ?email t ()
 
 let set' { info; email } ?(info = info) ?(email = email) () = { info; email }
 
-let of_email email =
-  Or_error.map (Envelope_info.of_email email) ~f:(fun info -> { info; email })
+let of_email ?ignore_unparseable_recipient_header email =
+  Or_error.map
+    (Envelope_info.of_email ?ignore_unparseable_recipient_header email)
+    ~f:(fun info -> { info; email })
 ;;
 
 let modify_email t ~f =

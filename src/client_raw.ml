@@ -86,7 +86,8 @@ end
 type t =
   { config : Config.t
   ; flows : Log.Flows.t (* The only allowed transition is from Plain to Tls. *)
-  ; mutable mode :
+  ; mutable
+    mode :
       [ `Bsmtp of Bsmtp.t
       | `Plain of Plain.t
       | `Emulate_tls_for_test of Plain.t
@@ -330,7 +331,8 @@ let do_quit t ~log ~component =
        | `Bsmtp -> return (Ok ())
        | `Received { Smtp_reply.code = `Closing_connection_221; _ } -> return (Ok ())
        | `Received reply ->
-         return (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Smtp_reply}" reply))))
+         return
+           (Or_error.error_string (sprintf !"Bad reply to QUIT: %{Smtp_reply}" reply))))
 ;;
 
 let cleanup t =
@@ -479,7 +481,8 @@ let check_tls_security t =
      | Some tls ->
        (match Config.Tls.mode tls with
         | `Always_try | `If_available -> Ok ()
-        | `Required -> Or_error.errorf "TLS Required for %s:%d but not negotiated" host port))
+        | `Required ->
+          Or_error.errorf "TLS Required for %s:%d but not negotiated" host port))
   | `Emulate_tls_for_test _emulate_tls ->
     Ok ()
   | `Tls tls ->
