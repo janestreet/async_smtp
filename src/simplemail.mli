@@ -85,3 +85,12 @@ val send
   -> ?no_tracing_headers:[ `Because_not_using_standard_email_infra ]
   -> Email.Simple.Content.t
   -> unit Deferred.Or_error.t
+
+module For_testing : sig
+  (** Set the default server to localhost with this port.
+
+      You should probably use lib/email_test_helpers/ instead of this. *)
+  val set_default_server : Host_and_port.t -> unit
+
+  val system_default_server : Host_and_port.t
+end

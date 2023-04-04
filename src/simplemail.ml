@@ -6,7 +6,13 @@ module Envelope_status = Client.Envelope_status
 include (
   Email.Simple : module type of Email.Simple with module Expert := Email.Simple.Expert)
 
-let default_server = Host_and_port.create ~host:"localhost" ~port:25
+let system_default_server = Host_and_port.create ~host:"localhost" ~port:25
+let default_server = ref system_default_server
+
+module For_testing = struct
+  let system_default_server = system_default_server
+  let set_default_server server = default_server := server
+end
 
 let client_log =
   Lazy.map Async.Log.Global.log ~f:(fun log ->
@@ -16,12 +22,8 @@ let client_log =
 module Expert = struct
   include Email.Simple.Expert
 
-  let send_envelope
-        ?(log = Lazy.force client_log)
-        ?credentials
-        ?(server = default_server)
-        envelope
-    =
+  let send_envelope ?(log = Lazy.force client_log) ?credentials ?server envelope =
+    let server = Option.value server ~default:!default_server in
     Client.Tcp.with_ ?credentials server ~log ~f:(fun client ->
       Client.send_envelope client ~log envelope)
   ;;
