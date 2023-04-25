@@ -1,3 +1,18 @@
+## Release v0.16.0
+
+- `Mail_fingerprint.of_email` now accepts an additional `compute_md5` parameter, allowing
+   users to choose whether to compute the MD5 hash while creating a fingerprint from an
+   email
+
+- Add `Simplemail.For_testing` module can be used in testing code to override the default server
+  that mail is sent to
+
+- `Envelope.of_email` and `Envelope_info.of_email` now accept an additional
+  `ignore_unparseable_recipient_header` parameter that causes the function to ignore
+   unparseable headers rather than returning an error
+
+## Old pre-v0.15 changelogs (very likely stale and incomplete)
+
 ## v0.11
 
 - Moved the `Cache` module out to its own library: `resource_cache`.
