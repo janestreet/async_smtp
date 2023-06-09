@@ -46,7 +46,7 @@ module Server = Smtp_server.Make (struct
         Option.iter id ~f:(fun id ->
           match Hashtbl.find messages id with
           | None -> ()
-          | Some ivar -> Ivar.fill ivar envelope');
+          | Some ivar -> Ivar.fill_exn ivar envelope');
         return "Message consumed"
       ;;
     end

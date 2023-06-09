@@ -97,7 +97,7 @@ let%test_module _ =
         let pipeline = dequeue_and_move spool ~iterations ~stop ~print_detail:false in
         let%bind () = enqueue spool ~iterations:(iterations - 1) in
         print_string "Stopping [dequeue]...\n";
-        Ivar.fill ivar ();
+        Ivar.fill_exn ivar ();
         let%bind () = pipeline in
         [%expect {|
         Stopping [dequeue]...

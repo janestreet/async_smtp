@@ -68,7 +68,7 @@ let%test_module _ =
 
             let process ~state:() ~log:_ ~flows:_ _session t email =
               let envelope = smtp_envelope t email in
-              Ivar.fill finished envelope;
+              Ivar.fill_exn finished envelope;
               return "done"
             ;;
           end

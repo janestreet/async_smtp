@@ -87,7 +87,7 @@ module Count = struct
       | `All -> true
       | `Only_frozen -> is_frozen status
       | `Only_active -> is_active status)
-    >>| List.length
+    >>| (List.length :> _ -> _)
   ;;
 
   let command =

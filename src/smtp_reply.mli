@@ -42,6 +42,7 @@ val service_unavailable_421 : t
 val data_timeout_421 : t
 val command_timeout_421 : t
 val local_error_451 : string -> t
+val insufficent_system_storage_452 : t
 val message_rate_exceeded_452 : t
 val unable_to_accommodate_455 : string -> t
 val command_not_recognized_500 : string -> t

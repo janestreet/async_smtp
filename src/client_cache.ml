@@ -108,7 +108,7 @@ module Resource = struct
            ~log
            (Address_and_route.address address)
            ~f:(fun client ->
-             Ivar.fill result (Ok client);
+             Ivar.fill_exn result (Ok client);
              Ivar.read close_finished |> Deferred.ok)
        with
        | Ok () -> ()
@@ -140,7 +140,7 @@ module Resource = struct
             ~flows
             ~component:[ "client_cache" ]
             "connection closed"));
-     Ivar.fill close_finished ());
+     Ivar.fill_exn close_finished ());
     { close_started; close_finished; client; flows }
   ;;
 

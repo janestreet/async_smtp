@@ -66,37 +66,48 @@ let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reade
     else return `Timeout
 ;;
 
+(* RFC 5321 specifies that the max size of that a server should support at LEAST be 64KB
+   https://www.rfc-editor.org/rfc/rfc5321#section-4.5.3.1.7. [100KB] is large, but is
+   likely smaller than [max_size], but larger than [64KB]. *)
+let initial_buffer_size_bytes = Byte_units.of_kilobytes 100. |> Byte_units.bytes_int_exn
+
+let try_with_out_of_memory f =
+  match Result.try_with f with
+  | Error Out_of_memory -> Error `Out_of_memory
+  | Error exn -> raise exn
+  | Ok res -> Ok res
+;;
+
 (* Utility to read all data up to and including a '\n.' discarding the '\n.'. *)
 let read_data ~max_size ~close_started ~timeouts reader =
-  let max_size = max_size |> Byte_units.bytes_int_exn in
-  let rec loop ~is_first accum =
-    let add_string s = Option.iter accum ~f:(fun accum -> Bigbuffer.add_string accum s) in
-    let return () =
-      match accum with
-      | Some accum -> return (`Ok accum)
-      | None -> return `Too_much_data
-    in
-    match%bind read_line_with_timeouts ~close_started ~timeouts reader with
-    | `Timeout -> Deferred.return `Timeout
-    | `Eof ->
-      if not is_first then add_string "\n";
-      Deferred.return `Eof
-    | `Ok "." -> return ()
-    | `Ok line ->
-      let too_long =
-        match accum with
-        | None -> true
-        | Some accum -> String.length line + Bigbuffer.length accum + 1 > max_size
-      in
-      if too_long
-      then loop ~is_first None
-      else (
-        if not is_first then add_string "\n";
-        let decoded = Dot_escaping.decode_line_string line in
-        add_string decoded;
-        loop ~is_first:false accum)
+  let max_len = max_size |> Byte_units.bytes_int_exn in
+  let write_string s buf =
+    let%bind.Result buf = buf in
+    (* [Bigbuffer] does not bound its underlying buffer. It's possible for [buf] to
+       resize to something between [max_len] and [2 * max_len]. *)
+    if Bigbuffer.length buf + String.length s > max_len
+    then Error `Too_much_data
+    else (
+      let%map.Result () = try_with_out_of_memory (fun () -> Bigbuffer.add_string buf s) in
+      buf)
   in
-  Some (Bigbuffer.create max_size) |> loop ~is_first:true
+  let rec loop ~is_first buf =
+    match%bind read_line_with_timeouts ~close_started ~timeouts reader with
+    | `Timeout -> return (Error `Timeout)
+    | `Eof -> if not is_first then return (write_string "\n" buf) else return (Error `Eof)
+    | `Ok "." -> return buf
+    | `Ok line ->
+      let buf = if not is_first then write_string "\n" buf else buf in
+      let decoded = Dot_escaping.decode_line_string line in
+      let buf = write_string decoded buf in
+      loop ~is_first:false buf
+  in
+  let%bind.Deferred.Result buf =
+    try_with_out_of_memory (fun () ->
+      Int.min max_len initial_buffer_size_bytes |> Bigbuffer.create)
+    |> Deferred.return
+  in
+  loop ~is_first:true (Ok buf)
 ;;
 
 module Make (Cb : Plugin.S) = struct
@@ -720,12 +731,12 @@ module Make (Cb : Plugin.S) = struct
         (match%bind
            read_data ~max_size:max_message_size ~close_started ~timeouts reader
          with
-         | `Eof ->
+         | Error `Eof ->
            Log.info
              log
              (lazy (Log.Message.create ~here:[%here] ~flows ~component "MESSAGE_ABORTED"));
            return ()
-         | `Timeout ->
+         | Error `Timeout ->
            Log.info
              log
              (lazy
@@ -738,7 +749,7 @@ module Make (Cb : Plugin.S) = struct
              write_reply ~here:[%here] ~flows ~component Smtp_reply.data_timeout_421
            in
            return ()
-         | `Too_much_data ->
+         | Error `Too_much_data ->
            let%bind () =
              write_reply
                ~here:[%here]
@@ -747,7 +758,16 @@ module Make (Cb : Plugin.S) = struct
                Smtp_reply.exceeded_storage_allocation_552
            in
            top ~session
-         | `Ok raw ->
+         | Error `Out_of_memory ->
+           let%bind () =
+             write_reply
+               ~here:[%here]
+               ~flows
+               ~component
+               Smtp_reply.insufficent_system_storage_452
+           in
+           top ~session
+         | Ok raw ->
            Log.debug
              log
              (lazy

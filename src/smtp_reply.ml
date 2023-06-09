@@ -158,6 +158,12 @@ let command_timeout_421 =
 ;;
 
 let local_error_451 msg = create `Local_error_451 "Local error: %s" msg
+
+(* We use [`Other] here as [`Message_rate_exceeded] reserved [452], yet insufficent system storage is also a [452]:
+
+   https://www.rfc-editor.org/rfc/rfc5321#section-4.2.2
+*)
+let insufficent_system_storage_452 = create (`Other 452) "Insufficent system storage"
 let message_rate_exceeded_452 = create `Message_rate_exceeded_452 "Message rate exceeded"
 
 let unable_to_accommodate_455 msg =
