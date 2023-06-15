@@ -53,7 +53,7 @@ let send'
       ?log
       ?credentials
       ?server
-      ?(from = Email_address.local_address ())
+      ?(from = Email.Simple.local_address ())
       ?sender_args
       ~to_
       ?(cc = [])

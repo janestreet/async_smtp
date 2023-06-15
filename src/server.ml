@@ -94,7 +94,7 @@ let read_data ~max_size ~close_started ~timeouts reader =
   let rec loop ~is_first buf =
     match%bind read_line_with_timeouts ~close_started ~timeouts reader with
     | `Timeout -> return (Error `Timeout)
-    | `Eof -> if not is_first then return (write_string "\n" buf) else return (Error `Eof)
+    | `Eof -> return (Error `Eof)
     | `Ok "." -> return buf
     | `Ok line ->
       let buf = if not is_first then write_string "\n" buf else buf in

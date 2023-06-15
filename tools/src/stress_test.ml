@@ -213,7 +213,7 @@ let main
       let recipients = [ Email_address.of_string_exn "test@example.com" ] in
       let email =
         Email.Simple.create
-          ~from:(Email_address.local_address ())
+          ~from:(Async_smtp.Simplemail.local_address ())
           ~subject:"Stress test"
           ~to_:recipients
           (Email.Simple.Content.text_utf8 "Stress Test")
