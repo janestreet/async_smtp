@@ -4,7 +4,7 @@ open Async_smtp_types
 module type Mech = Auth.Client
 
 type elt
-type t = elt list [@@deriving sexp_of]
+type t = elt list [@@deriving sexp_of, compare, hash]
 
 val anon : t
 val login : ?on_behalf_of:string -> username:string -> password:string -> unit -> t
@@ -48,7 +48,7 @@ module Stable : sig
 
   module V3 : sig
 
-    type nonrec t = t [@@deriving sexp]
+    type nonrec t = t [@@deriving sexp, bin_io]
 
     val of_v2 : V2.t -> t
   end

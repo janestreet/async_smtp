@@ -92,7 +92,7 @@ let send_info = binable (module Spool.Stable.Send_info.V1)
 let recover_info = binable (module Spool.Stable.Recover_info.V2)
 let gc_stat = binable (module Gc.Stable.Stat.V2)
 let pid = binable (module Pid.Stable.V1)
-let cache_status = binable (module Client_cache.Status.Stable.V1)
+let cache_status_v2 = binable (module Client_cache.Status.Stable.V2)
 let cache_config = binable (module Client_cache.Config.Stable.V1)
 
 module Monitor = struct
@@ -111,7 +111,7 @@ end
 
 module Spool = struct
   module Cache = struct
-    let status = pipe_rpc ~name:"cache-status" span cache_status error
+    let status = pipe_rpc ~version:2 ~name:"cache-status" span cache_status_v2 error
     let config = rpc ~name:"cache-config" unit cache_config
   end
 

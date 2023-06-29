@@ -14,6 +14,23 @@ module Stable = struct
         [%expect {| 72331b37f209d3a3e9f43e2a7ce58395 |}]
       ;;
     end
+
+    module V2 = struct
+      type t =
+        { address : Host_and_port.V1.t
+        ; credentials : Credentials.Stable.V3.t option
+        ; route : string option
+        }
+      [@@deriving sexp, bin_io, stable_record ~version:V1.t ~remove:[ credentials ]]
+
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| 760560ddfd777807461844e9cf47ad0d |}]
+      ;;
+
+      let of_v1 = of_V1_t ~credentials:None
+      let to_v1 = to_V1_t
+    end
   end
 end
 
@@ -55,8 +72,9 @@ module Address_and_route = struct
   module Stable = Stable.Address_and_route
 
   module T = struct
-    type t = Stable.V1.t =
+    type t = Stable.V2.t =
       { address : Host_and_port.t
+      ; credentials : Credentials.t option
       ; route : string option
       }
     [@@deriving compare, hash, sexp_of, fields]
@@ -105,6 +123,7 @@ module Resource = struct
            ?timeout:tcp_options.timeout
            ?component:args.component
            ~config:args.client_config
+           ?credentials:(Address_and_route.credentials address)
            ~log
            (Address_and_route.address address)
            ~f:(fun client ->
@@ -164,7 +183,7 @@ module Status = struct
   include Client_cache.Status
 
   module Stable = struct
-    module V1 = Make_stable.V1 (Address_and_route.Stable.V1)
+    module V2 = Make_stable.V1 (Address_and_route.Stable.V2)
   end
 end
 
@@ -209,7 +228,7 @@ let status t = Client_cache.status t.cache
 let config t = Config.of_cache_config (Client_cache.config t.cache)
 
 module Tcp = struct
-  let with_' ?give_up ~f ~cache:t ?route addresses =
+  let with_' ?give_up ~f ~cache:t ?route ?credentials addresses =
     let f (r : Resource.t) =
       match%bind f ~flows:r.flows r.client with
       | Error _ as err ->
@@ -218,7 +237,8 @@ module Tcp = struct
       | Ok _ as ok -> return ok
     in
     let addresses =
-      List.map addresses ~f:(fun address -> { Address_and_route.address; route })
+      List.map addresses ~f:(fun address ->
+        { Address_and_route.address; credentials; route })
     in
     match%map
       Client_cache.with_any_loop

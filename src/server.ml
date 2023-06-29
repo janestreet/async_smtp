@@ -1158,7 +1158,7 @@ let read_bsmtp ?(log = Lazy.force bsmtp_log) reader =
       ~log
       ~tls_options:Config.default.tls_options
       ~emulate_tls_for_test:false
-      ~max_message_size:Config.default.max_message_size
+      ~max_message_size:(Byte_units.of_megabytes 250.)
       ~malformed_emails:Config.default.malformed_emails
       ~reader
       ~server_events

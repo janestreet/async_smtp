@@ -10,7 +10,12 @@ module Stable = struct
         ; username : string
         ; password : string
         }
-      [@@deriving sexp]
+      [@@deriving sexp, bin_io]
+
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| 3e4f02bfc1837a8bd78a51febfc1d6c8 |}]
+      ;;
     end
   end
 
@@ -37,19 +42,49 @@ module Stable = struct
   end
 
   module V3 = struct
-    type mech = (module Mech)
+    module Mech = struct
+      module T = struct
+        type t = (module Mech)
 
-    (*_ stub [sexp] implementation for [mech] *)
-    let sexp_of_mech (module A : Mech) = [%sexp (A.mechanism : string)]
-    let mech_of_sexp = [%of_sexp: _]
+        (*_ stub [sexp] implementation for [mech] *)
+        let sexp_of_t (module A : Mech) = [%sexp (A.mechanism : string)]
+        let t_of_sexp = [%of_sexp: _]
+
+        let caller_identity =
+          Bin_shape.Uuid.of_string "9fd412f6-09cf-11ee-9591-aa0000d17d61"
+        ;;
+      end
+
+      include T
+      include Binable.Of_sexpable.V2 (T)
+
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| d18715b8d0f918397ecbe1b6449635bc |}]
+      ;;
+    end
 
     type elt =
       | Anon
       | Login of Login.V1.t
-      | Custom of mech
-    [@@deriving sexp]
+      | Custom of Mech.t
+    [@@deriving sexp, bin_io]
 
-    type t = elt list [@@deriving sexp]
+    type t = elt list [@@deriving sexp, bin_io]
+
+    let%expect_test _ =
+      print_endline [%bin_digest: t];
+      [%expect {| 5b76311e900f8dc0bf791313602726be |}]
+    ;;
+
+    let%expect_test _ =
+      print_endline [%bin_digest: elt];
+      print_endline [%bin_digest: t];
+      [%expect
+        {|
+        db5918f58da395e473ed9b97958e8d8a
+        5b76311e900f8dc0bf791313602726be |}]
+    ;;
 
     let of_v2 =
       Core.List.map ~f:(function
@@ -68,25 +103,29 @@ module Login = struct
     ; username : string
     ; password : (string[@sexp.opaque])
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp_of, compare, hash]
 end
 
-type mech = (module Mech)
+module Mech = struct
+  type t = (module Mech)
 
-let sexp_of_mech = [%sexp_of: Stable.V3.mech]
+  let sexp_of_t = [%sexp_of: Stable.V3.Mech.t]
+  let compare a b = Sexp.compare [%sexp (a : t)] [%sexp (b : t)]
+  let hash_fold_t h t = Sexp.hash_fold_t h [%sexp (t : t)]
+end
 
 type elt = Stable.V3.elt =
   | Anon
   | Login of Login.t
-  | Custom of mech
-[@@deriving sexp_of]
+  | Custom of Mech.t
+[@@deriving sexp_of, compare, hash]
 
 let sexp_of_elt = function
-  | Custom mech -> sexp_of_mech mech
+  | Custom mech -> Mech.sexp_of_t mech
   | elt -> sexp_of_elt elt
 ;;
 
-type t = elt list [@@deriving sexp_of]
+type t = elt list [@@deriving sexp_of, compare, hash]
 
 let allows_anon =
   List.exists ~f:(function

@@ -5,6 +5,7 @@ module Config = Resource_cache.Address_config
 module Address_and_route : sig
   type t =
     { address : Host_and_port.t
+    ; credentials : Credentials.t option
     ; route : string option
     }
   [@@deriving fields, sexp_of]
@@ -14,7 +15,14 @@ module Address_and_route : sig
 
   module Stable : sig
     module V1 : sig
+      type t [@@deriving sexp, bin_io]
+    end
+
+    module V2 : sig
       type nonrec t = t [@@deriving sexp, bin_io]
+
+      val of_v1 : V1.t -> t
+      val to_v1 : t -> V1.t
     end
   end
 end
@@ -23,7 +31,7 @@ module Status : sig
   include Resource_cache.Status.S with type Key.t = Address_and_route.t
 
   module Stable : sig
-    module V1 : sig
+    module V2 : sig
       type nonrec t = t [@@deriving sexp, bin_io]
     end
   end
@@ -47,7 +55,6 @@ val close_finished : t -> unit Deferred.t
 val status : t -> Status.t
 val config : t -> Config.t
 
-(* NOTE: Make sure not to reuse connections when using SMTP authentication *)
 module Tcp : sig
   (** [with_'] concurrently tries to get a cached connection for one of [addresses].
       [`Ok] and [`Error_opening_resource] return back the [Smtp_socket_address.t] that was
@@ -57,6 +64,7 @@ module Tcp : sig
     -> f:(flows:Mail_log.Flows.t -> Client.t -> 'a Deferred.Or_error.t)
     -> cache:t
     -> ?route:string
+    -> ?credentials:Credentials.t
     -> Host_and_port.t list
     -> [ `Ok of Host_and_port.t * 'a Or_error.t
        | `Error_opening_all_addresses of (Host_and_port.t * Error.t) list
