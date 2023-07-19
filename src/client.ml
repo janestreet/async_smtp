@@ -318,6 +318,7 @@ let send_data_via_reader_writer t ~email =
   let writer = writer t in
   Email.to_string email
   |> String.split ~on:'\n'
+  |> List.map ~f:(String.rstrip ~drop:(Char.equal '\r'))
   |> fun lines ->
   let num_lines = List.length lines in
   Deferred.Or_error.List.iteri lines ~how:`Sequential ~f:(fun i line ->
