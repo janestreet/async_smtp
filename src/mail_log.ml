@@ -43,7 +43,7 @@ module Mail_fingerprint = struct
     ; md5 : string option [@sexp.option]
     ; parts : t list [@default []]
     }
-  [@@deriving sexp, fields]
+  [@@deriving sexp, fields ~getters]
 
   let rec of_email email ~compute_md5 =
     let headers = Email_headers.to_list (Email.headers email) in

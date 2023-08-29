@@ -15,7 +15,7 @@ module Data : sig
     { serial_number : int
     ; customer : string
     }
-  [@@deriving sexp_of, fields]
+  [@@deriving sexp_of, fields ~iterators:create]
 
   val load : string -> t Deferred.Or_error.t
   val save : ?temp_file:string -> t -> string -> unit Deferred.Or_error.t

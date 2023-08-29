@@ -237,7 +237,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       ; queue : S.Queue.t
       ; name : string
       }
-    [@@deriving fields, sexp_of]
+    [@@deriving fields ~getters ~iterators:create, sexp_of]
 
     let create spool queue ~name = Fields.create ~spool ~queue ~name
 
@@ -826,7 +826,7 @@ module Monitor = struct
         { spool_dir : string
         ; limits : Limits.t
         }
-      [@@deriving fields, sexp]
+      [@@deriving fields ~iterators:create, sexp]
 
       let create = Fields.create
 

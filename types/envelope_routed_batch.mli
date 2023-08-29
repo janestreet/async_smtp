@@ -7,7 +7,7 @@ type t =
   { envelopes : Envelope_bodiless_routed.t list
   ; email_body : Email.Raw_content.t
   }
-[@@deriving fields, sexp_of]
+[@@deriving fields ~getters, sexp_of]
 
 val single_envelope : Envelope_routed.t -> t
 val to_envelopes : t -> Envelope_routed.t list

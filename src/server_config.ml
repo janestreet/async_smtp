@@ -13,7 +13,7 @@ module Tls_options = struct
     ; ca_file : string option
     ; ca_path : string option
     }
-  [@@deriving fields, sexp]
+  [@@deriving sexp]
 end
 
 module Tcp_options = struct
@@ -21,7 +21,7 @@ module Tcp_options = struct
     { max_accepts_per_batch : int option [@sexp.option]
     ; backlog : int option [@sexp.option]
     }
-  [@@deriving fields, sexp]
+  [@@deriving fields ~getters, sexp]
 end
 
 module Where_to_listen = struct
@@ -110,7 +110,7 @@ type t =
   ; tls_options : Tls_options.t option [@sexp.option]
   ; tcp_options : Tcp_options.t option [@sexp.option]
   }
-[@@deriving fields, sexp]
+[@@deriving fields ~getters, sexp]
 
 let load_exn file = Sexp_macro.load_sexp file t_of_sexp >>| Or_error.ok_exn
 

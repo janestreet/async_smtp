@@ -59,7 +59,7 @@ module T = struct
     ; route : string option
     ; id : Envelope_id.t [@compare.ignore] [@hash.ignore]
     }
-  [@@deriving sexp_of, fields, compare, hash]
+  [@@deriving sexp_of, fields ~getters ~iterators:create, compare, hash]
 
   let info t = t
 end

@@ -31,7 +31,7 @@ module T = struct
     { info : Envelope_info.t
     ; email : Email.t
     }
-  [@@deriving sexp_of, fields, compare, hash]
+  [@@deriving sexp_of, fields ~getters ~iterators:create, compare, hash]
 end
 
 include T

@@ -327,7 +327,7 @@ let%expect_test "AUTH LOGIN does not allow delegation" =
   return ()
 ;;
 
-let%expect_test "perfer AUTH over ANON" =
+let%expect_test "prefer AUTH over ANON" =
   let%bind () =
     Smtp_expect_test_helper.smtp
       ~tls:true

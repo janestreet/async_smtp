@@ -194,7 +194,7 @@ type t =
   ; mutable is_killed : bool
   ; killed_and_flushed : unit Ivar.t
   }
-[@@deriving fields]
+[@@deriving fields ~getters ~iterators:create]
 
 let add_message t msg =
   let id = Message.id msg in
@@ -710,7 +710,7 @@ module Spooled_message_info = struct
     ; file_size : Byte_units.t option
     ; envelope : Smtp_envelope.t option
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving fields ~getters, sexp_of]
 
   let sp f t = f t.message
   let id = sp Message.id

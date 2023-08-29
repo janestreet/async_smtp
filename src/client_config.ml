@@ -13,7 +13,7 @@ module Tls = struct
     ; mode : [ `Required | `Always_try | `If_available ]
     ; certificate_mode : [ `Ignore | `Verify ]
     }
-  [@@deriving sexp, fields]
+  [@@deriving sexp, fields ~getters]
 
   let default =
     { version = None
@@ -36,7 +36,7 @@ type t =
   ; send_receive_timeout : [ `Default | `This of Time_float.Span.t ]
   ; final_ok_timeout : [ `Default | `This of Time_float.Span.t ]
   }
-[@@deriving sexp, fields]
+[@@deriving sexp]
 
 let default =
   { tls = [ "", Tls.default ]

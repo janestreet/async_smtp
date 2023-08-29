@@ -30,7 +30,7 @@ type t = Stable.V1.t =
   ; envelope_sender : Smtp_envelope.Sender.t
   ; from_headers : string
   }
-[@@deriving sexp_of, compare, fields]
+[@@deriving sexp_of, compare, fields ~getters]
 
 let to_string t = Sexp.to_string (sexp_of_t t)
 

@@ -6,7 +6,7 @@ module T = struct
     { info : Envelope_info.t
     ; headers : Email_headers.t
     }
-  [@@deriving fields, compare, hash, sexp_of]
+  [@@deriving fields ~getters ~iterators:create, compare, hash, sexp_of]
 
   let headers t = t.headers
   let set_headers t headers = { t with headers }

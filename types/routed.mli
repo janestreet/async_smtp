@@ -7,7 +7,7 @@ type 'a t =
   ; next_hop_choices : Host_and_port.t list
   ; retry_intervals : Retry_interval.t list
   }
-[@@deriving sexp_of, fields, compare, hash]
+[@@deriving sexp_of, fields ~getters ~iterators:create, compare, hash]
 
 type 'a create =
   envelope:'a

@@ -8,7 +8,7 @@ type t =
   ; client : Client_config.t
   ; load_balance : bool
   }
-[@@deriving fields, sexp]
+[@@deriving fields ~getters, sexp]
 
 val tmp_dir : t -> string
 val default : t

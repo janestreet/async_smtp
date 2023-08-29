@@ -8,7 +8,7 @@ module Mail_fingerprint : sig
     ; md5 : string option
     ; parts : t list
     }
-  [@@deriving sexp, fields]
+  [@@deriving sexp, fields ~getters]
 
   val of_email : Email.t -> compute_md5:bool -> t
 end

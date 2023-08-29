@@ -140,7 +140,7 @@ module Simple : sig
       ; tls : bool
       ; authenticated : string option
       }
-    [@@deriving fields, sexp_of]
+    [@@deriving sexp_of]
 
     val empty : t
 
@@ -166,7 +166,7 @@ module Simple : sig
       ; sender_args : Smtp_envelope.Sender_argument.t list
       ; recipients : Email_address.t list
       }
-    [@@deriving fields, sexp_of]
+    [@@deriving sexp_of]
 
     val smtp_envelope : t -> Email.t -> Smtp_envelope.t
 
@@ -219,7 +219,7 @@ end = struct
       ; tls : bool
       ; authenticated : string option
       }
-    [@@deriving fields, sexp_of]
+    [@@deriving sexp_of]
 
     let empty =
       let null_inet_addr = Socket.Address.Inet.create_bind_any ~port:0 in
@@ -252,7 +252,7 @@ end = struct
       ; sender_args : Smtp_envelope.Sender_argument.t list
       ; recipients : Email_address.t list
       }
-    [@@deriving sexp_of, fields]
+    [@@deriving sexp_of]
 
     let smtp_envelope_info { id; sender; sender_args; recipients } =
       Smtp_envelope.Info.create ~id ~sender ~sender_args ~recipients ()

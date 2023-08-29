@@ -17,7 +17,7 @@ module Config = struct
     ; server_allowed_ciphers : [ `Secure | `Openssl_default | `Only of string list ]
     ; key_type : [ `rsa of int | `ecdsa of string | `dsa of int ]
     }
-  [@@deriving fields, sexp]
+  [@@deriving fields ~getters, sexp]
 
   let make_tls_certificates t =
     let openssl args = Async_shell.run "openssl" args in

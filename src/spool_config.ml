@@ -50,7 +50,7 @@ type t = Stable.V3.t =
   ; client : Client_config.t
   ; load_balance : bool
   }
-[@@deriving fields, sexp_of]
+[@@deriving fields ~getters, sexp_of]
 
 let t_of_sexp sexp =
   try Stable.V3.t_of_sexp sexp with

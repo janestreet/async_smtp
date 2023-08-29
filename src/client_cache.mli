@@ -8,7 +8,7 @@ module Address_and_route : sig
     ; credentials : Credentials.t option
     ; route : string option
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving sexp_of]
 
   include Comparable.S_plain with type t := t
   include Hashable.S_plain with type t := t

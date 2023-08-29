@@ -33,7 +33,7 @@ module Tls : sig
           `Verify
         ]
     }
-  [@@deriving sexp, fields]
+  [@@deriving sexp, fields ~getters]
 
   val default : t
 end
@@ -62,7 +62,7 @@ type t =
      practical since a session may take [O(number of recepients)] to complete. *)
   ; final_ok_timeout : [ `Default | `This of Time_float.Span.t ]
   }
-[@@deriving sexp, fields]
+[@@deriving sexp]
 
 val default : t
 val load_exn : string -> t Deferred.t

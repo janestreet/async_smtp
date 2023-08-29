@@ -5,7 +5,7 @@ type t =
   { envelopes : Envelope_bodiless_routed.t list
   ; email_body : Email.Raw_content.t
   }
-[@@deriving fields, sexp_of]
+[@@deriving fields ~getters, sexp_of]
 
 let single_envelope envelope =
   let bodiless, email_body = Envelope_routed.split_bodiless envelope in

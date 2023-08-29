@@ -16,7 +16,7 @@ module Peer_info = struct
         [ `Simple of string | `Extended of string * Smtp_extension.t list ]
           Set_once.Stable.V1.t
     }
-  [@@deriving sexp_of, fields]
+  [@@deriving sexp_of, fields ~getters ~fields]
 
   let create ~remote_address ~remote_ip_address ~local_ip_address () =
     { remote_address
@@ -53,7 +53,7 @@ module Peer_info = struct
 end
 
 module Bsmtp = struct
-  type t = { writer : Writer.t } [@@deriving fields]
+  type t = { writer : Writer.t } [@@deriving fields ~getters]
 
   let create ~writer = { writer }
 end
@@ -64,7 +64,7 @@ module Plain = struct
     ; writer : Writer.t
     ; info : Peer_info.t
     }
-  [@@deriving fields]
+  [@@deriving fields ~getters]
 
   let create ~reader ~writer ~info = { reader; writer; info }
 end
@@ -76,7 +76,7 @@ module Tls = struct
     ; info : Peer_info.t
     ; tls : Ssl.Connection.t
     }
-  [@@deriving fields]
+  [@@deriving fields ~getters]
 
   let create ~reader ~writer ~info ~tls = { reader; writer; info; tls }
 end
@@ -94,7 +94,7 @@ type t =
       | `Tls of Tls.t
       ]
   }
-[@@deriving fields]
+[@@deriving fields ~getters]
 
 let remote_address t =
   match t.mode with

@@ -23,7 +23,7 @@ module Outbound_envelope = struct
     ; mutable recipients : string list
     ; mutable events : Smtp_mail_log.Message.t list
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving fields ~getters, sexp_of]
 
   let create id = { id; recipients = []; events = [] }
   let add_event t event = t.events <- event :: t.events
@@ -39,7 +39,7 @@ module Inbound_envelope = struct
     ; mutable events : Smtp_mail_log.Message.t list
     ; mutable outbound_envelopes : Outbound_envelope.t list
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving fields ~getters, sexp_of]
 
   let create id =
     { id

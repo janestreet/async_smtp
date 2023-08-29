@@ -13,7 +13,7 @@ module Tls_options : sig
     ; ca_file : string option
     ; ca_path : string option
     }
-  [@@deriving fields, sexp]
+  [@@deriving sexp]
 end
 
 module Tcp_options : sig
@@ -21,7 +21,7 @@ module Tcp_options : sig
     { max_accepts_per_batch : int option
     ; backlog : int option
     }
-  [@@deriving fields, sexp]
+  [@@deriving fields ~getters, sexp]
 end
 
 module Where_to_listen : sig
@@ -64,7 +64,7 @@ type t =
   ; tls_options : Tls_options.t option
   ; tcp_options : Tcp_options.t option
   }
-[@@deriving fields, sexp]
+[@@deriving fields ~getters, sexp]
 
 val load_exn : string -> t Deferred.t
 val default : t

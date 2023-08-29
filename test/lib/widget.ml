@@ -18,7 +18,7 @@ module Data = struct
     { serial_number : int
     ; customer : string
     }
-  [@@deriving sexp, fields]
+  [@@deriving sexp, fields ~iterators:create]
 
   let load path = Reader.load_sexp path t_of_sexp
 

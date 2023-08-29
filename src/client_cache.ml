@@ -77,7 +77,7 @@ module Address_and_route = struct
       ; credentials : Credentials.t option
       ; route : string option
       }
-    [@@deriving compare, hash, sexp_of, fields]
+    [@@deriving compare, hash, sexp_of, fields ~getters]
   end
 
   include T
@@ -95,7 +95,7 @@ module Resource = struct
       ; log : Mail_log.t
       ; client_config : Client_config.t
       }
-    [@@deriving fields]
+    [@@deriving fields ~iterators:create]
 
     let create = Fields.create
   end

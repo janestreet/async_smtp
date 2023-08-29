@@ -296,7 +296,7 @@ type t = Stable.V3.t =
   ; mutable status : Status.t
   ; mutable envelope_info : Smtp_envelope.Info.t
   }
-[@@deriving fields, sexp_of]
+[@@deriving fields ~getters, sexp_of]
 
 (* type alias to make code more readable below *)
 type meta = t [@@deriving sexp_of]

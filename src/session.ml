@@ -11,7 +11,7 @@ type t =
   ; authenticated : string option
   ; advertised_extensions : Smtp_extension.t list
   }
-[@@deriving sexp_of, fields]
+[@@deriving sexp_of]
 
 let create ~remote ~local ?helo ?tls ?authenticated ?(advertised_extensions = []) () =
   { remote; local; helo; tls; authenticated; advertised_extensions }
