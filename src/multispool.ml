@@ -16,42 +16,28 @@ module Utils = struct
   ;;
 
   let open_creat_excl_wronly ?perm path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> Unix.openfile path ?perm ~mode:[ `Creat; `Excl; `Wronly ])
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+      Unix.openfile path ?perm ~mode:[ `Creat; `Excl; `Wronly ])
     >>| replace_unix_error ~error:EEXIST ~replacement:`Exists
   ;;
 
   let touch path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () ->
-         let tod = Unix.gettimeofday () in
-         Unix.utimes path ~access:tod ~modif:tod)
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+      let tod = Unix.gettimeofday () in
+      Unix.utimes path ~access:tod ~modif:tod)
   ;;
 
   let unlink path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> Unix.unlink path)
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Unix.unlink path)
   ;;
 
   let stat_or_notfound path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> Unix.stat path)
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Unix.stat path)
     >>| replace_unix_error ~error:ENOENT ~replacement:`Not_found
   ;;
 
   let ls dir =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> Sys.ls_dir dir)
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Sys.ls_dir dir)
   ;;
 
   let ls_sorted dir =
@@ -155,20 +141,15 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
 
   let load_metadata path =
     S.Throttle.enqueue (fun () ->
-      Deferred.Or_error.try_with
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () ->
-           let%bind contents = Reader.file_contents path in
-           return (S.Metadata.of_string contents)))
+      Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+        let%bind contents = Reader.file_contents path in
+        return (S.Metadata.of_string contents)))
   ;;
 
   let save_metadata ?temp_file ~contents path =
     S.Throttle.enqueue (fun () ->
-      Deferred.Or_error.try_with
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () -> Writer.save path ?temp_file ~contents ~fsync:true))
+      Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+        Writer.save path ?temp_file ~contents ~fsync:true))
   ;;
 
   module Data_file = struct
@@ -183,11 +164,8 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     let save t ~contents = S.Throttle.enqueue (fun () -> S.Data.save contents (path t))
 
     let stat t =
-      Deferred.Or_error.try_with
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () ->
-           S.Throttle.enqueue (fun () -> Unix.stat (data_dir_of t.spool ^/ t.name)))
+      Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+        S.Throttle.enqueue (fun () -> Unix.stat (data_dir_of t.spool ^/ t.name)))
     ;;
   end
 
@@ -218,10 +196,8 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
         >>=? fun () ->
         Utils.touch src
         >>=? fun () ->
-        Deferred.Or_error.try_with
-          ~run:`Schedule
-          ~rest:`Log
-          (fun () -> Unix.rename ~src ~dst))
+        Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+          Unix.rename ~src ~dst))
     ;;
 
     let rename' ~src_dir ~dst_dir ~filename t =
@@ -291,20 +267,15 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
       let open Deferred.Or_error.Let_syntax in
       let rec try_name ~attempt =
         let%bind name =
-          Deferred.Or_error.try_with
-            ~run:`Schedule
-            ~rest:`Log
-            (fun () -> Deferred.return (S.Name_generator.next opaque ~attempt))
+          Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+            Deferred.return (S.Name_generator.next opaque ~attempt))
         in
         let path = reg_dir_of t ^/ S.Name_generator.Unique_name.to_string name in
         match%bind Utils.open_creat_excl_wronly path with
         | `Exists -> try_name ~attempt:(attempt + 1)
         | `Ok fd ->
           let%bind () =
-            Deferred.Or_error.try_with
-              ~run:`Schedule
-              ~rest:`Log
-              (fun () -> Unix.close fd)
+            Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Unix.close fd)
           in
           return name
       in
@@ -324,19 +295,14 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     let meta_path = t ^/ S.Queue.to_dirname queue ^/ name in
     let data_path = data_dir_of t ^/ name in
     match%bind
-      Deferred.Or_error.try_with_join
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () ->
-           save_metadata temp_path ~contents:meta
-           >>=? fun () ->
-           S.Data.save data data_path
-           >>=? fun () ->
-           S.Throttle.enqueue (fun () ->
-             Deferred.Or_error.try_with
-               ~run:`Schedule
-               ~rest:`Log
-               (fun () -> Unix.rename ~src:temp_path ~dst:meta_path)))
+      Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () ->
+        save_metadata temp_path ~contents:meta
+        >>=? fun () ->
+        S.Data.save data data_path
+        >>=? fun () ->
+        S.Throttle.enqueue (fun () ->
+          Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+            Unix.rename ~src:temp_path ~dst:meta_path)))
     with
     | Error _ as error ->
       (* Best-effort cleanup: Unlink both files and ignore any errors *)
@@ -772,10 +738,10 @@ module Monitor = struct
       end
 
       let create
-            ?(max_checked_out_age = Defaults.max_checked_out_age)
-            ?(max_tmp_file_age = Defaults.max_tmp_file_age)
-            ?(max_queue_ages = [])
-            ()
+        ?(max_checked_out_age = Defaults.max_checked_out_age)
+        ?(max_tmp_file_age = Defaults.max_tmp_file_age)
+        ?(max_queue_ages = [])
+        ()
         =
         { max_checked_out_age; max_tmp_file_age; max_queue_ages }
       ;;
@@ -973,9 +939,9 @@ module Monitor = struct
           t.private_problems
           ~init:Problem.Set.empty
           ~f:(fun ~key:problem ~data:count new_problems ->
-            if count > alert_after_cycles
-            then Set.add new_problems problem
-            else new_problems)
+          if count > alert_after_cycles
+          then Set.add new_problems problem
+          else new_problems)
       in
       let starts = Set.to_list (Set.diff new_problems old_problems) in
       let ends = Set.to_list (Set.diff old_problems new_problems) in
@@ -1001,9 +967,9 @@ module Monitor = struct
       end
 
       let create
-            ?(check_every = Defaults.check_every)
-            ?(alert_after_cycles = Defaults.alert_after_cycles)
-            ()
+        ?(check_every = Defaults.check_every)
+        ?(alert_after_cycles = Defaults.alert_after_cycles)
+        ()
         =
         { check_every; alert_after_cycles }
       ;;

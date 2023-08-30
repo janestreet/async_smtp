@@ -6,7 +6,6 @@ open Async_smtp_types
 
 type t
 
-
 module Event : sig
   module Envelope_received : sig
     type t =

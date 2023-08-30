@@ -5,8 +5,6 @@ type t [@@deriving sexp_of]
 val to_string : t -> string
 val of_string : string -> t
 val create : unit -> t
-
-
 val urlbase64_encode_float : ?length:int -> float -> t
 
 include Comparable.S_plain with type t := t

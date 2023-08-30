@@ -16,16 +16,16 @@ module T = struct
   let headers t = Email.headers (email t)
 
   let set
-        ?sender
-        ?sender_args
-        ?recipients
-        ?rejected_recipients
-        ?route
-        ?next_hop_choices
-        ?retry_intervals
-        ?email
-        t
-        ()
+    ?sender
+    ?sender_args
+    ?recipients
+    ?rejected_recipients
+    ?route
+    ?next_hop_choices
+    ?retry_intervals
+    ?email
+    t
+    ()
     =
     { Routed.envelope =
         Envelope.set

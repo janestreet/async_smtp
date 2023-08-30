@@ -4,9 +4,9 @@ open Async_smtp
 open Test_async_smtp
 
 module Widget_monitor = Multispool.Monitor.Make (struct
-    include Widget
-    module Name_generator = Common.Test_name_generator
-  end)
+  include Widget
+  module Name_generator = Common.Test_name_generator
+end)
 
 module Fsck = struct
   module Immediate = struct
@@ -57,9 +57,9 @@ end
 module Create = struct
   (* We need a Widget spool to create the on-disk spool structure *)
   module Widget_spool = Multispool.Make (struct
-      include Widget
-      module Name_generator = Common.Test_name_generator
-    end)
+    include Widget
+    module Name_generator = Common.Test_name_generator
+  end)
 
   let command =
     let open Command.Let_syntax in

@@ -29,8 +29,6 @@ val of_email
 
 val modify_email : t -> f:(Email.t -> Email.t) -> t
 val of_bodiless : Envelope_bodiless.t -> Email.Raw_content.t -> t
-
-
 val split_bodiless : t -> Envelope_bodiless.t * Email.Raw_content.t
 val with_bodiless : t -> (Envelope_bodiless.t -> Envelope_bodiless.t) -> t
 

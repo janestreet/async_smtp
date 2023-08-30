@@ -235,25 +235,25 @@ module Message = struct
     -> 'a
 
   let with_info
-        ~f
-        ~flows
-        ~component
-        ~here
-        ?local_ip_address
-        ?remote_address
-        ?remote_ip_address
-        ?email
-        ?(compute_body_fingerprint_hash = false)
-        ?message_size
-        ?rfc822_id
-        ?local_id
-        ?sender
-        ?recipients
-        ?spool_id
-        ?command
-        ?reply
-        ?session_marker
-        ?(tags = [])
+    ~f
+    ~flows
+    ~component
+    ~here
+    ?local_ip_address
+    ?remote_address
+    ?remote_ip_address
+    ?email
+    ?(compute_body_fingerprint_hash = false)
+    ?message_size
+    ?rfc822_id
+    ?local_id
+    ?sender
+    ?recipients
+    ?spool_id
+    ?command
+    ?reply
+    ?session_marker
+    ?(tags = [])
     =
     let tags =
       match reply with
@@ -548,34 +548,34 @@ let with_flow_and_component ~flows ~component t =
       [ Log.Output.create
           ~flush:(fun () -> if Log.is_closed t then Deferred.unit else Log.flushed t)
           (fun msgs ->
-             Queue.iter msgs ~f:(fun msg ->
-               let level = Message.level msg in
-               let log_level = Log.level t in
-               if Level.( <= ) log_level level
-               then
-                 message
-                   ~level
-                   t
-                   (lazy (Message.with_flow_and_component ~flows ~component msg)));
-             return ())
+            Queue.iter msgs ~f:(fun msg ->
+              let level = Message.level msg in
+              let log_level = Log.level t in
+              if Level.( <= ) log_level level
+              then
+                message
+                  ~level
+                  t
+                  (lazy (Message.with_flow_and_component ~flows ~component msg)));
+            return ())
       ]
     ~on_error:
       (`Call
-         (fun err ->
-            Log.Global.sexp
-              ~level:`Error
-              ~tags:
-                ([ Message.Tag.component, sprintf !"%{Component}" (component @ [ "_LOG" ]) ]
-                 @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
-              (Error.sexp_of_t err)))
+        (fun err ->
+          Log.Global.sexp
+            ~level:`Error
+            ~tags:
+              ([ Message.Tag.component, sprintf !"%{Component}" (component @ [ "_LOG" ]) ]
+               @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
+            (Error.sexp_of_t err)))
     ()
 ;;
 
 let adjust_log_levels
-      ?(minimum_level = `Debug)
-      ?(remap_info_to = `Info)
-      ?(remap_error_to = `Error)
-      t
+  ?(minimum_level = `Debug)
+  ?(remap_info_to = `Info)
+  ?(remap_error_to = `Error)
+  t
   =
   let log_level = Log.level t in
   let minimum_level = Level.max log_level minimum_level in
@@ -590,23 +590,23 @@ let adjust_log_levels
         [ Log.Output.create
             ~flush:(fun () -> if Log.is_closed t then Deferred.unit else Log.flushed t)
             (fun msgs ->
-               Queue.iter msgs ~f:(fun msg ->
-                 let level =
-                   match Message.level msg with
-                   | `Debug -> `Debug
-                   | `Info -> remap_info_to
-                   | `Error -> remap_error_to
-                 in
-                 if Level.( <= ) minimum_level level then message' ~level t msg);
-               return ())
+              Queue.iter msgs ~f:(fun msg ->
+                let level =
+                  match Message.level msg with
+                  | `Debug -> `Debug
+                  | `Info -> remap_info_to
+                  | `Error -> remap_error_to
+                in
+                if Level.( <= ) minimum_level level then message' ~level t msg);
+              return ())
         ]
       ~on_error:
         (`Call
-           (fun err ->
-              Log.Global.sexp
-                ~level:`Error
-                ~tags:[ Message.Tag.component, "_LOG" ]
-                (Error.sexp_of_t err)))
+          (fun err ->
+            Log.Global.sexp
+              ~level:`Error
+              ~tags:[ Message.Tag.component, "_LOG" ]
+              (Error.sexp_of_t err)))
       ()
 ;;
 
@@ -619,10 +619,10 @@ let%expect_test "with_flow_and_component" =
         [ Log.Output.create
             ~flush:(fun () -> Writer.flushed stdout)
             (fun messages ->
-               Queue.iter messages ~f:(fun message ->
-                 let component = Message.component message in
-                 printf !"Component: %{Component}\n" component);
-               Deferred.unit)
+              Queue.iter messages ~f:(fun message ->
+                let component = Message.component message in
+                printf !"Component: %{Component}\n" component);
+              Deferred.unit)
         ]
       ~on_error:`Raise
       ()

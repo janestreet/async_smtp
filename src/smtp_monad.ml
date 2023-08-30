@@ -28,20 +28,13 @@ let tag ~tag ?here t = t >>| Sync.tag ~tag ?here
 let tag' ?tag ?here t = t >>| Sync.tag' ?tag ?here
 
 let try_with ?tag ~here f =
-  Deferred.Or_error.try_with
-    ~run:`Schedule
-    ~rest:`Log
-    f
-  >>| Sync.of_or_error ?tag ~here
+  Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log f >>| Sync.of_or_error ?tag ~here
 ;;
 
 let try_with_join ?tag ~here f = try_with ?tag ~here f >>| Result.join
 
 let try_with_or_error ?tag ~here f =
-  Deferred.Or_error.try_with_join
-    ~run:`Schedule
-    ~rest:`Log
-    f
+  Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log f
   >>| Sync.of_or_error ?tag ~here
 ;;
 

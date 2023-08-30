@@ -13,8 +13,6 @@ module Entry : sig
 
   val create : spool -> Message.Queue.t -> name:string -> t
   val to_message : t -> Message.t Or_error.t Deferred.t
-
-
   val to_message_with_envelope : t -> (Message.t * Smtp_envelope.t) Or_error.t Deferred.t
   val size : t -> Byte_units.t Or_error.t Deferred.t
 end
@@ -31,8 +29,7 @@ val ls : t -> Message.Queue.t list -> Entry.t list Or_error.t Deferred.t
 (** The Deferred becomes determined once the messages have been synced to disk. *)
 val enqueue
   :  t
-  -> log:
-       Mail_log.t
+  -> log:Mail_log.t
   -> initial_status:Message.Status.t (** should usually be [`Send_now]*)
   -> Smtp_envelope.Routed.Batch.t
   -> flows:Mail_log.Flows.t

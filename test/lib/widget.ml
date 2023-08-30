@@ -23,10 +23,8 @@ module Data = struct
   let load path = Reader.load_sexp path t_of_sexp
 
   let save ?temp_file t path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> Writer.save_sexp ?temp_file ~hum:true path (sexp_of_t t))
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+      Writer.save_sexp ?temp_file ~hum:true path (sexp_of_t t))
   ;;
 
   let to_string t = Sexp.to_string_hum (sexp_of_t t)

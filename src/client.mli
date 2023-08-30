@@ -68,7 +68,6 @@ val send_envelope
 
 (** Standard SMTP over tcp *)
 module Tcp : sig
-
   (** Establish a connection to the given address and perform the appropriate
       SMTP handshake. Use [send_envelope] to (attempt) to deliver messages. *)
   val with_
@@ -80,7 +79,7 @@ module Tcp : sig
        -> Host_and_port.t
        -> f:(t -> 'a Deferred.Or_error.t)
        -> 'a Deferred.Or_error.t)
-        Tcp.Aliases.with_connect_options
+      Tcp.Aliases.with_connect_options
 end
 
 module Expert : sig
@@ -89,7 +88,7 @@ module Expert : sig
     -> log:Mail_log.t
     -> ?flows:Mail_log.Flows.t
     -> ?component:Mail_log.Component.t
-    (** Send the raw data of the [Email.t].
+         (** Send the raw data of the [Email.t].
 
         [send_data] must:
         - not include a trailing "\r\n.\r\n"

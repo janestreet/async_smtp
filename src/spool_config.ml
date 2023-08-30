@@ -7,10 +7,10 @@ module Stable = struct
       ; tmp_dir : string option
       ; max_concurrent_send_jobs : int
       ; connection_cache : Resource_cache.Address_config.Stable.V1.t
-                           [@default
-                             Resource_cache.Address_config.default
-                             |> Resource_cache.Address_config.Stable.V2.of_v3
-                             |> Resource_cache.Address_config.Stable.V1.of_v2]
+           [@default
+             Resource_cache.Address_config.default
+             |> Resource_cache.Address_config.Stable.V2.of_v3
+             |> Resource_cache.Address_config.Stable.V1.of_v2]
       ; client : Client_config.t
       }
     [@@deriving sexp]

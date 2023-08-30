@@ -3,7 +3,6 @@ open With_info
 
 type t [@@deriving sexp_of]
 
-
 val createf : (('a, unit, string, t) format4 -> 'a) with_reject
 val of_exn : (Exn.t -> t) with_reject
 val of_error : (Error.t -> t) with_reject
@@ -18,4 +17,3 @@ val tag' : ?tag:string -> ?here:Source_code_position.t -> t -> t
 val reject : t -> Smtp_reply.t option
 
 val error : t -> Error.t
-

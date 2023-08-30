@@ -58,8 +58,6 @@ val retry_intervals : t -> Smtp_envelope.Retry_interval.t list
 
 val set_retry_intervals : t -> Smtp_envelope.Retry_interval.t list -> unit
 val add_retry_intervals : t -> Smtp_envelope.Retry_interval.t list -> unit
-
-
 val remaining_recipients : t -> Email_address.Stable.V1.t list
 val set_remaining_recipients : t -> Email_address.t list -> unit
 
@@ -70,8 +68,6 @@ val failed_recipients : t -> Email_address.Stable.V1.t list
 
 val set_failed_recipients : t -> Email_address.t list -> unit
 val move_failed_recipients_to_remaining_recipients : t -> unit
-
-
 val relay_attempts : t -> (Time_float.t * Error.t) list
 val add_relay_attempt : t -> Time_float.t * Error.t -> unit
 val last_relay_attempt : t -> (Time_float.t * Error.t) option
@@ -101,11 +97,11 @@ val of_envelope_batch
 
 module On_disk :
   Multispool_intf.Spoolable.S
-  with type Metadata.t = t
-   and type Name_generator.t = Smtp_envelope.t
-   and module Name_generator.Unique_name = Id
-   and module Queue = Queue
-   and module Data = Data
+    with type Metadata.t = t
+     and type Name_generator.t = Smtp_envelope.t
+     and module Name_generator.Unique_name = Id
+     and module Queue = Queue
+     and module Data = Data
 
 module On_disk_spool : Multispool_intf.S with module Spoolable := On_disk
 
@@ -114,8 +110,8 @@ module Stable : sig
     module V1 : sig
       include
         Stable_comparable.V1
-        with type t = Id.t
-        with type comparator_witness = Id.comparator_witness
+          with type t = Id.t
+          with type comparator_witness = Id.comparator_witness
 
       include Stringable.S with type t := t
     end

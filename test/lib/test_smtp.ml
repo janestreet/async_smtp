@@ -54,19 +54,19 @@ let%test_unit "Smtp_expect_test_helper.manual_server" =
     manual_server
       [ envelope () ]
       (fun ~client ~server ->
-         let%bind () = server "220 custom server commands" in
-         let%bind () = client "EHLO [SMTP TEST CLIENT]" in
-         let%bind () = server "250 continue" in
-         let%bind () = client "MAIL FROM: <sender@example.com>" in
-         let%bind () = server "250 continue" in
-         let%bind () = client "RCPT TO: <recipient@example.com>" in
-         let%bind () = server "250 continue" in
-         let%bind () = client "DATA" in
-         let%bind () = server "354 transmit data followed by ." in
-         let%bind () = client "Subject: TEST EMAIL\n\nTEST EMAIL\n." in
-         let%bind () = server "250 ok" in
-         let%bind () = client "RSET" in
-         let%bind () = server "250 continue" in
-         let%bind () = client "QUIT" in
-         server "221 goodbye"))
+        let%bind () = server "220 custom server commands" in
+        let%bind () = client "EHLO [SMTP TEST CLIENT]" in
+        let%bind () = server "250 continue" in
+        let%bind () = client "MAIL FROM: <sender@example.com>" in
+        let%bind () = server "250 continue" in
+        let%bind () = client "RCPT TO: <recipient@example.com>" in
+        let%bind () = server "250 continue" in
+        let%bind () = client "DATA" in
+        let%bind () = server "354 transmit data followed by ." in
+        let%bind () = client "Subject: TEST EMAIL\n\nTEST EMAIL\n." in
+        let%bind () = server "250 ok" in
+        let%bind () = client "RSET" in
+        let%bind () = server "250 continue" in
+        let%bind () = client "QUIT" in
+        server "221 goodbye"))
 ;;

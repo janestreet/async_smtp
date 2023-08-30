@@ -103,13 +103,13 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
     ~how:`Sequential
     messages_with_data
     ~f:(fun (meta, data, envelope) ->
-      let id = Message.id meta in
-      enqueue spool queue ~meta ~id ~data >>|? fun () -> meta, envelope)
+    let id = Message.id meta in
+    enqueue spool queue ~meta ~id ~data >>|? fun () -> meta, envelope)
 ;;
 
 let with_file
-      t
-      (f : On_disk_spool.Data_file.t -> ([ `Sync_meta | `Unlink ] * 'a) Or_error.t Deferred.t)
+  t
+  (f : On_disk_spool.Data_file.t -> ([ `Sync_meta | `Unlink ] * 'a) Or_error.t Deferred.t)
   : 'a Or_error.t Deferred.t
   =
   entry t
@@ -359,7 +359,7 @@ let do_send t ~log ~client_cache =
          Message.set_status
            t
            (`Send_at
-              (Time_float.add (Time_float.now ()) (Smtp_envelope.Retry_interval.to_span r)));
+             (Time_float.add (Time_float.now ()) (Smtp_envelope.Retry_interval.to_span r)));
          Message.set_retry_intervals t rs;
          Ok (`Sync_meta, `Failed delivery_failure)))
 ;;

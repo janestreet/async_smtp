@@ -14,7 +14,7 @@ module Peer_info = struct
     ; greeting : string Set_once.Stable.V1.t
     ; hello :
         [ `Simple of string | `Extended of string * Smtp_extension.t list ]
-          Set_once.Stable.V1.t
+        Set_once.Stable.V1.t
     }
   [@@deriving sexp_of, fields ~getters ~fields]
 
@@ -87,7 +87,7 @@ type t =
   { config : Config.t
   ; flows : Log.Flows.t (* The only allowed transition is from Plain to Tls. *)
   ; mutable
-    mode :
+      mode :
       [ `Bsmtp of Bsmtp.t
       | `Plain of Plain.t
       | `Emulate_tls_for_test of Plain.t
@@ -121,14 +121,14 @@ let remote_ip_address t =
 ;;
 
 let create
-      ?flows
-      ~emulate_tls_for_test
-      ~remote_address
-      ?local_ip_address
-      ?remote_ip_address
-      reader
-      writer
-      config
+  ?flows
+  ~emulate_tls_for_test
+  ~remote_address
+  ?local_ip_address
+  ?remote_ip_address
+  reader
+  writer
+  config
   =
   let info = Peer_info.create ~remote_address ~local_ip_address ~remote_ip_address () in
   let flows =
@@ -210,10 +210,7 @@ let read_reply ?on_eof reader =
        | Some on_eof -> on_eof ?partial ()
        | None -> Deferred.Or_error.error_string "Unexpected EOF")
   in
-  Deferred.Or_error.try_with_join
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () -> loop None)
+  Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () -> loop None)
 ;;
 
 (* entry point *)
@@ -260,14 +257,11 @@ let send_gen ?command t ~log ?flows ~component ~here str =
     | None -> t.flows
     | Some flows -> Log.Flows.union t.flows flows
   in
-  Deferred.Or_error.try_with_join
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () ->
-       Log.debug log (lazy (Log.Message.create ~here ~flows ~component ?command "->"));
-       Writer.write (writer t) str;
-       Writer.write (writer t) "\r\n";
-       writer_flushed_or_consumer_left str (writer t))
+  Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () ->
+    Log.debug log (lazy (Log.Message.create ~here ~flows ~component ?command "->"));
+    Writer.write (writer t) str;
+    Writer.write (writer t) "\r\n";
+    writer_flushed_or_consumer_left str (writer t))
 ;;
 
 let send_string t ~log ?flows ~component ~here str =
@@ -430,12 +424,12 @@ let do_start_tls t ~log ~component tls_options =
       ?name:tls_options.Config.Tls.name
       ?ca_file:tls_options.Config.Tls.ca_file
       ?ca_path:tls_options.Config.Tls.ca_path
-      (* This is set to [Verify_none] to allow [check_tls_security] to do its job below,
+        (* This is set to [Verify_none] to allow [check_tls_security] to do its job below,
          which (depending on configuration) may allow the connection to succeed in spite
          of a certificate that OpenSSL would consider invalid. *)
       ~verify_modes:[ Verify_none ]
       ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
-      (* Closing ssl connection will close the pipes which will in turn close
+        (* Closing ssl connection will close the pipes which will in turn close
          the readers. *)
       ~net_to_ssl:(Reader.pipe old_reader)
       ~ssl_to_net:(Writer.pipe old_writer)
@@ -483,8 +477,7 @@ let check_tls_security t =
         | `Always_try | `If_available -> Ok ()
         | `Required ->
           Or_error.errorf "TLS Required for %s:%d but not negotiated" host port))
-  | `Emulate_tls_for_test _emulate_tls ->
-    Ok ()
+  | `Emulate_tls_for_test _emulate_tls -> Ok ()
   | `Tls tls ->
     let hp = Peer_info.remote_address (Tls.info tls) in
     let host, port = Host_and_port.tuple hp in
@@ -535,19 +528,19 @@ let maybe_start_tls t ~log ~component =
    | Some tls_options ->
      send_receive t ~log ~component ~here:[%here] Smtp_command.Start_tls
      >>=? (function
-       | `Bsmtp -> return (Ok ())
-       | `Received { Smtp_reply.code = `Service_ready_220; _ } ->
-         do_start_tls t ~log ~component tls_options
-       | `Received
-           { Smtp_reply.code =
-               ( `Command_not_recognized_500
-               | `Command_not_implemented_502
-               | `Parameter_not_implemented_504
-               | `Tls_temporarily_unavailable_454 )
-           ; _
-           } -> return (Ok ())
-       | `Received reply ->
-         return (Or_error.errorf !"Unexpected response to STARTTLS: %{Smtp_reply}" reply)))
+     | `Bsmtp -> return (Ok ())
+     | `Received { Smtp_reply.code = `Service_ready_220; _ } ->
+       do_start_tls t ~log ~component tls_options
+     | `Received
+         { Smtp_reply.code =
+             ( `Command_not_recognized_500
+             | `Command_not_implemented_502
+             | `Parameter_not_implemented_504
+             | `Tls_temporarily_unavailable_454 )
+         ; _
+         } -> return (Ok ())
+     | `Received reply ->
+       return (Or_error.errorf !"Unexpected response to STARTTLS: %{Smtp_reply}" reply)))
   >>=? fun () -> return (check_tls_security t)
 ;;
 
@@ -611,18 +604,15 @@ let do_auth t ~log ~component (module Auth : Auth.Client) =
     | Some response -> return response
     | None -> Deferred.Or_error.errorf "AUTH flow incomplete"
   in
-  Deferred.Or_error.try_with
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () ->
-       Auth.negotiate
-         ~log:
-           (Log.with_flow_and_component
-              log
-              ~flows:t.flows
-              ~component:(component @ [ "authenticate" ]))
-         ~remote:(remote_address t)
-         ~send_response_and_expect_challenge)
+  Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+    Auth.negotiate
+      ~log:
+        (Log.with_flow_and_component
+           log
+           ~flows:t.flows
+           ~component:(component @ [ "authenticate" ]))
+      ~remote:(remote_address t)
+      ~send_response_and_expect_challenge)
   >>=? finish
 ;;
 
@@ -643,8 +633,8 @@ let maybe_auth t ~log ~component ~credentials =
   | _ ->
     return (Credentials.get_auth_client credentials ~tls:(is_using_tls t) (extensions t))
     >>=? (function
-      | `Anon -> Deferred.Or_error.ok_unit
-      | `Auth_with auth -> do_auth t ~log ~component auth)
+    | `Anon -> Deferred.Or_error.ok_unit
+    | `Auth_with auth -> do_auth t ~log ~component auth)
 ;;
 
 let with_quit t ~log ~component ~f =
@@ -657,11 +647,8 @@ let with_quit t ~log ~component ~f =
         log
         (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
   in
-  Monitor.protect
-    ~run:`Schedule
-    ~rest:`Log
-    f
-    ~finally:(fun () -> quit_and_cleanup_with_log t)
+  Monitor.protect ~run:`Schedule ~rest:`Log f ~finally:(fun () ->
+    quit_and_cleanup_with_log t)
 ;;
 
 (* Entry point *)

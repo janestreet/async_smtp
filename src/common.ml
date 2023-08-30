@@ -34,17 +34,11 @@ let safely_ls_dir dir =
 ;;
 
 let unlink file =
-  Deferred.Or_error.try_with
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () -> Unix.unlink file)
+  Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Unix.unlink file)
 ;;
 
 let rename ~src ~dst =
-  Deferred.Or_error.try_with
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () -> Unix.rename ~src ~dst)
+  Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Unix.rename ~src ~dst)
 ;;
 
 let urlbase64_encode_float ?(length = 6) f =

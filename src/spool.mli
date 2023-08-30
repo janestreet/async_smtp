@@ -1,4 +1,3 @@
-
 (** Spool directory structure:
 
     Async_smtp uses a spool directory structure heavily inspired by that of Exim (see [1]
@@ -54,7 +53,6 @@ module Config = Spool_config
 module Message_id = Message.Id
 
 type t
-
 
 (** Lock the spool directory and load all the files that are already present there. Note
     that for the purposes of locking, the spool directory assumed to NOT be on an NFS file

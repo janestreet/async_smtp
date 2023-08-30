@@ -81,7 +81,6 @@ module type With_headers = sig
     -> f:(name:Email_headers.Name.t -> value:Email_headers.Value.t -> string)
     -> t
 
-
   (** Equivalent to [last_header t "Subject" ~normalize:`Whitespace_and_encoded_words] *)
   val subject_decoded : t -> string option
 end

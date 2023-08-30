@@ -21,5 +21,4 @@ let parse =
     ~behave_nicely_in_pipeline:false
 ;;
 
-
 let command : Command.t = Command.group ~summary:"BSMTP tools" [ "parse", parse ]

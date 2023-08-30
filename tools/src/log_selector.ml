@@ -61,15 +61,15 @@ module Base = struct
     | `envelope_sender regex ->
       Smtp_mail_log.Message.sender msg
       |> Option.map ~f:(function
-        | `String str -> str
-        | `Sender sender -> Smtp_envelope.Sender.to_string sender)
+           | `String str -> str
+           | `Sender sender -> Smtp_envelope.Sender.to_string sender)
       |> Option.value_map ~default:false ~f:(Regex.matches regex)
     | `envelope_recipient regex | `recipient regex ->
       Smtp_mail_log.Message.recipients msg
       |> Option.value ~default:[]
       |> List.map ~f:(function
-        | `String str -> str
-        | `Email email -> Email_address.to_string email)
+           | `String str -> str
+           | `Email email -> Email_address.to_string email)
       |> List.exists ~f:(Regex.matches regex)
     | `subject regex -> matches_message_header msg "Subject" regex
     | `rfc822_id regex ->

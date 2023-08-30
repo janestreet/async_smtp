@@ -1,6 +1,5 @@
 open! Core
 
-
 type t =
   | Hello of string
   | Extended_hello of string

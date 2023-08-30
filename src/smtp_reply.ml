@@ -122,10 +122,10 @@ let code t = Code.to_int t.code
 let create code fmt =
   ksprintf
     (fun raw_message ->
-       let raw_message =
-         if String.is_empty raw_message then [ "" ] else String.split_lines raw_message
-       in
-       { code; raw_message })
+      let raw_message =
+        if String.is_empty raw_message then [ "" ] else String.split_lines raw_message
+      in
+      { code; raw_message })
     fmt
 ;;
 

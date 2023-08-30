@@ -1,7 +1,6 @@
 open Core
 open Async
 
-
 (** {0 Multispool}
 
     Multispool allows multiple, separate processes to cooperate via a filesystem-based
@@ -194,7 +193,7 @@ module type S = sig
          (Spoolable.Metadata.t
           -> Data_file.t
           -> ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a)
-               Deferred.t)
+             Deferred.t)
     -> Entry.t
     -> 'a Deferred.Or_error.t
 
@@ -206,7 +205,7 @@ module type S = sig
          (Spoolable.Metadata.t
           -> Data_file.t
           -> ([ `Save of Spoolable.Metadata.t * Spoolable.Queue.t | `Remove ] * 'a)
-               Deferred.t)
+             Deferred.t)
     -> Entry.t
     -> [ `Ok of 'a | `Not_found ] Deferred.Or_error.t
 
@@ -288,13 +287,13 @@ module type S = sig
         :  ?stop:unit Deferred.t
         -> Queue_reader.t
         -> [ `Stopped | `Checked_out of Checked_out_entry.t * Queue_reader.t ]
-             Deferred.Or_error.t
+           Deferred.Or_error.t
 
       (** Dequeue the next entry that that is available, if any.  Do not wait. *)
       val dequeue_available
         :  Queue_reader.t
         -> ([ `Nothing_available | `Checked_out of Checked_out_entry.t ] * Queue_reader.t)
-             Deferred.Or_error.t
+           Deferred.Or_error.t
     end
   end
 end

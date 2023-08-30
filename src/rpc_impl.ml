@@ -18,14 +18,14 @@ module Monitor = struct
       Log.Output.create
         ~flush:(fun () -> return ())
         (fun messages ->
-           Queue.iter messages ~f:(fun message ->
-             match Mail_log.Message.level message with
-             | `Error ->
-               let error = Log.Message.message message |> Error.of_string in
-               incr seqnum;
-               Bus.write error_stream (!seqnum, Some error)
-             | _ -> ());
-           Deferred.unit)
+          Queue.iter messages ~f:(fun message ->
+            match Mail_log.Message.level message with
+            | `Error ->
+              let error = Log.Message.message message |> Error.of_string in
+              incr seqnum;
+              Bus.write error_stream (!seqnum, Some error)
+            | _ -> ());
+          Deferred.unit)
     in
     Log.Global.set_output (send_errors :: Log.Global.get_output ());
     Rpc.Pipe_rpc.implement Rpc_intf.Monitor.errors (fun () () ->

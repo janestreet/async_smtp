@@ -264,19 +264,14 @@ module Data = struct
   let of_email = map_email ~encode_or_decode:`Encode
 
   let load path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () ->
-         let%bind contents = Reader.file_contents path in
-         return (Email.of_string contents))
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+      let%bind contents = Reader.file_contents path in
+      return (Email.of_string contents))
   ;;
 
   let save ?temp_file t path =
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> Email.save ?temp_file ~fsync:true ~eol_except_raw_content:`CRLF t path)
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+      Email.save ?temp_file ~fsync:true ~eol_except_raw_content:`CRLF t path)
   ;;
 end
 
@@ -324,15 +319,15 @@ let move_failed_recipients_to_remaining_recipients t =
 ;;
 
 let of_envelope_batch
-      envelope_batch
-      ~gen_id
-      ~spool_dir
-      ~spool_date
-      ~failed_recipients
-      ~relay_attempts
-      ~parent_id
-      ~status
-      ~flows
+  envelope_batch
+  ~gen_id
+  ~spool_dir
+  ~spool_date
+  ~failed_recipients
+  ~relay_attempts
+  ~parent_id
+  ~status
+  ~flows
   =
   let email_body = Smtp_envelope.Routed.Batch.email_body envelope_batch in
   (* We make sure to only map the email body once. *)
@@ -341,32 +336,32 @@ let of_envelope_batch
     ~how:`Sequential
     (Smtp_envelope.Routed.Batch.envelopes envelope_batch)
     ~f:(fun envelope ->
-      let headers =
-        Smtp_envelope.Bodiless.Routed.headers envelope
-        |> Data.map_headers ~encode_or_decode:`Encode
-      in
-      let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
-      let data = Email.create ~headers ~raw_content:data_raw_content in
-      let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
-      let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
-      let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
-      gen_id ()
-      >>|? fun id ->
-      ( { spool_dir
-        ; id
-        ; flows
-        ; parent_id
-        ; spool_date
-        ; next_hop_choices
-        ; retry_intervals
-        ; remaining_recipients
-        ; failed_recipients
-        ; relay_attempts
-        ; status
-        ; envelope_info
-        }
-      , data
-      , Smtp_envelope.Routed.of_bodiless envelope email_body ))
+    let headers =
+      Smtp_envelope.Bodiless.Routed.headers envelope
+      |> Data.map_headers ~encode_or_decode:`Encode
+    in
+    let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
+    let data = Email.create ~headers ~raw_content:data_raw_content in
+    let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
+    let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
+    let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
+    gen_id ()
+    >>|? fun id ->
+    ( { spool_dir
+      ; id
+      ; flows
+      ; parent_id
+      ; spool_date
+      ; next_hop_choices
+      ; retry_intervals
+      ; remaining_recipients
+      ; failed_recipients
+      ; relay_attempts
+      ; status
+      ; envelope_info
+      }
+    , data
+    , Smtp_envelope.Routed.of_bodiless envelope email_body ))
 ;;
 
 module On_disk = struct

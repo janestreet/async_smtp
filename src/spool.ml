@@ -95,8 +95,6 @@ open Poly
 open Async
 open Async_smtp_types
 module Time = Time_float_unix
-
-
 module Config = Spool_config
 module Message_id = Message.Id
 module Message_queue = Message.Queue
@@ -145,12 +143,12 @@ module Event = struct
   ;;
 
   let event_gen
-        event
-        ~(time : [ `Now | `Of_msg of Message.t -> Time.t ])
-        ~here
-        ~log
-        event_stream
-        spooled_msg
+    event
+    ~(time : [ `Now | `Of_msg of Message.t -> Time.t ])
+    ~here
+    ~log
+    event_stream
+    spooled_msg
     =
     let id = Message.id spooled_msg in
     let t =
@@ -533,19 +531,19 @@ let add t ?(initial_status = `Send_now) ~flows ~original_msg envelope_batches =
     envelope_batches
     ~how:`Parallel
     ~f:(fun envelope_batch ->
-      Message_spool.enqueue
-        t.spool
-        ~log:t.log
-        ~flows:(Log.Flows.extend flows `Outbound_envelope)
-        ~initial_status:(initial_status :> Message.Status.t)
-        envelope_batch
-        ~original_msg
-      >>|? fun spooled_msgs ->
-      List.map spooled_msgs ~f:(fun (msg, envelope) ->
-        add_message t msg;
-        don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit));
-        spooled_event t ~here:[%here] msg;
-        Message.id msg, envelope))
+    Message_spool.enqueue
+      t.spool
+      ~log:t.log
+      ~flows:(Log.Flows.extend flows `Outbound_envelope)
+      ~initial_status:(initial_status :> Message.Status.t)
+      envelope_batch
+      ~original_msg
+    >>|? fun spooled_msgs ->
+    List.map spooled_msgs ~f:(fun (msg, envelope) ->
+      add_message t msg;
+      don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit));
+      spooled_event t ~here:[%here] msg;
+      Message.id msg, envelope))
 ;;
 
 let quarantine t ~reason ~flows ~original_msg envelope_batches =
@@ -553,17 +551,17 @@ let quarantine t ~reason ~flows ~original_msg envelope_batches =
     envelope_batches
     ~how:`Parallel
     ~f:(fun envelope_batch ->
-      Message_spool.enqueue
-        t.spool
-        ~log:t.log
-        ~flows:(Log.Flows.extend flows `Outbound_envelope)
-        ~initial_status:(`Quarantined reason)
-        envelope_batch
-        ~original_msg
-      >>|? fun quarantined_msgs ->
-      List.map quarantined_msgs ~f:(fun (msg, envelope) ->
-        quarantined_event ~here:[%here] t (`Reason reason) msg;
-        Message.id msg, envelope))
+    Message_spool.enqueue
+      t.spool
+      ~log:t.log
+      ~flows:(Log.Flows.extend flows `Outbound_envelope)
+      ~initial_status:(`Quarantined reason)
+      envelope_batch
+      ~original_msg
+    >>|? fun quarantined_msgs ->
+    List.map quarantined_msgs ~f:(fun (msg, envelope) ->
+      quarantined_event ~here:[%here] t (`Reason reason) msg;
+      Message.id msg, envelope))
 ;;
 
 let kill_and_flush ?(timeout = Deferred.never ()) t =
@@ -685,15 +683,15 @@ let recover t (info : Recover_info.t) =
 let send_all ?retry_intervals ?(frozen_only = false) t =
   Hashtbl.data t.messages
   |> List.filter_map ~f:(fun m ->
-    match Message.status m, frozen_only with
-    | `Frozen, _ -> Some (Message.id m)
-    | `Send_at _, false -> Some (Message.id m)
-    | `Send_now, _
-    | `Send_at _, true
-    | `Sending, _
-    | `Delivered, _
-    | `Removed, _
-    | `Quarantined _, _ -> None)
+       match Message.status m, frozen_only with
+       | `Frozen, _ -> Some (Message.id m)
+       | `Send_at _, false -> Some (Message.id m)
+       | `Send_now, _
+       | `Send_at _, true
+       | `Sending, _
+       | `Delivered, _
+       | `Removed, _
+       | `Quarantined _, _ -> None)
   |> send_msgs ?retry_intervals t
 ;;
 
@@ -870,7 +868,7 @@ end
 let status t =
   Hashtbl.data t.messages
   |> List.map ~f:(fun message ->
-    { Spooled_message_info.message; envelope = None; file_size = None })
+       { Spooled_message_info.message; envelope = None; file_size = None })
 ;;
 
 let status_from_disk config =

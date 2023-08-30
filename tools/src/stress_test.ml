@@ -162,36 +162,33 @@ let send ~config ~client_config envelope =
   let host = Config.host config in
   don't_wait_for
     (Throttle.enqueue !throttle (fun () ->
-       Deferred.Or_error.try_with_join
-         ~run:`Schedule
-         ~rest:`Log
-         (fun () ->
-            Smtp_client.Tcp.with_
-              ~log:(Lazy.force Log.Global.log)
-              (Host_and_port.create ~host ~port)
-              ~config:client_config
-              ~f:(fun client ->
-                Smtp_client.send_envelope client ~log envelope
-                >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
-                >>| Or_error.join
-                >>|? ignore)))
+       Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () ->
+         Smtp_client.Tcp.with_
+           ~log:(Lazy.force Log.Global.log)
+           (Host_and_port.create ~host ~port)
+           ~config:client_config
+           ~f:(fun client ->
+           Smtp_client.send_envelope client ~log envelope
+           >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
+           >>| Or_error.join
+           >>|? ignore)))
      >>| Result.iter_error ~f:(Log.Global.error !"buh???: %{Error#hum}"))
 ;;
 
 let main
-      ~dir
-      ~host
-      ~port
-      ~tls
-      ~send_n_messages
-      ~num_copies
-      ~concurrent_senders
-      ~concurrent_receivers
-      ~message_from_stdin
-      ~client_allowed_ciphers
-      ~server_allowed_ciphers
-      ~key_type
-      ()
+  ~dir
+  ~host
+  ~port
+  ~tls
+  ~send_n_messages
+  ~num_copies
+  ~concurrent_senders
+  ~concurrent_receivers
+  ~message_from_stdin
+  ~client_allowed_ciphers
+  ~server_allowed_ciphers
+  ~key_type
+  ()
   =
   let config =
     { Config.dir
@@ -223,7 +220,7 @@ let main
   in
   let envelopes = List.init num_copies ~f:(fun _ -> envelopes) |> List.concat in
   throttle
-  := Throttle.create ~continue_on_error:true ~max_concurrent_jobs:concurrent_senders;
+    := Throttle.create ~continue_on_error:true ~max_concurrent_jobs:concurrent_senders;
   let%bind server_config, client_config =
     Config.server_and_client_config ~concurrent_receivers config
   in
@@ -296,8 +293,8 @@ let command =
       let dir =
         flag "-dir" (optional string) ~doc:" Working dir"
         |> map ~f:(function
-          | Some dir -> dir
-          | None -> Core_unix.mkdtemp "/tmp/stress-test-")
+             | Some dir -> dir
+             | None -> Core_unix.mkdtemp "/tmp/stress-test-")
       and host =
         flag
           "-host"

@@ -18,8 +18,7 @@ let value_exn x =
 
 module Outbound_envelope = struct
   type t =
-    {
-      id : Flows.Id.t
+    { id : Flows.Id.t
     ; mutable recipients : string list
     ; mutable events : Smtp_mail_log.Message.t list
     }
@@ -141,8 +140,8 @@ let create_inbound_envelope t message =
   let sender =
     Message.sender message
     |> Option.map ~f:(function
-      | `String str -> str
-      | `Sender sender -> Smtp_envelope.Sender.to_string sender)
+         | `String str -> str
+         | `Sender sender -> Smtp_envelope.Sender.to_string sender)
   in
   inbound_envelope.Inbound_envelope.mail_from <- sender;
   t.inbound_envelopes <- inbound_envelope :: t.inbound_envelopes
@@ -159,8 +158,8 @@ let update_inbound_envelope t message ~which =
         |> Option.map
              ~f:
                (List.map ~f:(function
-                  | `String str -> str
-                  | `Email addr -> Email_address.to_string addr))
+                 | `String str -> str
+                 | `Email addr -> Email_address.to_string addr))
       in
       Option.iter recipients ~f:(fun recipients ->
         in_.Inbound_envelope.rcpt_to <- recipients @ in_.Inbound_envelope.rcpt_to)
@@ -176,15 +175,15 @@ let create_outbound_envelope t message =
   Option.iter inbound_envelope ~f:(fun in_ ->
     let out = Outbound_envelope.create outbound_id in
     in_.Inbound_envelope.outbound_envelopes
-    <- out :: in_.Inbound_envelope.outbound_envelopes;
+      <- out :: in_.Inbound_envelope.outbound_envelopes;
     let recipients =
       Smtp_mail_log.Message.recipients message
       |> Option.value_map
            ~default:[]
            ~f:
              (List.map ~f:(function
-                | `String str -> str
-                | `Email addr -> Email_address.to_string addr))
+               | `String str -> str
+               | `Email addr -> Email_address.to_string addr))
     in
     out.Outbound_envelope.recipients <- recipients)
 ;;
@@ -238,8 +237,7 @@ let summary t =
       ; to_ = Inbound_envelope.get_header_value inb "To"
       ; cc = Inbound_envelope.get_header_value inb "Cc"
       ; rfc822_id = Inbound_envelope.get_header_value inb "Message-Id"
-      ; flow =
-          Inbound_envelope.id inb
+      ; flow = Inbound_envelope.id inb
       ; recipients =
           List.map (Inbound_envelope.outbound_envelopes inb) ~f:(fun outb ->
             Outbound_envelope.recipients outb, Outbound_envelope.id outb)

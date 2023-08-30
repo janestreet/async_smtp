@@ -16,8 +16,6 @@ module type S = sig
 
   val config : t -> Config.t
   val ports : t -> int list
-
-
   val close : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
 end
 

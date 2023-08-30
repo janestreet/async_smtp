@@ -61,15 +61,15 @@ let match_header conds =
       conds
       ~init:Email_headers.Name.Map.empty
       ~f:(fun acc { Config.Header_cond.name; if_ } ->
-        let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
-        let cond =
-          match if_ with
-          | None -> cond
-          | Some (`Contains s) ->
-            let re = Re2.escape s |> Re2.create_exn in
-            fun ~name ~value -> cond ~name ~value && Re2.matches re value
-        in
-        Map.add_multi acc ~key:name ~data:cond)
+      let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
+      let cond =
+        match if_ with
+        | None -> cond
+        | Some (`Contains s) ->
+          let re = Re2.escape s |> Re2.create_exn in
+          fun ~name ~value -> cond ~name ~value && Re2.matches re value
+      in
+      Map.add_multi acc ~key:name ~data:cond)
   in
   fun ~name ~value ->
     match Map.find conds name with
@@ -83,15 +83,15 @@ let match_listed_header conds =
       conds
       ~init:Email_headers.Name.Map.empty
       ~f:(fun acc { Config.Listed_header_cond.name; if_; remove_duplicates } ->
-        let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
-        let cond =
-          match if_ with
-          | None -> cond
-          | Some (`Contains s) ->
-            let re = Re2.escape s |> Re2.create_exn in
-            fun ~name ~value -> cond ~name ~value && Re2.matches re value
-        in
-        Map.add_multi acc ~key:name ~data:(cond, remove_duplicates))
+      let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
+      let cond =
+        match if_ with
+        | None -> cond
+        | Some (`Contains s) ->
+          let re = Re2.escape s |> Re2.create_exn in
+          fun ~name ~value -> cond ~name ~value && Re2.matches re value
+      in
+      Map.add_multi acc ~key:name ~data:(cond, remove_duplicates))
   in
   fun ~name ~value ->
     match Map.find conds name with
@@ -162,9 +162,9 @@ let sort_emails_in_header pattern =
     let remove_duplicates = Option.is_some remove_duplicates in
     List.sort value ~compare:Email_address.compare
     |> (fun l ->
-      if remove_duplicates
-      then List.remove_consecutive_duplicates l ~equal:Email_address.equal
-      else l)
+         if remove_duplicates
+         then List.remove_consecutive_duplicates l ~equal:Email_address.equal
+         else l)
     |> List.map ~f:Email_address.to_string
   in
   Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
@@ -187,9 +187,9 @@ let sort_words_in_header pattern =
     |> List.filter ~f:(fun s -> not (String.is_empty s))
     |> List.sort ~compare:String.compare
     |> (fun l ->
-      if remove_duplicates
-      then List.remove_consecutive_duplicates l ~equal:String.equal
-      else l)
+         if remove_duplicates
+         then List.remove_consecutive_duplicates l ~equal:String.equal
+         else l)
     |> String.concat ~sep:" "
   in
   Envelope.map_headers ~normalize:`None ~f:(fun ~name ~value ->
@@ -215,7 +215,7 @@ let sort_envelope_recipients message =
 let dedup_headers conds =
   let equal (name1, value1) (name2, value2) =
     if match_header conds ~name:name1 ~value:value1
-    && match_header conds ~name:name2 ~value:value2
+       && match_header conds ~name:name2 ~value:value2
     then Email_headers.Name.equal name1 name2
     else false
   in
@@ -226,17 +226,17 @@ let dedup_headers conds =
 ;;
 
 let transform
-      { Config.strip_whitespace
-      ; normalize_whitespace
-      ; filter
-      ; sort
-      ; dedup
-      ; hash
-      ; mask
-      ; sort_emails
-      ; sort_words
-      }
-      message
+  { Config.strip_whitespace
+  ; normalize_whitespace
+  ; filter
+  ; sort
+  ; dedup
+  ; hash
+  ; mask
+  ; sort_emails
+  ; sort_words
+  }
+  message
   =
   let maybe_sort message =
     if not sort then message else message |> sort_headers |> sort_envelope_recipients

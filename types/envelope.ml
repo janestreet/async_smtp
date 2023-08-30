@@ -104,12 +104,12 @@ let with_bodiless t f =
 ;;
 
 include Envelope_container.Make_with_headers (struct
-    type t = envelope
+  type t = envelope
 
-    let headers t = Email.headers t.email
+  let headers t = Email.headers t.email
 
-    let set_headers t headers =
-      let email = Email.set_headers t.email headers in
-      set t ~email ()
-    ;;
-  end)
+  let set_headers t headers =
+    let email = Email.set_headers t.email headers in
+    set t ~email ()
+  ;;
+end)

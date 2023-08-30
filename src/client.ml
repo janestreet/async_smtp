@@ -16,10 +16,7 @@ let with_reset t ~log ~flows ~component ~f =
       return (Or_error.errorf !"Unexpected response to RSET: %{Smtp_reply}" reject)
   in
   let%bind result =
-    Deferred.Or_error.try_with_join
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () -> f t)
+    Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () -> f t)
   in
   let%map (_ : unit Or_error.t) = reset t in
   result
@@ -48,7 +45,7 @@ module Envelope_status = struct
     then
       rejected_recipients
       |> List.map ~f:(fun (email, reject) ->
-        sprintf !"%{Email_address} (%{Smtp_reply})" email reject)
+           sprintf !"%{Email_address} (%{Smtp_reply})" email reject)
       |> String.concat ~sep:", "
       |> sprintf "%s %s" err
     else ok
@@ -157,62 +154,37 @@ module Expert = struct
         ~here:[%here]
         command
       >>=? (function
-        | `Bsmtp -> return (Ok (Ok ()))
-        | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
-        | `Received reply ->
-          Log.info
-            log
-            (lazy
-              (Log.Message.create
-                 ~here:[%here]
-                 ~flows
-                 ~component:(component @ [ "sender" ])
-                 ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
-                 ~command
-                 ~reply
-                 "send rejected"));
-          return (Ok (Error (`Rejected_sender reply))))
+             | `Bsmtp -> return (Ok (Ok ()))
+             | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
+             | `Received reply ->
+               Log.info
+                 log
+                 (lazy
+                   (Log.Message.create
+                      ~here:[%here]
+                      ~flows
+                      ~component:(component @ [ "sender" ])
+                      ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
+                      ~command
+                      ~reply
+                      "send rejected"));
+               return (Ok (Error (`Rejected_sender reply))))
       >>=?? fun () ->
       Deferred.Or_error.List.map
         ~how:`Sequential
         (Smtp_envelope.Info.recipients envelope_info)
         ~f:(fun recipient ->
-          let command = Smtp_command.Recipient (recipient |> Email_address.to_string) in
-          send_receive
-            t
-            ~log
-            ~flows
-            ~component:(component @ [ "recipient" ])
-            ~here:[%here]
-            command
-          >>|? function
-          | `Bsmtp -> First recipient
-          | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> First recipient
-          | `Received reply ->
-            Log.info
-              log
-              (lazy
-                (Log.Message.create
-                   ~here:[%here]
-                   ~flows
-                   ~component:(component @ [ "recipient" ])
-                   ~recipients:[ `Email recipient ]
-                   ~command
-                   ~reply
-                   "send rejected"));
-            Second (recipient, reply))
-      >>|? List.partition_map ~f:Fn.id
-      >>|? (function
-        | [], rejected_recipients -> Error (`No_recipients rejected_recipients)
-        | accepted_recipients, rejected_recipients ->
-          Ok (accepted_recipients, rejected_recipients))
-      >>=?? fun (accepted_recipients, rejected_recipients) ->
-      let command = Smtp_command.Data in
-      send_receive t ~log ~flows ~component:(component @ [ "data" ]) ~here:[%here] command
-      >>=? (function
-        | `Bsmtp -> return (Ok (Ok ()))
-        | `Received { Smtp_reply.code = `Start_mail_input_354; _ } ->
-          return (Ok (Ok ()))
+        let command = Smtp_command.Recipient (recipient |> Email_address.to_string) in
+        send_receive
+          t
+          ~log
+          ~flows
+          ~component:(component @ [ "recipient" ])
+          ~here:[%here]
+          command
+        >>|? function
+        | `Bsmtp -> First recipient
+        | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> First recipient
         | `Received reply ->
           Log.info
             log
@@ -220,92 +192,114 @@ module Expert = struct
               (Log.Message.create
                  ~here:[%here]
                  ~flows
-                 ~component:(component @ [ "data" ])
+                 ~component:(component @ [ "recipient" ])
+                 ~recipients:[ `Email recipient ]
                  ~command
                  ~reply
                  "send rejected"));
-          return
-            (Ok
-               (Error (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
+          Second (recipient, reply))
+      >>|? List.partition_map ~f:Fn.id
+      >>|? (function
+             | [], rejected_recipients -> Error (`No_recipients rejected_recipients)
+             | accepted_recipients, rejected_recipients ->
+               Ok (accepted_recipients, rejected_recipients))
+      >>=?? fun (accepted_recipients, rejected_recipients) ->
+      let command = Smtp_command.Data in
+      send_receive t ~log ~flows ~component:(component @ [ "data" ]) ~here:[%here] command
+      >>=? (function
+             | `Bsmtp -> return (Ok (Ok ()))
+             | `Received { Smtp_reply.code = `Start_mail_input_354; _ } ->
+               return (Ok (Ok ()))
+             | `Received reply ->
+               Log.info
+                 log
+                 (lazy
+                   (Log.Message.create
+                      ~here:[%here]
+                      ~flows
+                      ~component:(component @ [ "data" ])
+                      ~command
+                      ~reply
+                      "send rejected"));
+               return
+                 (Ok
+                    (Error (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
       >>=?? fun () ->
-      Deferred.Or_error.try_with_join
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () ->
-           Log.debug
-             log
-             (lazy
-               (Log.Message.create
-                  ~here:[%here]
-                  ~flows
-                  ~component:(component @ [ "data" ])
-                  "starting transmitting body"));
-           send_data t
-           >>=? fun () ->
-           let writer = writer t in
-           Writer.write writer "\r\n";
-           Writer.write writer ".";
-           Writer.write writer "\r\n";
-           flush_writer_with_timeout
-             ~timeout:(Config.send_receive_timeout (config t))
-             ~writer
-           >>=? fun () ->
-           Log.debug
-             log
-             (lazy
-               (Log.Message.create
-                  ~here:[%here]
-                  ~flows
-                  ~component:(component @ [ "data" ])
-                  "finishing transmitting body"));
-           receive
-             t
-             ~timeout:(Config.final_ok_timeout (config t))
-             ~log
-             ~flows
-             ~component
-             ~here:[%here]
-           >>|? function
-           | `Bsmtp ->
-             Log.info
-               log
-               (lazy
-                 (Log.Message.create
-                    ~here:[%here]
-                    ~flows
-                    ~component
-                    ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
-                    "delivered"));
-             Ok ("bsmtp", rejected_recipients)
-           | `Received { Smtp_reply.code = `Ok_completed_250; raw_message } ->
-             let remote_id = String.concat ~sep:"\n" raw_message in
-             Log.info
-               log
-               (lazy
-                 (Log.Message.create
-                    ~here:[%here]
-                    ~flows
-                    ~component
-                    ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
-                    ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
-                    ?remote_address:(remote_address t)
-                    ?remote_ip_address:(remote_ip_address t)
-                    ?local_ip_address:(local_ip_address t)
-                    ~tags:[ "remote-id", remote_id ]
-                    "sent"));
-             Ok (remote_id, rejected_recipients)
-           | `Received reply ->
-             Log.info
-               log
-               (lazy
-                 (Log.Message.create
-                    ~here:[%here]
-                    ~flows
-                    ~component
-                    ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
-                    ~reply
-                    "send rejected"));
-             Error (`Rejected_body (reply, rejected_recipients))))
+      Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () ->
+        Log.debug
+          log
+          (lazy
+            (Log.Message.create
+               ~here:[%here]
+               ~flows
+               ~component:(component @ [ "data" ])
+               "starting transmitting body"));
+        send_data t
+        >>=? fun () ->
+        let writer = writer t in
+        Writer.write writer "\r\n";
+        Writer.write writer ".";
+        Writer.write writer "\r\n";
+        flush_writer_with_timeout
+          ~timeout:(Config.send_receive_timeout (config t))
+          ~writer
+        >>=? fun () ->
+        Log.debug
+          log
+          (lazy
+            (Log.Message.create
+               ~here:[%here]
+               ~flows
+               ~component:(component @ [ "data" ])
+               "finishing transmitting body"));
+        receive
+          t
+          ~timeout:(Config.final_ok_timeout (config t))
+          ~log
+          ~flows
+          ~component
+          ~here:[%here]
+        >>|? function
+        | `Bsmtp ->
+          Log.info
+            log
+            (lazy
+              (Log.Message.create
+                 ~here:[%here]
+                 ~flows
+                 ~component
+                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
+                 "delivered"));
+          Ok ("bsmtp", rejected_recipients)
+        | `Received { Smtp_reply.code = `Ok_completed_250; raw_message } ->
+          let remote_id = String.concat ~sep:"\n" raw_message in
+          Log.info
+            log
+            (lazy
+              (Log.Message.create
+                 ~here:[%here]
+                 ~flows
+                 ~component
+                 ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
+                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
+                 ?remote_address:(remote_address t)
+                 ?remote_ip_address:(remote_ip_address t)
+                 ?local_ip_address:(local_ip_address t)
+                 ~tags:[ "remote-id", remote_id ]
+                 "sent"));
+          Ok (remote_id, rejected_recipients)
+        | `Received reply ->
+          Log.info
+            log
+            (lazy
+              (Log.Message.create
+                 ~here:[%here]
+                 ~flows
+                 ~component
+                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
+                 ~reply
+                 "send rejected"));
+          Error (`Rejected_body (reply, rejected_recipients))))
   ;;
 end
 
@@ -322,8 +316,7 @@ let send_data_via_reader_writer t ~email =
   |> fun lines ->
   let num_lines = List.length lines in
   Deferred.Or_error.List.iteri lines ~how:`Sequential ~f:(fun i line ->
-    (if
-      !block_length >= max_block_length
+    (if !block_length >= max_block_length
      then (
        block_length := 0;
        flush_writer_with_timeout ~timeout ~writer)
@@ -347,18 +340,18 @@ let send_envelope t ~log ?flows ?component envelope =
 
 module For_test = struct
   let with_
-        ?(config = Config.default)
-        ?(credentials = Credentials.anon)
-        ~log
-        ?(flows = Log.Flows.none)
-        ?(component = [])
-        ?(emulate_tls = false)
-        ?local_ip_address
-        ?remote_ip_address
-        ~remote_address
-        reader
-        writer
-        ~f
+    ?(config = Config.default)
+    ?(credentials = Credentials.anon)
+    ~log
+    ?(flows = Log.Flows.none)
+    ?(component = [])
+    ?(emulate_tls = false)
+    ?local_ip_address
+    ?remote_ip_address
+    ~remote_address
+    reader
+    writer
+    ~f
     =
     create
       ~remote_address
@@ -376,20 +369,20 @@ end
 
 module Tcp = struct
   let with_address
-        ?buffer_age_limit
-        ?interrupt
-        ?reader_buffer_size
-        ?writer_buffer_size
-        ?timeout
-        ?time_source
-        ?(config = Config.default)
-        ?(credentials = Credentials.anon)
-        ~log
-        ?(flows = Log.Flows.none)
-        ?(component = [])
-        ?remote_address
-        socket_address
-        ~f
+    ?buffer_age_limit
+    ?interrupt
+    ?reader_buffer_size
+    ?writer_buffer_size
+    ?timeout
+    ?time_source
+    ?(config = Config.default)
+    ?(credentials = Credentials.anon)
+    ~log
+    ?(flows = Log.Flows.none)
+    ?(component = [])
+    ?remote_address
+    socket_address
+    ~f
     =
     let remote_address =
       match remote_address with
@@ -428,19 +421,16 @@ module Tcp = struct
       (* Flow already attatched to the session *)
       |> with_session ~log ~component ~credentials ~f
     in
-    Deferred.Or_error.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      (fun () ->
-         Tcp.with_connection
-           ?buffer_age_limit
-           ?interrupt
-           ?reader_buffer_size
-           ?writer_buffer_size
-           ?timeout
-           ?time_source
-           (Tcp.Where_to_connect.of_inet_address socket_address)
-           f)
+    Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+      Tcp.with_connection
+        ?buffer_age_limit
+        ?interrupt
+        ?reader_buffer_size
+        ?writer_buffer_size
+        ?timeout
+        ?time_source
+        (Tcp.Where_to_connect.of_inet_address socket_address)
+        f)
   ;;
 
   let resolve_addresses smtp_server =
@@ -448,10 +438,8 @@ module Tcp = struct
     | inet -> Deferred.Or_error.return [ inet ]
     | exception _not_an_ip ->
       (match%bind
-         Deferred.Or_error.try_with
-           ~run:`Schedule
-           ~rest:`Log
-           (fun () -> Unix.Host.getbyname smtp_server)
+         Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+           Unix.Host.getbyname smtp_server)
        with
        | Error error ->
          Deferred.Or_error.error_s
@@ -465,19 +453,19 @@ module Tcp = struct
   ;;
 
   let with_
-        ?buffer_age_limit
-        ?interrupt
-        ?reader_buffer_size
-        ?writer_buffer_size
-        ?timeout
-        ?time_source
-        ?config
-        ?credentials
-        ~log
-        ?flows
-        ?component
-        smtp_server
-        ~f
+    ?buffer_age_limit
+    ?interrupt
+    ?reader_buffer_size
+    ?writer_buffer_size
+    ?timeout
+    ?time_source
+    ?config
+    ?credentials
+    ~log
+    ?flows
+    ?component
+    smtp_server
+    ~f
     =
     let remote_address = smtp_server in
     let host, port = Host_and_port.tuple smtp_server in
@@ -540,24 +528,21 @@ module Bsmtp = struct
   ;;
 
   let write
-        ?skip_prelude_and_prologue
-        ?(log = Lazy.force bsmtp_log)
-        ?flows
-        ?(component = [ "bsmtp"; "writer" ])
-        writer
-        envelopes
+    ?skip_prelude_and_prologue
+    ?(log = Lazy.force bsmtp_log)
+    ?flows
+    ?(component = [ "bsmtp"; "writer" ])
+    writer
+    envelopes
     =
     with_ ?skip_prelude_and_prologue writer ~log ~component ~f:(fun client ->
-      Deferred.Or_error.try_with
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () ->
-           Pipe.iter envelopes ~f:(fun envelope ->
-             (* Flow already attatched to the session *)
-             send_envelope client ~log ?flows ~component envelope
-             >>| Or_error.ok_exn
-             >>| Envelope_status.ok_exn ~allow_rejected_recipients:false
-             >>| (ignore : string -> unit))))
+      Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+        Pipe.iter envelopes ~f:(fun envelope ->
+          (* Flow already attatched to the session *)
+          send_envelope client ~log ?flows ~component envelope
+          >>| Or_error.ok_exn
+          >>| Envelope_status.ok_exn ~allow_rejected_recipients:false
+          >>| (ignore : string -> unit))))
   ;;
 
   let to_string ?skip_prelude_and_prologue ?log ?flows ?component envelopes =

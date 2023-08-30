@@ -17,7 +17,6 @@ module Peer_info : sig
   val remote_ip_address : t -> Socket.Address.Inet.t option
 end
 
-
 type t
 
 val create

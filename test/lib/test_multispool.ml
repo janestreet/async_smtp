@@ -5,22 +5,16 @@ open Expect_test_helpers_core
 open Expect_test_helpers_async
 
 module Widgetspool = Multispool.Make (struct
-    include Widget
-    module Name_generator = Common.Test_name_generator
-  end)
+  include Widget
+  module Name_generator = Common.Test_name_generator
+end)
 
 let chdir_or_error dir =
-  Deferred.Or_error.try_with
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () -> Sys.chdir dir)
+  Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Sys.chdir dir)
 ;;
 
 let system_or_error cmd =
-  Deferred.Or_error.try_with
-    ~run:`Schedule
-    ~rest:`Log
-    (fun () -> system cmd)
+  Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> system cmd)
 ;;
 
 let string_filter_tmp_dir ~tmp_dir string =
@@ -348,16 +342,16 @@ let%expect_test "File Behavior" =
 ;;
 
 module Widgetspool_monitor = Multispool.Monitor.Make (struct
-    include Widget
-    module Name_generator = Common.Test_name_generator
-  end)
+  include Widget
+  module Name_generator = Common.Test_name_generator
+end)
 
 let create_spool_and_monitor
-      ?(max_checked_out_age = Time_float.Span.of_day 1.)
-      ?(max_tmp_file_age = Time_float.Span.of_day 1.)
-      ?(max_queue_ages = [])
-      ~tmp_dir
-      ()
+  ?(max_checked_out_age = Time_float.Span.of_day 1.)
+  ?(max_tmp_file_age = Time_float.Span.of_day 1.)
+  ?(max_queue_ages = [])
+  ~tmp_dir
+  ()
   =
   let open Deferred.Or_error.Let_syntax in
   let%bind spool = chdir_create_and_open_spool ~tmp_dir in
@@ -606,16 +600,16 @@ let%expect_test "Monitor: Queue entry too old" =
   with_spool_and_monitor
     ~max_queue_ages:[ Widget.Queue.Queue1, sec 0. ]
     (fun _ monitor ->
-       let%bind () = touch Registry "foo" in
-       let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
-       [%expect
-         {|
+      let%bind () = touch Registry "foo" in
+      let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
+      [%expect
+        {|
          ((
            Too_old
            ((filename foo)
             (mtime    <omitted>))
            (Queue Queue1)))
        |}];
-       return ())
+      return ())
   |> Deferred.Or_error.ok_exn
 ;;

@@ -18,7 +18,7 @@ module Command : sig
         | `Rpc of Rpc.Connection.t
         ]
         -> unit Deferred.t)
-         Param.t
+       Param.t
     -> t
 end = struct
   include Command
@@ -87,7 +87,6 @@ end = struct
         fun () -> rpc_client_command0 ~host_and_port:rpc_server ~f:main]
       ~behave_nicely_in_pipeline:false
   ;;
-
 
   let configs_or_rpc ~summary ?readme main =
     let open Command.Let_syntax in

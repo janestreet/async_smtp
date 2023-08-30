@@ -106,14 +106,12 @@ module type Envelope = sig
       [Ok str] results in "250 Ok: <str>". *)
   val process
     :  state:state
-    -> log:
-         Mail_log.t
+    -> log:Mail_log.t
     -> flows:Mail_log.Flows.t
     -> session
     -> t
     -> Email.t
     -> string Smtp_monad.t
-
 end
 
 module type S = sig
@@ -204,9 +202,9 @@ module Simple : sig
 
   include
     S
-    with module State := State
-    with module Session := Session
-     and module Envelope := Envelope
+      with module State := State
+      with module Session := Session
+       and module Envelope := Envelope
 end = struct
   open Smtp_monad.Let_syntax
   module State = Unit

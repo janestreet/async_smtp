@@ -47,7 +47,7 @@ val init
      -> load_balance:bool
      -> unit
      -> t)
-      Tcp.Aliases.with_connect_options
+    Tcp.Aliases.with_connect_options
 
 val close_and_flush : t -> unit Deferred.t
 val close_started : t -> bool
@@ -71,6 +71,5 @@ module Tcp : sig
        | `Gave_up_waiting_for_address
        | `Cache_is_closed
        ]
-         Deferred.t
+       Deferred.t
 end
-

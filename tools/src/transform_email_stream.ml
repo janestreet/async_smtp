@@ -16,7 +16,7 @@ module Hash = Crypto.Hash
 module Envelopes = struct
   type t =
     { sort : [ `Envelope_id | `Sender | `Recipients | `Subject | `Body | `Headers ] list
-             [@sexp.list]
+         [@sexp.list]
     }
   [@@deriving sexp]
 
@@ -151,8 +151,7 @@ let compare_message_recipients =
 
 let compare_message_subject =
   Compare.map
-    ~f:(fun e ->
-      Envelope.find_all_headers e "Subject")
+    ~f:(fun e -> Envelope.find_all_headers e "Subject")
     (List.compare String.compare)
 ;;
 

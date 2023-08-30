@@ -186,5 +186,5 @@ let get_auth_client t ~tls extensions =
         [%sexp
           "No common auth mechanism available and ANON authentication not allowed by \
            client"
-        , { client_mechs : string list; server_mechs : string list }])
+          , { client_mechs : string list; server_mechs : string list }])
 ;;

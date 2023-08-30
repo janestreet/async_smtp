@@ -40,7 +40,7 @@ let command =
                     guess from the headers"
              in
              if Option.is_none eml_file
-             && (Option.is_some sender || Option.is_some recipients)
+                && (Option.is_some sender || Option.is_some recipients)
              then raise_s [%message "Can't use -sender or -recipients without -eml-file"];
              Option.map eml_file ~f:(fun eml_file () ->
                let open Deferred.Let_syntax in
@@ -87,6 +87,5 @@ let command =
           exit 1]
     ~behave_nicely_in_pipeline:false
 ;;
-
 
 let () = Command_unix.run command

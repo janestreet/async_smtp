@@ -162,7 +162,6 @@ module Message : sig
     -> ?tags:(string * string) list
     -> 'a
 
-
   type t = Log.Message.t [@@deriving sexp_of]
 
   val create : (Action.t -> t) with_info
@@ -262,8 +261,8 @@ val with_flow_and_component : flows:Flows.t -> component:Component.t -> t -> t
 
 val adjust_log_levels
   :  ?minimum_level:
-    Log.Level.t
-  (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
+       Log.Level.t
+       (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
   -> ?remap_info_to:
        Log.Level.t (* Rewrite messages with level [`Info] to level [remap_info_to] *)
   -> ?remap_error_to:

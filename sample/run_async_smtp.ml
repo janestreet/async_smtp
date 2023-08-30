@@ -41,37 +41,37 @@ let spool_config =
 let the_spool = Set_once.create ()
 
 module Server = Smtp_server.Make (struct
-    open Smtp_monad.Let_syntax
-    module State = Smtp_server.Plugin.Simple.State
-    module Session = Smtp_server.Plugin.Simple.Session
+  open Smtp_monad.Let_syntax
+  module State = Smtp_server.Plugin.Simple.State
+  module Session = Smtp_server.Plugin.Simple.Session
 
-    module Envelope = struct
-      include Smtp_server.Plugin.Simple.Envelope
+  module Envelope = struct
+    include Smtp_server.Plugin.Simple.Envelope
 
-      let next_hop_choices = [ Host_and_port.create ~host:"localhost" ~port:25 ]
+    let next_hop_choices = [ Host_and_port.create ~host:"localhost" ~port:25 ]
 
-      let retry_intervals =
-        let minute x = Smtp_envelope.Retry_interval.create (Time_float.Span.of_min x) in
-        [ minute 1.; minute 2.; minute 2.; minute 5. ]
-      ;;
+    let retry_intervals =
+      let minute x = Smtp_envelope.Retry_interval.create (Time_float.Span.of_min x) in
+      [ minute 1.; minute 2.; minute 2.; minute 5. ]
+    ;;
 
-      let process ~state:_ ~log:_ ~flows _session t email =
-        let spool = Set_once.get_exn the_spool [%here] in
-        let envelope = smtp_envelope t email in
-        let routed_envelope =
-          Smtp_envelope.Routed.create ~envelope ~next_hop_choices ~retry_intervals
-          |> Smtp_envelope.Routed.Batch.single_envelope
-        in
-        let%bind _spooled_ids =
-          Smtp_spool.add spool ~flows ~original_msg:envelope [ routed_envelope ]
-          |> Smtp_monad.of_or_error ~here:[%here]
-        in
-        return (Smtp_envelope.id envelope |> Smtp_envelope.Id.to_string)
-      ;;
-    end
+    let process ~state:_ ~log:_ ~flows _session t email =
+      let spool = Set_once.get_exn the_spool [%here] in
+      let envelope = smtp_envelope t email in
+      let routed_envelope =
+        Smtp_envelope.Routed.create ~envelope ~next_hop_choices ~retry_intervals
+        |> Smtp_envelope.Routed.Batch.single_envelope
+      in
+      let%bind _spooled_ids =
+        Smtp_spool.add spool ~flows ~original_msg:envelope [ routed_envelope ]
+        |> Smtp_monad.of_or_error ~here:[%here]
+      in
+      return (Smtp_envelope.id envelope |> Smtp_envelope.Id.to_string)
+    ;;
+  end
 
-    let rpcs () = []
-  end)
+  let rpcs () = []
+end)
 
 let handle_signals () =
   Signal.handle [ Signal.term; Signal.int ] ~f:(fun signal ->

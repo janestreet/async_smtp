@@ -6,9 +6,9 @@ open Async_smtp
 open Test_async_smtp
 
 module Widgetspool = Multispool.For_testing.Make (struct
-    include Widget
-    module Name_generator = Multispool.For_testing.Lexicographic_time_order_name_generator
-  end)
+  include Widget
+  module Name_generator = Multispool.For_testing.Lexicographic_time_order_name_generator
+end)
 
 let%test_module _ =
   (module struct

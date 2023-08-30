@@ -26,14 +26,14 @@ let stdout_log ~tag ~level () =
       Log.Output.create
         ~flush:(fun () -> Deferred.unit)
         (fun msgs ->
-           Queue.iter msgs ~f:(fun msg ->
-             printf "%s " tag;
-             Option.iter (Log.Message.level msg) ~f:(printf !"%{Log.Level} ");
-             printf "%s" (Log.Message.message msg);
-             if not (List.is_empty (Log.Message.tags msg)) then printf " --";
-             List.iter (Log.Message.tags msg) ~f:(fun (k, v) -> printf " [%s:%s]" k v);
-             printf "\n%!");
-           Deferred.unit)
+          Queue.iter msgs ~f:(fun msg ->
+            printf "%s " tag;
+            Option.iter (Log.Message.level msg) ~f:(printf !"%{Log.Level} ");
+            printf "%s" (Log.Message.message msg);
+            if not (List.is_empty (Log.Message.tags msg)) then printf " --";
+            List.iter (Log.Message.tags msg) ~f:(fun (k, v) -> printf " [%s:%s]" k v);
+            printf "\n%!");
+          Deferred.unit)
     in
     Log.create ~level ~output:[ output ] ~on_error:`Raise ()
 ;;
@@ -49,10 +49,7 @@ let with_stdout_log ~tag ~level (f : log:Log.t -> 'a Deferred.t) : 'a Deferred.t
 
 let drain_and_closed r =
   Deferred.all_unit
-    [ Monitor.try_with
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () -> Reader.lines r |> Pipe.drain)
+    [ Monitor.try_with ~run:`Schedule ~rest:`Log (fun () -> Reader.lines r |> Pipe.drain)
       >>| ignore
     ; Reader.close_finished r
     ]
@@ -89,13 +86,7 @@ let rec mk_pipe ?echo here desc =
 ;;
 
 let print_and_ignore_exn identity f =
-  match%map
-    Monitor.try_with
-      ~run:`Schedule
-      ~rest:`Log
-      ~extract_exn:true
-      f
-  with
+  match%map Monitor.try_with ~run:`Schedule ~rest:`Log ~extract_exn:true f with
   | Ok () -> ()
   | Error exn ->
     Ref.set_temporarily Backtrace.elide true ~f:(fun () ->
@@ -103,10 +94,10 @@ let print_and_ignore_exn identity f =
 ;;
 
 let envelope
-      ?(sender = "<sender@example.com>")
-      ?(recipients = [ "<recipient@example.com>" ])
-      ?(data = "Subject: TEST EMAIL\n\nTEST EMAIL")
-      ()
+  ?(sender = "<sender@example.com>")
+  ?(recipients = [ "<recipient@example.com>" ])
+  ?(data = "Subject: TEST EMAIL\n\nTEST EMAIL")
+  ()
   =
   let sender, sender_args =
     Smtp_envelope.Sender.of_string_with_arguments
@@ -139,17 +130,13 @@ let run ~echo ~client ~server =
   let shutdown_later () =
     don't_wait_for (Clock.after (Time_float.Span.of_sec 1.) >>= shutdown_now)
   in
-  Monitor.protect
-    ~run:`Schedule
-    ~rest:`Log
-    ~finally:shutdown_now
-    (fun () ->
-       Deferred.all_unit
-         [ print_and_ignore_exn "client" (fun () -> client client_r client_w)
-           >>| shutdown_later
-         ; print_and_ignore_exn "server" (fun () -> server server_r server_w)
-           >>| shutdown_later
-         ])
+  Monitor.protect ~run:`Schedule ~rest:`Log ~finally:shutdown_now (fun () ->
+    Deferred.all_unit
+      [ print_and_ignore_exn "client" (fun () -> client client_r client_w)
+        >>| shutdown_later
+      ; print_and_ignore_exn "server" (fun () -> server server_r server_w)
+        >>| shutdown_later
+      ])
 ;;
 
 module Default_plugin : Server.Plugin.S with type State.t = unit = struct
@@ -167,10 +154,10 @@ module Default_plugin : Server.Plugin.S with type State.t = unit = struct
 end
 
 module Safe_plugin (Info : sig
-    val level : [ Log.Level.t | `None ]
-    val tag : string
-  end)
-    (P : Server.Plugin.S) : Server.Plugin.S with type State.t = P.State.t = struct
+  val level : [ Log.Level.t | `None ]
+  val tag : string
+end)
+(P : Server.Plugin.S) : Server.Plugin.S with type State.t = P.State.t = struct
   let rpcs () = []
   let with_stdout_log f = with_stdout_log ~tag:Info.tag ~level:Info.level f
 
@@ -251,26 +238,26 @@ module Safe_plugin (Info : sig
 end
 
 let server_impl
-      ?(tls = false)
-      ?max_message_size
-      ?malformed_emails
-      ?(server_log = `None)
-      ?plugin
-      ?(plugin_log = `Debug)
-      r
-      w
+  ?(tls = false)
+  ?max_message_size
+  ?malformed_emails
+  ?(server_log = `None)
+  ?plugin
+  ?(plugin_log = `Debug)
+  r
+  w
   =
   let (module Plugin : Server.Plugin.S with type State.t = unit) =
     match plugin with
     | None -> (module Default_plugin)
     | Some (module Plugin : Server.Plugin.S with type State.t = unit) ->
       (module Safe_plugin
-           (struct
-             let level = plugin_log
-             let tag = "server.plugin"
-           end)
-           (Plugin) : Server.Plugin.S
-         with type State.t = Plugin.State.t)
+                (struct
+                  let level = plugin_log
+                  let tag = "server.plugin"
+                end)
+                (Plugin) : Server.Plugin.S
+        with type State.t = Plugin.State.t)
   in
   let module S = Server.For_test (Plugin) in
   with_stdout_log ~tag:"server" ~level:server_log (fun ~log ->
@@ -285,13 +272,13 @@ let server_impl
 ;;
 
 let client_impl
-      ?(tls = false)
-      ?credentials
-      ?(client_greeting = "[SMTP TEST CLIENT]")
-      ?(client_log = `None)
-      ?(envelopes = [])
-      r
-      w
+  ?(tls = false)
+  ?credentials
+  ?(client_greeting = "[SMTP TEST CLIENT]")
+  ?(client_log = `None)
+  ?(envelopes = [])
+  r
+  w
   =
   with_stdout_log ~tag:"client" ~level:client_log (fun ~log ->
     match%map
@@ -357,16 +344,16 @@ let gen_impl ~f r w =
 ;;
 
 let smtp
-      ?tls
-      ?max_message_size
-      ?malformed_emails
-      ?server_log
-      ?plugin
-      ?plugin_log
-      ?credentials
-      ?client_greeting
-      ?client_log
-      envelopes
+  ?tls
+  ?max_message_size
+  ?malformed_emails
+  ?server_log
+  ?plugin
+  ?plugin_log
+  ?credentials
+  ?client_greeting
+  ?client_log
+  envelopes
   =
   run
     ~echo:true
@@ -382,13 +369,13 @@ let smtp
 ;;
 
 let manual_client
-      ?tls
-      ?max_message_size
-      ?malformed_emails
-      ?server_log
-      ?plugin
-      ?plugin_log
-      f
+  ?tls
+  ?max_message_size
+  ?malformed_emails
+  ?server_log
+  ?plugin
+  ?plugin_log
+  f
   =
   run
     ~echo:false

@@ -15,16 +15,16 @@ module T = struct
   let info t = Envelope_bodiless.info t.Routed.envelope
 
   let set
-        ?sender
-        ?sender_args
-        ?recipients
-        ?rejected_recipients
-        ?route
-        ?next_hop_choices
-        ?retry_intervals
-        ?headers
-        t
-        ()
+    ?sender
+    ?sender_args
+    ?recipients
+    ?rejected_recipients
+    ?route
+    ?next_hop_choices
+    ?retry_intervals
+    ?headers
+    t
+    ()
     =
     { Routed.envelope =
         Envelope_bodiless.set

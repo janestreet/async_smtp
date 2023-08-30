@@ -47,7 +47,6 @@ module Stable : sig
   end
 
   module V3 : sig
-
     type nonrec t = t [@@deriving sexp, bin_io]
 
     val of_v2 : V2.t -> t

@@ -38,7 +38,6 @@ module type For_test = sig
     -> unit Deferred.t
 end
 
-
 let read_line_with_timeouts ~close_started ~(timeouts : Config.Timeouts.t) reader =
   let start = Time_float.now () in
   let read_result =
@@ -111,7 +110,6 @@ let read_data ~max_size ~close_started ~timeouts reader =
 ;;
 
 module Make (Cb : Plugin.S) = struct
-
   let write_reply_impl ~log ?raw_writer ?write_reply () =
     let write_reply_default reply =
       match raw_writer with
@@ -133,14 +131,14 @@ module Make (Cb : Plugin.S) = struct
   ;;
 
   let on_plugin_error_no_reply
-        ~log
-        ?(tags = [])
-        ?reply
-        ~here
-        ~flows
-        ~component
-        ~plugin
-        err
+    ~log
+    ?(tags = [])
+    ?reply
+    ~here
+    ~flows
+    ~component
+    ~plugin
+    err
     =
     let level, error =
       match err with
@@ -155,15 +153,15 @@ module Make (Cb : Plugin.S) = struct
   ;;
 
   let on_plugin_error
-        ~log
-        ?tags
-        ~write_reply
-        ?(default_reject = Smtp_reply.service_unavailable_421)
-        ~here
-        ~flows
-        ~component
-        ~plugin
-        err
+    ~log
+    ?tags
+    ~write_reply
+    ?(default_reject = Smtp_reply.service_unavailable_421)
+    ~here
+    ~flows
+    ~component
+    ~plugin
+    err
     =
     let reject =
       match err with
@@ -177,10 +175,8 @@ module Make (Cb : Plugin.S) = struct
   let protect_plugin ~log ~here ~flows ~component ~plugin f =
     let component = component @ [ "PLUGIN"; plugin ] in
     match%map
-      Monitor.try_with
-        ~run:`Schedule
-        ~rest:`Log
-        (fun () -> f ~log:(Log.with_flow_and_component log ~flows ~component))
+      Monitor.try_with ~run:`Schedule ~rest:`Log (fun () ->
+        f ~log:(Log.with_flow_and_component log ~flows ~component))
     with
     | Ok (Ok res) -> Ok res
     | Ok (Error err) -> Error (`Reject (Reject_or_error.tag ~here ~tag:plugin err))
@@ -207,19 +203,19 @@ module Make (Cb : Plugin.S) = struct
   ;;
 
   let rec session_loop
-            ~state
-            ~log
-            ~tls_options
-            ~max_message_size
-            ~malformed_emails
-            ~server_events
-            ~close_started
-            ~timeouts
-            ~session_flows
-            ~reader
-            ?raw_writer
-            ?write_reply
-            (session : Cb.Session.t)
+    ~state
+    ~log
+    ~tls_options
+    ~max_message_size
+    ~malformed_emails
+    ~server_events
+    ~close_started
+    ~timeouts
+    ~session_flows
+    ~reader
+    ?raw_writer
+    ?write_reply
+    (session : Cb.Session.t)
     =
     let extensions session =
       extensions ~tls_options (Cb.Session.extensions ~state session)
@@ -346,9 +342,9 @@ module Make (Cb : Plugin.S) = struct
           (match
              Cb.Session.extensions ~state session
              |> List.find_map ~f:(function
-               | Plugin.Extension.Start_tls cb ->
-                 Option.map tls_options ~f:(fun opts -> opts, cb)
-               | _ -> None)
+                  | Plugin.Extension.Start_tls cb ->
+                    Option.map tls_options ~f:(fun opts -> opts, cb)
+                  | _ -> None)
            with
            | None ->
              let%bind () =
@@ -402,10 +398,10 @@ module Make (Cb : Plugin.S) = struct
           ~plugin
           err
     and top_start_tls
-          ~flows
-          ~session
-          tls_options
-          (module Tls_cb : Plugin.Start_tls with type session = Cb.Session.t)
+      ~flows
+      ~session
+      tls_options
+      (module Tls_cb : Plugin.Start_tls with type session = Cb.Session.t)
       =
       let component = [ "smtp-server"; "session"; "starttls" ] in
       let%bind () =
@@ -425,7 +421,7 @@ module Make (Cb : Plugin.S) = struct
           ~allowed_ciphers:tls_options.Config.Tls_options.allowed_ciphers
           ~crt_file:tls_options.Config.Tls_options.crt_file
           ~key_file:tls_options.Config.Tls_options.key_file
-          (* Closing ssl connection will close the pipes which will in turn close
+            (* Closing ssl connection will close the pipes which will in turn close
              the readers. *)
           ~net_to_ssl:(Reader.pipe old_reader)
           ~ssl_to_net:(Writer.pipe old_writer)
@@ -458,9 +454,9 @@ module Make (Cb : Plugin.S) = struct
           let%bind () =
             Ssl.Connection.closed tls
             >>| Result.iter_error ~f:(fun e ->
-              Log.error
-                log
-                (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e)))
+                  Log.error
+                    log
+                    (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e)))
           in
           Reader.close new_reader
         in
@@ -469,37 +465,37 @@ module Make (Cb : Plugin.S) = struct
           ~run:`Schedule
           ~rest:`Log
           (fun () ->
-             match%bind
-               protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
-                 Tls_cb.upgrade_to_tls ~log session)
-             with
-             | Ok session ->
-               session_loop
-                 ~state
-                 ~log
-                 ~tls_options:(Some tls_options)
-                 ~max_message_size
-                 ~malformed_emails
-                 ~server_events
-                 ~close_started
-                 ~timeouts
-                 ~session_flows
-                 ~reader:new_reader
-                 ~raw_writer:new_writer
-                 session
-             | Error err ->
-               on_plugin_error_no_reply ~log ~here:[%here] ~flows ~component ~plugin err;
-               Deferred.unit)
+            match%bind
+              protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
+                Tls_cb.upgrade_to_tls ~log session)
+            with
+            | Ok session ->
+              session_loop
+                ~state
+                ~log
+                ~tls_options:(Some tls_options)
+                ~max_message_size
+                ~malformed_emails
+                ~server_events
+                ~close_started
+                ~timeouts
+                ~session_flows
+                ~reader:new_reader
+                ~raw_writer:new_writer
+                session
+            | Error err ->
+              on_plugin_error_no_reply ~log ~here:[%here] ~flows ~component ~plugin err;
+              Deferred.unit)
           ~finally:teardown
     and top_auth ~flows ~session ~meth ~initial_resp =
       let component = [ "smtp-server"; "session"; "auth" ] in
       match
         Cb.Session.extensions ~state session
         |> List.find_map ~f:(function
-          | Plugin.Extension.Auth
-              ((module Auth : Plugin.Auth with type session = Cb.Session.t) as auth) ->
-            Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
-          | _ -> None)
+             | Plugin.Extension.Auth
+                 ((module Auth : Plugin.Auth with type session = Cb.Session.t) as auth) ->
+               Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
+             | _ -> None)
       with
       | None ->
         command_not_implemented
@@ -793,7 +789,7 @@ module Make (Cb : Plugin.S) = struct
                        ~extra_headers:
                          [ "X-JS-Parse-Error", sprintf !"%{sexp:Error.t}" error ]
                        raw
-                     :> Email.t))
+                      :> Email.t))
            in
            (match email with
             | Error error ->
@@ -850,22 +846,22 @@ module Make (Cb : Plugin.S) = struct
   ;;
 
   let start_session
-        ~state
-        ~log
-        ~malformed_emails
-        ~tls_options
-        ~emulate_tls_for_test
-        ~max_message_size
-        ~reader
-        ~server_events
-        ~close_started
-        ~timeouts
-        ?raw_writer
-        ?write_reply
-        ~session_flows
-        ~local_ip_address
-        ~remote_ip_address
-        ()
+    ~state
+    ~log
+    ~malformed_emails
+    ~tls_options
+    ~emulate_tls_for_test
+    ~max_message_size
+    ~reader
+    ~server_events
+    ~close_started
+    ~timeouts
+    ?raw_writer
+    ?write_reply
+    ~session_flows
+    ~local_ip_address
+    ~remote_ip_address
+    ()
     =
     let write_reply' =
       Staged.unstage (write_reply_impl ~log ?raw_writer ?write_reply ())
@@ -911,9 +907,9 @@ module Make (Cb : Plugin.S) = struct
              return
                (Error
                   (`Exn
-                     (Failure
-                        "Session initiated with claim of pre-established TLS but Plugin \
-                         does not provide TLS callback")))
+                    (Failure
+                       "Session initiated with claim of pre-established TLS but Plugin \
+                        does not provide TLS callback")))
            | Some (module Tls : Plugin.Start_tls with type session = Cb.Session.t) ->
              protect_plugin ~here:[%here] ~log ~flows ~component ~plugin (fun ~log ->
                Tls.upgrade_to_tls ~log session))
@@ -943,27 +939,27 @@ module Make (Cb : Plugin.S) = struct
            ~run:`Schedule
            ~rest:`Log
            (fun () ->
-              let%bind () =
-                write_reply'
-                  ~here:[%here]
-                  ~flows
-                  ~component
-                  (Smtp_reply.service_ready_220 greeting)
-              in
-              session_loop
-                ~state
-                ~log
-                ~tls_options
-                ~max_message_size
-                ~malformed_emails
-                ~server_events
-                ~close_started
-                ~timeouts
-                ~reader
-                ?raw_writer
-                ?write_reply
-                ~session_flows
-                session)
+             let%bind () =
+               write_reply'
+                 ~here:[%here]
+                 ~flows
+                 ~component
+                 (Smtp_reply.service_ready_220 greeting)
+             in
+             session_loop
+               ~state
+               ~log
+               ~tls_options
+               ~max_message_size
+               ~malformed_emails
+               ~server_events
+               ~close_started
+               ~timeouts
+               ~reader
+               ?raw_writer
+               ?write_reply
+               ~session_flows
+               session)
            ~finally:(fun () ->
              let plugin = "Session.disconnect" in
              match%map
@@ -996,59 +992,56 @@ module Make (Cb : Plugin.S) = struct
         ?backlog
         ~on_handler_error:
           (`Call
-             (fun remote_ip_address exn ->
-                (* Silence the [inner_monitor] errors *)
+            (fun remote_ip_address exn ->
+              (* Silence the [inner_monitor] errors *)
+              Log.error
+                log
+                (lazy
+                  (Log.Message.of_error
+                     ~here:[%here]
+                     ~flows:Log.Flows.none
+                     ~component:[ "smtp-server"; "tcp" ]
+                     ~local_ip_address
+                     ~remote_ip_address
+                     (Error.of_exn ~backtrace:`Get exn)))))
+        ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
+        (fun remote_ip_address reader writer ->
+          let local_ip_address =
+            Option.try_with (fun () ->
+              match Writer.fd writer |> Fd.file_descr_exn |> Core_unix.getsockname with
+              | Core_unix.ADDR_UNIX _ -> assert false
+              | Core_unix.ADDR_INET (host, port) -> Socket.Address.Inet.create host ~port)
+            |> Option.value ~default:local_ip_address
+          in
+          let session_flows = Log.Flows.create `Server_session in
+          Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+            start_session
+              ~state:server_state
+              ~log
+              ~server_events
+              ~tls_options:config.Config.tls_options
+              ~emulate_tls_for_test:false
+              ~malformed_emails:config.Config.malformed_emails
+              ~max_message_size:config.Config.max_message_size
+              ~session_flows
+              ~reader
+              ~raw_writer:writer
+              ~local_ip_address
+              ~remote_ip_address
+              ~close_started
+              ~timeouts:config.timeouts
+              ())
+          >>| Result.iter_error ~f:(fun err ->
                 Log.error
                   log
                   (lazy
                     (Log.Message.of_error
                        ~here:[%here]
-                       ~flows:Log.Flows.none
+                       ~flows:session_flows
                        ~component:[ "smtp-server"; "tcp" ]
                        ~local_ip_address
                        ~remote_ip_address
-                       (Error.of_exn ~backtrace:`Get exn)))))
-        ~max_connections:(Config.max_concurrent_receive_jobs_per_port config)
-        (fun remote_ip_address reader writer ->
-           let local_ip_address =
-             Option.try_with (fun () ->
-               match Writer.fd writer |> Fd.file_descr_exn |> Core_unix.getsockname with
-               | Core_unix.ADDR_UNIX _ -> assert false
-               | Core_unix.ADDR_INET (host, port) -> Socket.Address.Inet.create host ~port)
-             |> Option.value ~default:local_ip_address
-           in
-           let session_flows = Log.Flows.create `Server_session in
-           Deferred.Or_error.try_with
-             ~run:`Schedule
-             ~rest:`Log
-             (fun () ->
-                start_session
-                  ~state:server_state
-                  ~log
-                  ~server_events
-                  ~tls_options:config.Config.tls_options
-                  ~emulate_tls_for_test:false
-                  ~malformed_emails:config.Config.malformed_emails
-                  ~max_message_size:config.Config.max_message_size
-                  ~session_flows
-                  ~reader
-                  ~raw_writer:writer
-                  ~local_ip_address
-                  ~remote_ip_address
-                  ~close_started
-                  ~timeouts:config.timeouts
-                  ())
-           >>| Result.iter_error ~f:(fun err ->
-             Log.error
-               log
-               (lazy
-                 (Log.Message.of_error
-                    ~here:[%here]
-                    ~flows:session_flows
-                    ~component:[ "smtp-server"; "tcp" ]
-                    ~local_ip_address
-                    ~remote_ip_address
-                    err))))
+                       err))))
     in
     Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:start_server
   ;;
@@ -1096,16 +1089,16 @@ module For_test (P : Plugin.S) = struct
   include Make (P)
 
   let session
-        ~server_state
-        ~log
-        ?(max_message_size = Byte_units.of_bytes_int Int.max_value_30_bits)
-        ?tls_options
-        ?(emulate_tls = false)
-        ?(malformed_emails = `Reject)
-        ?(local_ip_address = Socket.Address.Inet.create_bind_any ~port:0)
-        ?(remote_ip_address = Socket.Address.Inet.create_bind_any ~port:0)
-        reader
-        writer
+    ~server_state
+    ~log
+    ?(max_message_size = Byte_units.of_bytes_int Int.max_value_30_bits)
+    ?tls_options
+    ?(emulate_tls = false)
+    ?(malformed_emails = `Reject)
+    ?(local_ip_address = Socket.Address.Inet.create_bind_any ~port:0)
+    ?(remote_ip_address = Socket.Address.Inet.create_bind_any ~port:0)
+    reader
+    writer
     =
     start_session
       ~state:server_state

@@ -50,13 +50,13 @@ module Tcp_options = struct
     }
 
   let create
-        ?buffer_age_limit
-        ?interrupt
-        ?reader_buffer_size
-        ?writer_buffer_size
-        ?timeout
-        ?time_source
-        ()
+    ?buffer_age_limit
+    ?interrupt
+    ?reader_buffer_size
+    ?writer_buffer_size
+    ?timeout
+    ?time_source
+    ()
     =
     { buffer_age_limit
     ; interrupt
@@ -127,8 +127,8 @@ module Resource = struct
            ~log
            (Address_and_route.address address)
            ~f:(fun client ->
-             Ivar.fill_exn result (Ok client);
-             Ivar.read close_finished |> Deferred.ok)
+           Ivar.fill_exn result (Ok client);
+           Ivar.read close_finished |> Deferred.ok)
        with
        | Ok () -> ()
        | Error e ->
@@ -193,18 +193,18 @@ type t =
   }
 
 let init
-      ?buffer_age_limit
-      ?interrupt
-      ?reader_buffer_size
-      ?writer_buffer_size
-      ?timeout
-      ?time_source
-      ?component
-      ~log
-      ~cache_config
-      ~client_config
-      ~load_balance
-      ()
+  ?buffer_age_limit
+  ?interrupt
+  ?reader_buffer_size
+  ?writer_buffer_size
+  ?timeout
+  ?time_source
+  ?component
+  ~log
+  ~cache_config
+  ~client_config
+  ~load_balance
+  ()
   =
   let config = Config.to_cache_config cache_config in
   let tcp_options =

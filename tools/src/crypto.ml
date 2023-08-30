@@ -1,2 +1,2 @@
-module Cryptokit       = Cryptokit
+module Cryptokit = Cryptokit
 module CryptokitBignum = CryptokitBignum
