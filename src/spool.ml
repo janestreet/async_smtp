@@ -801,15 +801,18 @@ module Status = struct
   ;;
 
   let to_formatted_string t ~format =
-    let format : [ `Sexp | `Exim | `Ascii_table_with_max_width of int ] =
+    let format : [ `Sexp | `Exim | `Id | `Ascii_table_with_max_width of int ] =
       match format with
       | `Ascii_table -> `Ascii_table_with_max_width 180
-      | (`Sexp | `Exim | `Ascii_table_with_max_width _) as format -> format
+      | (`Sexp | `Exim | `Id | `Ascii_table_with_max_width _) as format -> format
     in
     let f t =
       match format with
       | `Sexp -> Sexp.to_string_hum (sexp_of_t t)
       | `Exim -> to_string_exim t
+      | `Id ->
+        List.map t ~f:(Fn.compose Message_id.to_string Spooled_message_info.id)
+        |> String.concat_lines
       | `Ascii_table_with_max_width limit_width_to ->
         let display_span span =
           let style =

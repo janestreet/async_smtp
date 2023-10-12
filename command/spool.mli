@@ -3,6 +3,19 @@ open! Async
 open Async_smtp
 open Common
 
+module Client_side_filter : sig
+  type t =
+    { next_hop : Re2.t option
+    ; sender : Re2.t option
+    ; recipient : Re2.t option
+    ; queue : Smtp_spool_message.Queue.t option
+    ; younger_than : Time_float_unix.Span.t option
+    ; older_than : Time_float_unix.Span.t option
+    }
+
+  val param_opt : t option Command.Param.t
+end
+
 module Status : sig
   module Format : sig
     type t =
@@ -10,6 +23,7 @@ module Status : sig
       | `Ascii_table_with_max_width of int
       | `Exim
       | `Sexp
+      | `Id
       ]
     [@@deriving sexp]
 
@@ -18,8 +32,15 @@ module Status : sig
   end
 
   val dispatch
-    :  format:[ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
+    :  format:Format.t
+    -> ?client_side_filter:Client_side_filter.t
     -> Rpc.Connection.t
+    -> unit Deferred.t
+
+  val on_disk
+    :  format:Format.t
+    -> ?client_side_filter:Client_side_filter.t
+    -> Smtp_spool.Config.t
     -> unit Deferred.t
 end
 
@@ -28,8 +49,14 @@ module Count : sig
 
   val dispatch
     :  which:[ `Only_frozen | `Only_active | `All ]
+    -> ?client_side_filter:Client_side_filter.t
     -> Rpc.Connection.t
     -> int Deferred.t
+
+  val on_disk
+    :  ?client_side_filter:Client_side_filter.t
+    -> Smtp_spool.Config.t
+    -> unit Deferred.t
 end
 
 module Freeze : sig

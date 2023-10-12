@@ -8,7 +8,7 @@ module Stable = struct
       ; envelope_sender : Smtp_envelope.Sender.V1.t
       ; from_headers : string
       }
-    [@@deriving bin_io, sexp]
+    [@@deriving bin_io, sexp, compare]
   end
 
   module V1 = struct

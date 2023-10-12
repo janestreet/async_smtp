@@ -33,6 +33,7 @@ module Queue : sig
   [@@deriving sexp, enumerate, compare]
 
   val to_dirname : t -> string
+  val to_string : t -> string
   val of_status : Status.t -> t option
   val of_status' : Status.t -> t Or_error.t
 end

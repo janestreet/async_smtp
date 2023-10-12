@@ -125,6 +125,7 @@ module Spooled_message_info : sig
   val last_relay_attempt : t -> (Time_float.t * Error.t) option
   val parent_id : t -> Smtp_envelope.Id.t
   val envelope_info : t -> Smtp_envelope.Info.t
+  val next_hop_choices : t -> Host_and_port.t list
 
   val status
     :  t
@@ -153,7 +154,7 @@ module Status : sig
 
   val to_formatted_string
     :  t
-    -> format:[ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp ]
+    -> format:[ `Ascii_table | `Ascii_table_with_max_width of int | `Exim | `Sexp | `Id ]
     -> string
 end
 

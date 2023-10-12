@@ -11,7 +11,7 @@ val of_envelope : description:string -> Smtp_envelope.Bodiless.t -> t
 
 module Stable : sig
   module V1 : sig
-    type nonrec t = t [@@deriving sexp, bin_io]
+    type nonrec t = t [@@deriving sexp, bin_io, compare]
 
     include Stringable.S with type t := t
   end

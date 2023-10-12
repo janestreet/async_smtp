@@ -181,12 +181,14 @@ module Queue = struct
     | Quarantine
   [@@deriving sexp, enumerate, compare]
 
-  let to_dirname = function
+  let to_string = function
     | Active -> "active"
     | Frozen -> "frozen"
     | Removed -> "removed"
     | Quarantine -> "quarantine"
   ;;
+
+  let to_dirname = to_string
 
   let of_status status =
     match status with

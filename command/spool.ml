@@ -1,10 +1,114 @@
 open Core
 open Async
-open Async_smtp
+open! Async_smtp
 open Common
 module Time = Time_float_unix
 
 let msgid = Command.Param.Arg_type.create Smtp_spool.Stable.Message_id.V1.of_string
+
+module Client_side_filter = struct
+  type t =
+    { next_hop : Re2.t option
+    ; sender : Re2.t option
+    ; recipient : Re2.t option
+    ; queue : Smtp_spool_message.Queue.t option
+    ; younger_than : Time_float_unix.Span.t option
+    ; older_than : Time_float_unix.Span.t option
+    }
+  [@@deriving fields ~iterators:fold]
+
+  let has_some t =
+    let or_is_some acc field = acc || Option.is_some (Field.get field t) in
+    Fields.fold
+      ~init:false
+      ~next_hop:or_is_some
+      ~sender:or_is_some
+      ~recipient:or_is_some
+      ~queue:or_is_some
+      ~younger_than:or_is_some
+      ~older_than:or_is_some
+  ;;
+
+  let param_opt =
+    let open Command.Let_syntax in
+    let open Command.Param in
+    let re_opt_param ~name =
+      flag
+        ~doc:[%string "REGEX filter %{name} by regex"]
+        name
+        (Arg_type.create Re2.of_string |> optional)
+    in
+    let than_opt_param ~name =
+      flag ~doc:[%string "TIME %{name} than"] name (optional Time.Span.arg_type)
+    in
+    let%map_open next_hop = re_opt_param ~name:"next-hop"
+    and sender = re_opt_param ~name:"sender"
+    and recipient = re_opt_param ~name:"recipient"
+    and queue =
+      flag
+        ~doc:"QUEUE the status/queue of the message"
+        ~aliases:[ "status" ]
+        "queue"
+        (Arg_type.enumerated (module Smtp_spool_message.Queue) |> optional)
+    and younger_than = than_opt_param ~name:"younger"
+    and older_than = than_opt_param ~name:"older" in
+    (* If all fields are [None], return [None]. Only return [Some t] if [Some] field has a
+       value. *)
+    let t = { next_hop; sender; recipient; queue; younger_than; older_than } in
+    Option.some_if (has_some t) t
+  ;;
+
+  let matches ~now t msg =
+    let module S = Smtp_spool.Spooled_message_info in
+    let or_matches m field ~f =
+      match m with
+      | true -> true
+      | false as default -> Option.value_map ~default (Field.get field t) ~f
+    in
+    let or_matches_re m field ~get_values ~value_to_string =
+      or_matches m field ~f:(fun re ->
+        get_values msg |> List.map ~f:value_to_string |> List.exists ~f:(Re2.matches re))
+    in
+    Fields.fold
+      ~init:false
+      ~next_hop:
+        (or_matches_re
+           ~get_values:S.next_hop_choices
+           ~value_to_string:Host_and_port.to_string)
+      ~sender:
+        (or_matches_re
+           ~get_values:(fun msg -> [ S.envelope_info msg |> Smtp_envelope.Info.sender ])
+           ~value_to_string:Smtp_envelope.Sender.to_string)
+      ~recipient:
+        (or_matches_re
+           ~get_values:(fun msg -> S.envelope_info msg |> Smtp_envelope.Info.recipients)
+           ~value_to_string:Email_address.to_string)
+      ~queue:
+        (or_matches ~f:(fun queue ->
+           S.status msg
+           |> Smtp_spool_message.Queue.of_status
+           |> Option.value_map
+                ~default:false
+                ~f:([%compare.equal: Smtp_spool_message.Queue.t] queue)))
+      ~younger_than:
+        (or_matches ~f:(fun younger_than ->
+           Time.Span.(Time.diff now (S.spool_date msg) < younger_than)))
+      ~older_than:
+        (or_matches ~f:(fun older_than ->
+           Time.Span.(Time.diff now (S.spool_date msg) > older_than)))
+  ;;
+
+  let filter ?now t msgs =
+    let now = Option.value_or_thunk now ~default:Time.now in
+    List.filter msgs ~f:(matches ~now t)
+  ;;
+
+  let filter_opt ?now t msgs =
+    match t with
+    | None -> msgs
+    | Some t -> filter ?now t msgs
+  ;;
+end
 
 module Status = struct
   module Format = struct
@@ -13,6 +117,7 @@ module Status = struct
       | `Ascii_table_with_max_width of int
       | `Exim
       | `Sexp
+      | `Id
       ]
     [@@deriving sexp]
 
@@ -20,6 +125,7 @@ module Status = struct
       | "ascii" -> `Ascii_table
       | "exim" -> `Exim
       | "sexp" -> `Sexp
+      | "id" -> `Id
       | str -> Sexp.of_string_conv_exn str [%of_sexp: t]
     ;;
 
@@ -31,12 +137,25 @@ module Status = struct
           "format"
           (optional_with_default `Ascii_table arg_type)
           ~doc:
-            " Output format for the spool, valid values include 'ascii', 'exim', 'sexp'")
+            " Output format for the spool, valid values include 'ascii', 'exim', 'sexp', \
+             'id'")
     ;;
   end
 
-  let dispatch ~format client =
-    let%map status = Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client () in
+  let dispatch ~format ?client_side_filter client =
+    let%map status =
+      Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client ()
+      >>| Client_side_filter.filter_opt client_side_filter
+    in
+    printf "%s\n" (Smtp_spool.Status.to_formatted_string ~format status)
+  ;;
+
+  let on_disk ~format ?client_side_filter config =
+    let%map status =
+      Smtp_spool.status_from_disk config
+      |> Deferred.Or_error.ok_exn
+      >>| Client_side_filter.filter_opt client_side_filter
+    in
     printf "%s\n" (Smtp_spool.Status.to_formatted_string ~format status)
   ;;
 
@@ -45,15 +164,11 @@ module Status = struct
     Command.configs_or_rpc
       ~summary:"list current contents of the spool"
       [%map_open
-        let format = Format.param in
+        let format = Format.param
+        and client_side_filter = Client_side_filter.param_opt in
         function
-        | `Configs (_, spool_config) ->
-          let open Deferred.Let_syntax in
-          let%map status =
-            Smtp_spool.status_from_disk spool_config |> Deferred.Or_error.ok_exn
-          in
-          printf "%s\n" (Smtp_spool.Status.to_formatted_string ~format status)
-        | `Rpc client -> dispatch ~format client]
+        | `Configs (_, spool_config) -> on_disk ~format ?client_side_filter spool_config
+        | `Rpc client -> dispatch ~format ?client_side_filter client]
   ;;
 end
 
@@ -79,8 +194,9 @@ module Count = struct
     | `Frozen | `Removed | `Delivered | `Quarantined _ -> false
   ;;
 
-  let dispatch ~which client =
+  let dispatch ~which ?client_side_filter client =
     Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client ()
+    >>| Client_side_filter.filter_opt client_side_filter
     >>| List.filter ~f:(fun message_info ->
           let status = Smtp_spool.Spooled_message_info.status message_info in
           match which with
@@ -90,19 +206,33 @@ module Count = struct
     >>| (List.length :> _ -> _)
   ;;
 
+  let on_disk ?client_side_filter config =
+    let%map count =
+      match client_side_filter with
+      | None -> Smtp_spool.count_from_disk config >>| Or_error.ok_exn
+      | Some client_side_filter ->
+        let%map l =
+          Smtp_spool.status_from_disk config
+          |> Deferred.Or_error.ok_exn
+          >>| Client_side_filter.filter client_side_filter
+        in
+        List.length l
+    in
+    printf "%d\n" count
+  ;;
+
   let command =
     let open Command.Let_syntax in
     Command.configs_or_rpc
       ~summary:"print total number of messages in the spool"
       [%map_open
-        let which = which in
+        let which = which
+        and client_side_filter = Client_side_filter.param_opt in
         function
-        | `Configs (_, spool_config) ->
-          let open Deferred.Let_syntax in
-          Smtp_spool.count_from_disk spool_config >>| Or_error.ok_exn >>| printf "%d\n"
+        | `Configs (_, spool_config) -> on_disk ?client_side_filter spool_config
         | `Rpc client ->
           let open Deferred.Let_syntax in
-          dispatch ~which client >>| printf "%d\n"]
+          dispatch ~which ?client_side_filter client >>| printf "%d\n"]
   ;;
 end
 
