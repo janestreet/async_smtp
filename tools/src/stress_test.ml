@@ -172,7 +172,8 @@ let send ~config ~client_config envelope =
            >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
            >>| Or_error.join
            >>|? ignore)))
-     >>| Result.iter_error ~f:(Log.Global.error !"buh???: %{Error#hum}"))
+     >>| Result.iter_error ~f:(fun log_arg ->
+           [%log.global.error_format !"buh???: %{Error#hum}" log_arg]))
 ;;
 
 let main

@@ -562,12 +562,12 @@ let with_flow_and_component ~flows ~component t =
     ~on_error:
       (`Call
         (fun err ->
-          Log.Global.sexp
-            ~level:`Error
-            ~tags:
-              ([ Message.Tag.component, sprintf !"%{Component}" (component @ [ "_LOG" ]) ]
-               @ List.map flows ~f:(fun f -> Message.Tag.flow, f))
-            (Error.sexp_of_t err)))
+          [%log.global.error_sexp
+            Error.sexp_of_t err [@@tags
+                                  [ ( Message.Tag.component
+                                    , sprintf !"%{Component}" (component @ [ "_LOG" ]) )
+                                  ]
+                                  @ List.map flows ~f:(fun f -> Message.Tag.flow, f)]]))
     ()
 ;;
 
@@ -603,10 +603,8 @@ let adjust_log_levels
       ~on_error:
         (`Call
           (fun err ->
-            Log.Global.sexp
-              ~level:`Error
-              ~tags:[ Message.Tag.component, "_LOG" ]
-              (Error.sexp_of_t err)))
+            [%log.global.error_sexp
+              Error.sexp_of_t err [@@tags [ Message.Tag.component, "_LOG" ]]]))
       ()
 ;;
 

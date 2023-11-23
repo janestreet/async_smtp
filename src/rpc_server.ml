@@ -22,6 +22,6 @@ let start (config, server_events) ~log ~plugin_rpcs =
   let%bind _tcp_server =
     Rpc.Connection.serve ~implementations ~where_to_listen ~initial_connection_state ()
   in
-  Log.info log "RPC server listening on %d" (Server_config.rpc_port config);
+  [%log.info_format log "RPC server listening on %d" (Server_config.rpc_port config)];
   Deferred.unit
 ;;

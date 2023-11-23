@@ -29,7 +29,7 @@ module Monitor = struct
     in
     Log.Global.set_output (send_errors :: Log.Global.get_output ());
     Rpc.Pipe_rpc.implement Rpc_intf.Monitor.errors (fun () () ->
-      Log.Global.debug "received error stream subscription";
+      [%log.global.debug_string "received error stream subscription"];
       let pipe = Async_bus.pipe1_exn error_stream [%here] in
       return (Ok pipe))
   ;;
