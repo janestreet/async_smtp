@@ -45,7 +45,12 @@ val send
   :  Message.t
   -> log:Mail_log.t
   -> client_cache:Client_cache.t
-  -> [ `Delivered | `Failed of Error.t ] Or_error.t Deferred.t
+  -> on_error:
+       (log:Mail_log.t
+        -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
+        -> Smtp_reply.t
+        -> [ `Fail_permanently | `Try_later | `Done ] Deferred.t)
+  -> [> `Delivered | `Failed of Error.t ] Or_error.t Deferred.t
 
 val freeze : Message.t -> log:Mail_log.t -> unit Or_error.t Deferred.t
 

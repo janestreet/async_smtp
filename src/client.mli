@@ -44,7 +44,7 @@ module Envelope_status : sig
 
   type err =
     [ `Rejected_sender of Smtp_reply.t
-    | `No_recipients of rejected_recipients
+    | `Rejected_all_recipients of rejected_recipients
     | `Rejected_sender_and_recipients of Smtp_reply.t * rejected_recipients
     | `Rejected_body of Smtp_reply.t * rejected_recipients
     ]

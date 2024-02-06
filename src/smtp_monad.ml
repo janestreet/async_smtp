@@ -1,5 +1,6 @@
 open! Core
 open! Async
+module Reject_or_error = Reject_or_error
 
 type 'a t = ('a, Reject_or_error.t) Deferred.Result.t
 
@@ -24,6 +25,7 @@ end
 let ok t = t >>| Result.return
 let return_or_error ?tag ~here t = Deferred.return (Sync.of_or_error ?tag ~here t)
 let of_or_error ?tag ~here t = t >>| Sync.of_or_error ?tag ~here
+let to_or_error = Deferred.Result.map_error ~f:Reject_or_error.error
 let tag ~tag ?here t = t >>| Sync.tag ~tag ?here
 let tag' ?tag ?here t = t >>| Sync.tag' ?tag ?here
 

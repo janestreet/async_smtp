@@ -1,6 +1,7 @@
 open! Core
 open! Async
 open With_info
+module Reject_or_error = Reject_or_error
 
 type 'a t = ('a, Reject_or_error.t) Deferred.Result.t
 
@@ -19,6 +20,7 @@ val tag' : ?tag:string -> ('a t -> 'a t) with_maybe_here
 val ok : 'a Deferred.t -> 'a t
 
 val of_or_error : ('a Deferred.Or_error.t -> 'a t) with_tag
+val to_or_error : 'a t -> 'a Deferred.Or_error.t
 val return_or_error : ('a Or_error.t -> 'a t) with_tag
 
 (** Capture any raised exceptions as [Error]s. *)

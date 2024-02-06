@@ -203,7 +203,7 @@ let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_
   Client.Expert.send_envelope client ~log ~flows ~component ~send_data envelope_info
 ;;
 
-let send_to_hops t ~log ~client_cache data_file =
+let send_to_hops t ~log ~client_cache ~on_error data_file =
   let hops_tag =
     Sexp.to_string ([%sexp_of: Host_and_port.t list] (Message.next_hop_choices t))
   in
@@ -308,35 +308,54 @@ let send_to_hops t ~log ~client_cache data_file =
      | Error e ->
        (* We are being conservative here for simplicity - if we get a permanent error
           from one hop, we assume that we would get the same error from the remaining
-          hops. *)
+          hops, and call [on_error] to decide what to do. In order to send bounce
+          messages, [on_error] needs the full envelope. *)
+       let on_error ~log reply =
+         let load_envelope () =
+           let%map.Deferred.Or_error email =
+             On_disk_spool.Data_file.load data_file >>|? Message.Data.to_email
+           in
+           Smtp_envelope.create' ~info:(Message.envelope_info t) ~email
+         in
+         on_error ~log ~load_envelope reply
+       in
        (* Already logged by the client *)
        Message.add_relay_attempt t (Time_float.now (), e);
        (match envelope_status with
         | Ok (_ (* envelope_id *), rejected_recipients)
-        | Error (`No_recipients rejected_recipients) ->
-          let permanently_failed_recipients, temporarily_failed_recipients =
-            List.partition_map rejected_recipients ~f:(fun (recipient, reject) ->
-              if Smtp_reply.is_permanent_error reject
-              then First recipient
-              else Second recipient)
+        | Error (`Rejected_all_recipients rejected_recipients) ->
+          let%bind ( permanently_failed_recipients
+                   , temporarily_failed_recipients
+                   , _done_recipients )
+            =
+            Deferred.List.map
+              ~how:`Sequential
+              rejected_recipients
+              ~f:(fun (recipient, reject) ->
+              match%map on_error ~log reject with
+              | `Fail_permanently -> `Fst recipient
+              | `Try_later -> `Snd recipient
+              | `Done -> `Trd recipient)
+            >>| List.partition3_map ~f:Fn.id
           in
           Message.set_remaining_recipients t temporarily_failed_recipients;
           Message.set_failed_recipients
             t
             (Message.failed_recipients t @ permanently_failed_recipients);
-          if List.is_empty (Message.remaining_recipients t)
-          then return `Fail_permanently
-          else return `Try_later
+          (match
+             ( List.is_empty (Message.remaining_recipients t)
+             , List.is_empty (Message.failed_recipients t) )
+           with
+           | true, true -> return `Done
+           | true, false -> return `Fail_permanently
+           | false, false | false, true -> return `Try_later)
         | Error
             ( `Rejected_sender r
             | `Rejected_sender_and_recipients (r, _)
-            | `Rejected_body (r, _) ) ->
-          if Smtp_reply.is_permanent_error r
-          then return `Fail_permanently
-          else return `Try_later))
+            | `Rejected_body (r, _) ) -> on_error ~log r))
 ;;
 
-let do_send t ~log ~client_cache =
+let do_send t ~log ~client_cache ~on_error =
   let last_relay_error t =
     match Message.last_relay_attempt t with
     | None -> Error.of_string "No relay attempt"
@@ -344,7 +363,7 @@ let do_send t ~log ~client_cache =
   in
   with_file t (fun get_envelope ->
     Message.set_status t `Sending;
-    match%map send_to_hops t ~log ~client_cache get_envelope with
+    match%map send_to_hops t ~log ~client_cache ~on_error get_envelope with
     | `Done ->
       Message.set_status t `Delivered;
       Ok (`Unlink, `Delivered)
@@ -364,9 +383,9 @@ let do_send t ~log ~client_cache =
          Ok (`Sync_meta, `Failed delivery_failure)))
 ;;
 
-let send t ~log ~client_cache =
+let send t ~log ~client_cache ~on_error =
   match Message.status t with
-  | `Send_now | `Send_at _ -> do_send t ~log ~client_cache
+  | `Send_now | `Send_at _ -> do_send t ~log ~client_cache ~on_error
   | `Frozen -> return (Or_error.error_string "Message.send: message is frozen")
   | `Removed -> return (Or_error.error_string "Message.send: message is removed")
   | `Quarantined _ ->

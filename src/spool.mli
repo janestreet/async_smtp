@@ -57,7 +57,36 @@ type t
 (** Lock the spool directory and load all the files that are already present there. Note
     that for the purposes of locking, the spool directory assumed to NOT be on an NFS file
     system. *)
-val create : config:Config.t -> log:Mail_log.t -> unit -> t Deferred.Or_error.t
+val create
+  :  ?presend:(log:Mail_log.t -> Message.t -> [ `Send_now | `Send_at of Time_float.t ])
+       (** Immediately prior to sending a message, [presend] is called and can decide to delay
+      it to a later time. Example use case is rate limiting outbound messages.
+      default: `Send_now for all messages *)
+  -> ?on_error:
+       (log:Mail_log.t
+        -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
+        -> Message.t
+        -> Smtp_reply.t
+        -> [ `Fail_permanently | `Try_later | `Done ] Deferred.Or_error.t)
+       (** Upon receiving an error reply for a SMTP relay attempt, [on_error] is called to
+      determine how to handle the error. This callback can make decisions based on the
+      contents of the SMTP reply, the history of previous relay attempts, and other
+      information. `Fail_permanently will cause the message to be frozen (saved on disk
+      but not attempted again), while `Try_later will cause the message to be retried
+      according to [Message.retry_intervals]. `Done will cause the spool to treat the
+      message as handled. `Done can be used for [on-error] to let the spool know that it
+      has enqueued a bounce message to the sender of the failed message, and the spool
+      should stop worrying about the failed message.
+
+      Example use case is detecting and handling emails rate-limited or deemed malicious
+      by the recipient email server.
+
+      default: use [Smtp_reply.is_permanent_error] on the reply to choose between
+      `Fail_permanently and `Try_later, sends no bounce messages *)
+  -> config:Config.t
+  -> log:Mail_log.t
+  -> unit
+  -> t Deferred.Or_error.t
 
 (** Immediately write the message to disk and queue it for sending. The
     [Smtp_envelope.Routed.Batch.t list] represents the different "sections" of one

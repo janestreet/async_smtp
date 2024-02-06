@@ -191,6 +191,13 @@ type t =
   ; log : Log.t
   ; mutable is_killed : bool
   ; killed_and_flushed : unit Ivar.t
+  ; presend : log:Log.t -> Message.t -> [ `Send_now | `Send_at of Time_float.t ]
+  ; on_error :
+      log:Log.t
+      -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
+      -> Message.t
+      -> Smtp_reply.t
+      -> [ `Fail_permanently | `Try_later | `Done ] Deferred.t
   }
 [@@deriving fields ~getters ~iterators:create]
 
@@ -238,7 +245,74 @@ let unfrozen_event = with_event_writer ~f:Event.unfrozen
 let recovered_event t from_where = with_event_writer t ~f:(Event.recovered from_where)
 let quarantined_event t reason = with_event_writer t ~f:(Event.quarantined reason)
 
-let create ~config ~log : t Deferred.Or_error.t =
+let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
+  (* Wrap the [presend] and [on_error] callbacks to perform some logging and error
+     handling by default. *)
+  let presend ~log message =
+    let component = [ "spool"; "plugin-callback"; "presend" ] in
+    let flows = Message.flows message in
+    let decision =
+      presend ~log:(Log.with_flow_and_component ~flows ~component log) message
+    in
+    Log.info
+      log
+      (lazy
+        (Log.Message.create
+           ~here:[%here]
+           ~component
+           ~recipients:
+             (Message.remaining_recipients message
+              |> List.map ~f:(fun email -> `Email email))
+           ~spool_id:(Message.id message |> Message.Id.to_string)
+           ~flows
+           (Sexp.to_string
+              [%sexp (decision : [ `Send_now | `Send_at of Time_float_unix.t ])])));
+    decision
+  in
+  let on_error ~log ~load_envelope message reply =
+    let component = [ "spool"; "plugin-callback"; "on-error" ] in
+    let flows = Message.flows message in
+    let recipients =
+      Message.remaining_recipients message |> List.map ~f:(fun email -> `Email email)
+    in
+    let spool_id = Message.id message |> Message.Id.to_string in
+    match%map
+      Deferred.Or_error.try_with_join (fun () ->
+        on_error
+          ~log:(Log.with_flow_and_component ~flows ~component log)
+          ~load_envelope
+          message
+          reply)
+    with
+    | Ok decision ->
+      Log.info
+        log
+        (lazy
+          (Log.Message.create
+             ~here:[%here]
+             ~component
+             ~recipients
+             ~spool_id
+             ~reply
+             ~flows
+             (Sexp.to_string
+                [%sexp (decision : [ `Fail_permanently | `Try_later | `Done ])])));
+      decision
+    | Error error ->
+      Log.error
+        log
+        (lazy
+          (Log.Message.of_error
+             ~here:[%here]
+             ~component
+             ~recipients
+             ~spool_id
+             ~reply
+             ~flows
+             error));
+      (* Default to try later upon errors to give us more chances to handle the reject. *)
+      `Try_later
+  in
   let spool_dir = Config.spool_dir config in
   Log.info
     log
@@ -292,6 +366,8 @@ let create ~config ~log : t Deferred.Or_error.t =
     ~log
     ~is_killed:false
     ~killed_and_flushed
+    ~presend
+    ~on_error
 ;;
 
 let add_active_send_job t msgid =
@@ -368,7 +444,19 @@ let rec enqueue ?don't_retry ?at t spooled_msg =
   | `Send_now | `Send_at _ ->
     (match%bind
        with_spooled_message' t spooled_msg ~f:(fun () ->
-         Message_spool.send spooled_msg ~log:t.log ~client_cache:t.client_cache)
+         match
+           (* If we call [presend] before, the information it used to make the decision
+              may be outdated by the time we send. If we call [presend] after, the message
+              has already been sent. Calling [presend] here prevents both problems. *)
+           presend t spooled_msg ~log:t.log
+         with
+         | `Send_now ->
+           Message_spool.send
+             spooled_msg
+             ~log:t.log
+             ~client_cache:t.client_cache
+             ~on_error:(on_error t spooled_msg)
+         | `Send_at at -> Ok (`Delayed_to at) |> return)
      with
      | `Spool_is_killed -> return (Error spool_is_killed_error)
      | `Ok spool_send_result ->
@@ -388,6 +476,7 @@ let rec enqueue ?don't_retry ?at t spooled_msg =
           remove_message t spooled_msg;
           delivered_event t ~here:[%here] spooled_msg;
           return (Ok ())
+        | Ok (`Delayed_to at) -> enqueue ~at t spooled_msg
         | Ok (`Failed relay_attempt) ->
           (match don't_retry with
            | Some () -> return (Error relay_attempt)
@@ -519,8 +608,18 @@ let load t =
   return (Ok ())
 ;;
 
-let create ~config ~log () =
-  create ~config ~log
+let create
+  ?(presend = fun ~log:_ _message -> `Send_now)
+  ?(on_error =
+    fun ~log:_ ~load_envelope:_ _message reply ->
+      if Smtp_reply.is_permanent_error reply
+      then return (Ok `Fail_permanently)
+      else return (Ok `Try_later))
+  ~config
+  ~log
+  ()
+  =
+  internal_create ~presend ~on_error ~config ~log ()
   >>=? fun t ->
   let%bind () = uncheckout_all_entries t in
   load t >>=? fun () -> return (Ok t)

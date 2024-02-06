@@ -32,7 +32,7 @@ module Envelope_status = struct
 
   type err =
     [ `Rejected_sender of Smtp_reply.t
-    | `No_recipients of rejected_recipients
+    | `Rejected_all_recipients of rejected_recipients
     | `Rejected_sender_and_recipients of Smtp_reply.t * rejected_recipients
     | `Rejected_body of Smtp_reply.t * rejected_recipients
     ]
@@ -61,7 +61,7 @@ module Envelope_status = struct
            ~err:" but rejected recipients: "
            rejected_recipients)
     | Error (`Rejected_sender reject) -> sprintf !"Rejected sender (%{Smtp_reply})" reject
-    | Error (`No_recipients rejected_recipients) ->
+    | Error (`Rejected_all_recipients rejected_recipients) ->
       rejected_recipients_to_string
         ~ok:"No Recipients"
         ~err:"All recipients rejected: "
@@ -200,7 +200,8 @@ module Expert = struct
           Second (recipient, reply))
       >>|? List.partition_map ~f:Fn.id
       >>|? (function
-             | [], rejected_recipients -> Error (`No_recipients rejected_recipients)
+             | [], rejected_recipients ->
+               Error (`Rejected_all_recipients rejected_recipients)
              | accepted_recipients, rejected_recipients ->
                Ok (accepted_recipients, rejected_recipients))
       >>=?? fun (accepted_recipients, rejected_recipients) ->
