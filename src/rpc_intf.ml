@@ -7,7 +7,12 @@ let ( ^- ) a b = a ^ "-" ^ b
 let rpc ?(version = 0) (type q r) ~name q r =
   let module Q = (val q : Binable.S with type t = q) in
   let module R = (val r : Binable.S with type t = r) in
-  Rpc.Rpc.create ~name ~version ~bin_query:Q.bin_t ~bin_response:R.bin_t
+  Rpc.Rpc.create
+    ~name
+    ~version
+    ~bin_query:Q.bin_t
+    ~bin_response:R.bin_t
+    ~include_in_error_count:Only_on_exn
 ;;
 
 let pipe_rpc ?(version = 0) (type q r e) ~name q r e =
