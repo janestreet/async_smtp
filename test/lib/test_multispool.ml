@@ -52,9 +52,7 @@ let%expect_test "Spool Creation Fails" =
     let%bind result = chdir_create_and_open_spool ~tmp_dir in
     print_s ~tmp_dir [%sexp (result : Widgetspool.t Or_error.t)];
     [%expect
-      {|
-      (Error ("dir is not empty while creating new spool" (dir ${TMPDIR}/spool)))
-    |}];
+      {| (Error ("dir is not empty while creating new spool" (dir ${TMPDIR}/spool))) |}];
     return ())
 ;;
 
@@ -73,16 +71,16 @@ let%expect_test "File Behavior" =
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     [%expect
       {|
-        spool
-        spool/.data
-        spool/.registry
-        spool/.tmp
-        spool/queue1
-        spool/queue1/.checkout
-        spool/queue2
-        spool/queue2/.checkout
-        spool/queue3
-        spool/queue3/.checkout
+      spool
+      spool/.data
+      spool/.registry
+      spool/.tmp
+      spool/queue1
+      spool/queue1/.checkout
+      spool/queue2
+      spool/queue2/.checkout
+      spool/queue3
+      spool/queue3/.checkout
       |}];
     (* Enqueue a file, check its path(s) at various steps, and then remove it *)
     let data =
@@ -96,60 +94,58 @@ let%expect_test "File Behavior" =
     (* File exists in registry and queue *)
     [%expect
       {|
-        spool
-        spool/.data
-        spool/.data/q1_co_test_000000
-        spool/.registry
-        spool/.registry/q1_co_test_000000
-        spool/.tmp
-        spool/queue1
-        spool/queue1/.checkout
-        spool/queue1/q1_co_test_000000
-        spool/queue2
-        spool/queue2/.checkout
-        spool/queue3
-        spool/queue3/.checkout
+      spool
+      spool/.data
+      spool/.data/q1_co_test_000000
+      spool/.registry
+      spool/.registry/q1_co_test_000000
+      spool/.tmp
+      spool/queue1
+      spool/queue1/.checkout
+      spool/queue1/q1_co_test_000000
+      spool/queue2
+      spool/queue2/.checkout
+      spool/queue3
+      spool/queue3/.checkout
       |}];
     let%bind file_co = Widgetspool.Expert.checkout entry in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File exists in registry and checkout area *)
     [%expect
       {|
-        spool
-        spool/.data
-        spool/.data/q1_co_test_000000
-        spool/.registry
-        spool/.registry/q1_co_test_000000
-        spool/.tmp
-        spool/queue1
-        spool/queue1/.checkout
-        spool/queue1/.checkout/q1_co_test_000000
-        spool/queue2
-        spool/queue2/.checkout
-        spool/queue3
-        spool/queue3/.checkout
+      spool
+      spool/.data
+      spool/.data/q1_co_test_000000
+      spool/.registry
+      spool/.registry/q1_co_test_000000
+      spool/.tmp
+      spool/queue1
+      spool/queue1/.checkout
+      spool/queue1/.checkout/q1_co_test_000000
+      spool/queue2
+      spool/queue2/.checkout
+      spool/queue3
+      spool/queue3/.checkout
       |}];
     let%bind () = print_checkouts_unsafe spool Queue2 in
     [%expect {| |}];
     let%bind () = print_checkouts_unsafe spool Queue1 in
-    [%expect {|
-        q1_co_test_000000
-      |}];
+    [%expect {| q1_co_test_000000 |}];
     let%bind () = Widgetspool.Expert.Checked_out_entry.remove file_co in
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     (* File no longer exists *)
     [%expect
       {|
-        spool
-        spool/.data
-        spool/.registry
-        spool/.tmp
-        spool/queue1
-        spool/queue1/.checkout
-        spool/queue2
-        spool/queue2/.checkout
-        spool/queue3
-        spool/queue3/.checkout
+      spool
+      spool/.data
+      spool/.registry
+      spool/.tmp
+      spool/queue1
+      spool/queue1/.checkout
+      spool/queue2
+      spool/queue2/.checkout
+      spool/queue3
+      spool/queue3/.checkout
       |}];
     (* Enqueue some files and test nextname functionality *)
     let enqueue ~sn ~cust (queue : Widget.Queue.t) prefix text =
@@ -210,34 +206,34 @@ let%expect_test "File Behavior" =
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     [%expect
       {|
-        spool
-        spool/.data
-        spool/.data/q1prefix1_000000
-        spool/.data/q1prefix1_000001
-        spool/.data/q1prefix2_000000
-        spool/.data/q2prefix1_000000
-        spool/.data/q2prefix1_000001
-        spool/.data/q2prefix2_000000
-        spool/.registry
-        spool/.registry/q1prefix1_000000
-        spool/.registry/q1prefix1_000001
-        spool/.registry/q1prefix2_000000
-        spool/.registry/q2prefix1_000000
-        spool/.registry/q2prefix1_000001
-        spool/.registry/q2prefix2_000000
-        spool/.tmp
-        spool/queue1
-        spool/queue1/.checkout
-        spool/queue1/q1prefix1_000000
-        spool/queue1/q1prefix1_000001
-        spool/queue1/q1prefix2_000000
-        spool/queue2
-        spool/queue2/.checkout
-        spool/queue2/q2prefix1_000000
-        spool/queue2/q2prefix1_000001
-        spool/queue2/q2prefix2_000000
-        spool/queue3
-        spool/queue3/.checkout
+      spool
+      spool/.data
+      spool/.data/q1prefix1_000000
+      spool/.data/q1prefix1_000001
+      spool/.data/q1prefix2_000000
+      spool/.data/q2prefix1_000000
+      spool/.data/q2prefix1_000001
+      spool/.data/q2prefix2_000000
+      spool/.registry
+      spool/.registry/q1prefix1_000000
+      spool/.registry/q1prefix1_000001
+      spool/.registry/q1prefix2_000000
+      spool/.registry/q2prefix1_000000
+      spool/.registry/q2prefix1_000001
+      spool/.registry/q2prefix2_000000
+      spool/.tmp
+      spool/queue1
+      spool/queue1/.checkout
+      spool/queue1/q1prefix1_000000
+      spool/queue1/q1prefix1_000001
+      spool/queue1/q1prefix2_000000
+      spool/queue2
+      spool/queue2/.checkout
+      spool/queue2/q2prefix1_000000
+      spool/queue2/q2prefix1_000001
+      spool/queue2/q2prefix2_000000
+      spool/queue3
+      spool/queue3/.checkout
       |}];
     (* List files *)
     let%bind fentries1 = Widgetspool.list spool Queue1 in
@@ -248,10 +244,10 @@ let%expect_test "File Behavior" =
     print_s ~tmp_dir [%message "queue2 entries" (entries2 : string list)];
     [%expect
       {|
-        ("queue1 entries" (
-          entries1 (q1prefix1_000000 q1prefix1_000001 q1prefix2_000000)))
-        ("queue2 entries" (
-          entries2 (q2prefix1_000000 q2prefix1_000001 q2prefix2_000000)))
+      ("queue1 entries" (
+        entries1 (q1prefix1_000000 q1prefix1_000001 q1prefix2_000000)))
+      ("queue2 entries" (
+        entries2 (q2prefix1_000000 q2prefix1_000001 q2prefix2_000000)))
       |}];
     (* Checkout a file and move to a different queue *)
     let entry = Widgetspool.Entry.create spool Queue1 ~name:"q1prefix1_000000" in
@@ -260,34 +256,34 @@ let%expect_test "File Behavior" =
     let%bind () = system_or_error "find spool | /usr/bin/env -i sort" in
     [%expect
       {|
-        spool
-        spool/.data
-        spool/.data/q1prefix1_000000
-        spool/.data/q1prefix1_000001
-        spool/.data/q1prefix2_000000
-        spool/.data/q2prefix1_000000
-        spool/.data/q2prefix1_000001
-        spool/.data/q2prefix2_000000
-        spool/.registry
-        spool/.registry/q1prefix1_000000
-        spool/.registry/q1prefix1_000001
-        spool/.registry/q1prefix2_000000
-        spool/.registry/q2prefix1_000000
-        spool/.registry/q2prefix1_000001
-        spool/.registry/q2prefix2_000000
-        spool/.tmp
-        spool/queue1
-        spool/queue1/.checkout
-        spool/queue1/q1prefix1_000001
-        spool/queue1/q1prefix2_000000
-        spool/queue2
-        spool/queue2/.checkout
-        spool/queue2/q1prefix1_000000
-        spool/queue2/q2prefix1_000000
-        spool/queue2/q2prefix1_000001
-        spool/queue2/q2prefix2_000000
-        spool/queue3
-        spool/queue3/.checkout
+      spool
+      spool/.data
+      spool/.data/q1prefix1_000000
+      spool/.data/q1prefix1_000001
+      spool/.data/q1prefix2_000000
+      spool/.data/q2prefix1_000000
+      spool/.data/q2prefix1_000001
+      spool/.data/q2prefix2_000000
+      spool/.registry
+      spool/.registry/q1prefix1_000000
+      spool/.registry/q1prefix1_000001
+      spool/.registry/q1prefix2_000000
+      spool/.registry/q2prefix1_000000
+      spool/.registry/q2prefix1_000001
+      spool/.registry/q2prefix2_000000
+      spool/.tmp
+      spool/queue1
+      spool/queue1/.checkout
+      spool/queue1/q1prefix1_000001
+      spool/queue1/q1prefix2_000000
+      spool/queue2
+      spool/queue2/.checkout
+      spool/queue2/q1prefix1_000000
+      spool/queue2/q2prefix1_000000
+      spool/queue2/q2prefix1_000001
+      spool/queue2/q2prefix2_000000
+      spool/queue3
+      spool/queue3/.checkout
       |}];
     (* Use iter_exn to visit each file in queue2 in turn *)
     let%bind reader2 = Widgetspool.Queue_reader.create spool Queue2 in
@@ -303,14 +299,14 @@ let%expect_test "File Behavior" =
     in
     [%expect
       {|
-        (Sprocket "Hello, world 1! q1prefix1_000000")
-            Data: ((serial_number 1000000) (customer "Acme Corporation"))
-        (Sprocket "Hello, world 4! q2prefix1_000000")
-            Data: ((serial_number 2000001) (customer "Consolidated Amalgamated"))
-        (Sprocket "Hello, world 6! q2prefix1_000001")
-            Data: ((serial_number 4444444) (customer "XYZ Co."))
-        (Sprocket "Hello, world 5! q2prefix2_000000")
-            Data: ((serial_number 2000002) (customer "ABC Co."))
+      (Sprocket "Hello, world 1! q1prefix1_000000")
+          Data: ((serial_number 1000000) (customer "Acme Corporation"))
+      (Sprocket "Hello, world 4! q2prefix1_000000")
+          Data: ((serial_number 2000001) (customer "Consolidated Amalgamated"))
+      (Sprocket "Hello, world 6! q2prefix1_000001")
+          Data: ((serial_number 4444444) (customer "XYZ Co."))
+      (Sprocket "Hello, world 5! q2prefix2_000000")
+          Data: ((serial_number 2000002) (customer "ABC Co."))
       |}];
     (* Update a Sprocket *)
     let entry = Widgetspool.Entry.create spool Queue2 ~name:"q2prefix1_000000" in
@@ -331,11 +327,11 @@ let%expect_test "File Behavior" =
     in
     [%expect
       {|
-        Replacing '(Sprocket "Hello, world 4! q2prefix1_000000")' with '(Cog 42)' ...
-        (Sprocket "Hello, world 1! q1prefix1_000000")
-        (Cog 42)
-        (Sprocket "Hello, world 6! q2prefix1_000001")
-        (Sprocket "Hello, world 5! q2prefix2_000000")
+      Replacing '(Sprocket "Hello, world 4! q2prefix1_000000")' with '(Cog 42)' ...
+      (Sprocket "Hello, world 1! q1prefix1_000000")
+      (Cog 42)
+      (Sprocket "Hello, world 6! q2prefix1_000001")
+      (Sprocket "Hello, world 5! q2prefix2_000000")
       |}];
     return ())
   |> Deferred.Or_error.ok_exn
@@ -405,8 +401,7 @@ let%expect_test "Monitor: Empty" =
   let open Deferred.Or_error.Let_syntax in
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = run_once_and_print_problems monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -416,8 +411,7 @@ let%expect_test "Monitor: Queue entry, no issues" =
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch Registry "foo" in
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -427,8 +421,7 @@ let%expect_test "Monitor: Checkout entry, no issues" =
   with_spool_and_monitor (fun _ monitor ->
     let%bind () = touch Registry "foo" in
     let%bind () = touch (Queue_checkout Queue1) "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -439,8 +432,7 @@ let%expect_test "Monitor: Queue entry with temporary file, no issues" =
     let%bind () = touch Registry "foo" in
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" in
     let%bind () = touch Tmp "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -451,15 +443,14 @@ let%expect_test "Monitor: No entries for registered file" =
     let%bind () = touch Registry "foo" ~monitor in
     [%expect
       {|
-        ((
-          Orphaned
-          ((filename foo)
-           (mtime    <omitted>))
-          Registry))
+      ((
+        Orphaned
+        ((filename foo)
+         (mtime    <omitted>))
+        Registry))
       |}];
     let%bind () = rm Registry "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -472,14 +463,13 @@ let%expect_test "Monitor: Duplicate entries for registered file" =
     let%bind () = touch (Queue Widget.Queue.Queue2) "foo" ~monitor in
     [%expect
       {|
-        ((
-          Duplicated
-          ((filename foo)    (mtime <omitted>))
-          ((Queue    Queue1) (Queue Queue2))))
+      ((
+        Duplicated
+        ((filename foo)    (mtime <omitted>))
+        ((Queue    Queue1) (Queue Queue2))))
       |}];
     let%bind () = rm (Queue Widget.Queue.Queue2) "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -490,15 +480,14 @@ let%expect_test "Monitor: Temporary file not registered" =
     let%bind () = touch Tmp "foo" ~monitor in
     [%expect
       {|
-        ((
-          Orphaned
-          ((filename foo)
-           (mtime    <omitted>))
-          Tmp))
+      ((
+        Orphaned
+        ((filename foo)
+         (mtime    <omitted>))
+        Tmp))
       |}];
     let%bind () = rm Tmp "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -509,15 +498,14 @@ let%expect_test "Monitor: Checkout entry not registered" =
     let%bind () = touch (Queue_checkout Queue1) "foo" ~monitor in
     [%expect
       {|
-        ((
-          Orphaned
-          ((filename foo)
-           (mtime    <omitted>))
-          (Queue_checkout Queue1)))
+      ((
+        Orphaned
+        ((filename foo)
+         (mtime    <omitted>))
+        (Queue_checkout Queue1)))
       |}];
     let%bind () = rm (Queue_checkout Queue1) "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -528,15 +516,14 @@ let%expect_test "Monitor: Data file not registered" =
     let%bind () = touch Data "foo" ~monitor in
     [%expect
       {|
-        ((
-          Orphaned
-          ((filename foo)
-           (mtime    <omitted>))
-          Data))
+      ((
+        Orphaned
+        ((filename foo)
+         (mtime    <omitted>))
+        Data))
       |}];
     let%bind () = rm Data "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -547,15 +534,14 @@ let%expect_test "Monitor: Queue entry not registered" =
     let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
     [%expect
       {|
-        ((
-          Orphaned
-          ((filename foo)
-           (mtime    <omitted>))
-          (Queue Queue1)))
+      ((
+        Orphaned
+        ((filename foo)
+         (mtime    <omitted>))
+        (Queue Queue1)))
       |}];
     let%bind () = rm (Queue Widget.Queue.Queue1) "foo" ~monitor in
-    [%expect {|
-      () |}];
+    [%expect {| () |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -567,12 +553,12 @@ let%expect_test "Monitor: Checked out entry too old" =
     let%bind () = touch (Queue_checkout Queue1) "foo" ~monitor in
     [%expect
       {|
-         ((
-           Too_old
-           ((filename foo)
-            (mtime    <omitted>))
-           (Queue_checkout Queue1)))
-       |}];
+      ((
+        Too_old
+        ((filename foo)
+         (mtime    <omitted>))
+        (Queue_checkout Queue1)))
+      |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -585,12 +571,12 @@ let%expect_test "Monitor: Temporary file too old" =
     let%bind () = touch Tmp "foo" ~monitor in
     [%expect
       {|
-         ((
-           Too_old
-           ((filename foo)
-            (mtime    <omitted>))
-           Tmp))
-       |}];
+      ((
+        Too_old
+        ((filename foo)
+         (mtime    <omitted>))
+        Tmp))
+      |}];
     return ())
   |> Deferred.Or_error.ok_exn
 ;;
@@ -609,7 +595,7 @@ let%expect_test "Monitor: Queue entry too old" =
            ((filename foo)
             (mtime    <omitted>))
            (Queue Queue1)))
-       |}];
+         |}];
       return ())
   |> Deferred.Or_error.ok_exn
 ;;

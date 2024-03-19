@@ -83,7 +83,8 @@ module Stable = struct
       [%expect
         {|
         db5918f58da395e473ed9b97958e8d8a
-        5b76311e900f8dc0bf791313602726be |}]
+        5b76311e900f8dc0bf791313602726be
+        |}]
     ;;
 
     let of_v2 =

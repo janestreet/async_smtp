@@ -119,13 +119,13 @@ let normalize_whitespace s =
 let%expect_test _ =
   let test s = printf "%S\n" (normalize_whitespace s) in
   test "";
-  [%expect {|""|}];
+  [%expect {| "" |}];
   test "     ";
-  [%expect {|""|}];
+  [%expect {| "" |}];
   test "a b c d, e, f, g";
-  [%expect {|"a b c d, e, f, g"|}];
+  [%expect {| "a b c d, e, f, g" |}];
   test "  a b   c\n d, e  \r  , \n f,g  \n ";
-  [%expect {|"a b c d, e, f, g"|}]
+  [%expect {| "a b c d, e, f, g" |}]
 ;;
 
 let normalize_whitespace_headers cond =

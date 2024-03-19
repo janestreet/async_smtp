@@ -100,9 +100,9 @@ let%test_module _ =
         Ivar.fill_exn ivar ();
         let%bind () = pipeline in
         [%expect {|
-        Stopping [dequeue]...
-        Stopped.
-      |}];
+          Stopping [dequeue]...
+          Stopped.
+          |}];
         return ())
     ;;
 
@@ -119,19 +119,19 @@ let%test_module _ =
         let%bind () = print_queue spool Widget.Queue.Queue2 in
         [%expect
           {|
-        Dequeued and moved all expected widgets.
-        Contents of queue2:
-            (Cog 0)
-            (Cog 1)
-            (Cog 2)
-            (Cog 3)
-            (Cog 4)
-            (Cog 5)
-            (Cog 6)
-            (Cog 7)
-            (Cog 8)
-            (Cog 9)
-      |}];
+          Dequeued and moved all expected widgets.
+          Contents of queue2:
+              (Cog 0)
+              (Cog 1)
+              (Cog 2)
+              (Cog 3)
+              (Cog 4)
+              (Cog 5)
+              (Cog 6)
+              (Cog 7)
+              (Cog 8)
+              (Cog 9)
+          |}];
         return ())
     ;;
 
@@ -144,9 +144,7 @@ let%test_module _ =
         in
         let%bind () = enqueue spool ~iterations in
         let%bind () = pipeline in
-        [%expect {|
-        Dequeued and moved all expected widgets.
-      |}];
+        [%expect {| Dequeued and moved all expected widgets. |}];
         return ())
     ;;
   end)

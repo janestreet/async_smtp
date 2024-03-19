@@ -27,7 +27,7 @@ let%expect_test "Smtp_expect_test_helper.smtp" =
     < 250 Ok: continue
     > QUIT
     < 221 closing connection
-           |}];
+    |}];
   return ()
 ;;
 
