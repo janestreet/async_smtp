@@ -27,7 +27,7 @@ depends: [
   "textutils"
   "base64"         {>= "3.4.0"}
   "cryptokit"      {>= "1.16" & < "1.17"}
-  "dune"           {>= "2.0.0"}
+  "dune"           {>= "3.11.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "SMTP client and server"
