@@ -1,3 +1,13 @@
+## Release v0.17.0
+
+- In the `Envelope_status` module, rename the `No_recipients` constructor to `Rejected_all_recipients`
+
+- Add the following callbacks to `Spool.create`:
+  - `presend`: Called immediately prior to sending a message. This can be used to delay a message (e.g. due to rate limiting)
+  - `on_error`: Called after receiving an SMTP response. This can be used to determine how to handle the error code.
+  
+- Expose an optional credentials argument in the SMTP client connection pool
+
 ## Release v0.16.0
 
 - `Mail_fingerprint.of_email` now accepts an additional `compute_md5` parameter, allowing
