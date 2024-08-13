@@ -33,26 +33,26 @@ module Id = struct
 end
 
 module Server = Smtp_server.Make (struct
-  open Smtp_monad.Let_syntax
-  module State = Smtp_server.Plugin.Simple.State
-  module Session = Smtp_server.Plugin.Simple.Session
+    open Smtp_monad.Let_syntax
+    module State = Smtp_server.Plugin.Simple.State
+    module Session = Smtp_server.Plugin.Simple.Session
 
-  module Envelope = struct
-    include Smtp_server.Plugin.Simple.Envelope
+    module Envelope = struct
+      include Smtp_server.Plugin.Simple.Envelope
 
-    let process ~state:_ ~log:_ ~flows:_ _session t email =
-      let envelope = smtp_envelope t email in
-      let id, envelope' = Id.untag_exn envelope in
-      Option.iter id ~f:(fun id ->
-        match Hashtbl.find messages id with
-        | None -> ()
-        | Some ivar -> Ivar.fill_exn ivar envelope');
-      return "Message consumed"
-    ;;
-  end
+      let process ~state:_ ~log:_ ~flows:_ _session t email =
+        let envelope = smtp_envelope t email in
+        let id, envelope' = Id.untag_exn envelope in
+        Option.iter id ~f:(fun id ->
+          match Hashtbl.find messages id with
+          | None -> ()
+          | Some ivar -> Ivar.fill_exn ivar envelope');
+        return "Message consumed"
+      ;;
+    end
 
-  let rpcs () = []
-end)
+    let rpcs () = []
+  end)
 
 let start_exn config ~log =
   let%map _server = Server.start ~server_state:() ~log ~config >>| Or_error.ok_exn in
@@ -70,12 +70,12 @@ let send_receive log ?(timeout = sec 10.) address envelope =
       ~config:Smtp_client.Config.default
       address
       ~f:(fun client ->
-      let envelope' = Id.tag id envelope in
-      Smtp_client.send_envelope ~log client envelope'
-      >>=? function
-      | Ok _ -> Deferred.Or_error.ok_unit
-      | Error _ as status ->
-        Deferred.Or_error.errorf !"%{Smtp_client.Envelope_status}" status)
+        let envelope' = Id.tag id envelope in
+        Smtp_client.send_envelope ~log client envelope'
+        >>=? function
+        | Ok _ -> Deferred.Or_error.ok_unit
+        | Error _ as status ->
+          Deferred.Or_error.errorf !"%{Smtp_client.Envelope_status}" status)
   with
   | Error e ->
     Hashtbl.remove messages id;

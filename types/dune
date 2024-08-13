@@ -1,7 +1,8 @@
 (library
  (name async_smtp_types)
  (public_name async_smtp.types)
- (libraries async base64 core email_message)
+ (libraries async base64 core core_unix email_message.email_address
+   email_message re2 core_unix.time_float_unix)
  (preprocess
   (pps ppx_jane)))
 

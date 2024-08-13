@@ -342,9 +342,9 @@ module Make (Cb : Plugin.S) = struct
           (match
              Cb.Session.extensions ~state session
              |> List.find_map ~f:(function
-                  | Plugin.Extension.Start_tls cb ->
-                    Option.map tls_options ~f:(fun opts -> opts, cb)
-                  | _ -> None)
+               | Plugin.Extension.Start_tls cb ->
+                 Option.map tls_options ~f:(fun opts -> opts, cb)
+               | _ -> None)
            with
            | None ->
              let%bind () =
@@ -454,9 +454,9 @@ module Make (Cb : Plugin.S) = struct
           let%bind () =
             Ssl.Connection.closed tls
             >>| Result.iter_error ~f:(fun e ->
-                  Log.error
-                    log
-                    (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e)))
+              Log.error
+                log
+                (lazy (Log.Message.of_error ~here:[%here] ~flows ~component e)))
           in
           Reader.close new_reader
         in
@@ -492,10 +492,10 @@ module Make (Cb : Plugin.S) = struct
       match
         Cb.Session.extensions ~state session
         |> List.find_map ~f:(function
-             | Plugin.Extension.Auth
-                 ((module Auth : Plugin.Auth with type session = Cb.Session.t) as auth) ->
-               Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
-             | _ -> None)
+          | Plugin.Extension.Auth
+              ((module Auth : Plugin.Auth with type session = Cb.Session.t) as auth) ->
+            Option.some_if (String.Caseless.equal meth Auth.mechanism) auth
+          | _ -> None)
       with
       | None ->
         command_not_implemented
@@ -1032,16 +1032,16 @@ module Make (Cb : Plugin.S) = struct
               ~timeouts:config.timeouts
               ())
           >>| Result.iter_error ~f:(fun err ->
-                Log.error
-                  log
-                  (lazy
-                    (Log.Message.of_error
-                       ~here:[%here]
-                       ~flows:session_flows
-                       ~component:[ "smtp-server"; "tcp" ]
-                       ~local_ip_address
-                       ~remote_ip_address
-                       err))))
+            Log.error
+              log
+              (lazy
+                (Log.Message.of_error
+                   ~here:[%here]
+                   ~flows:session_flows
+                   ~component:[ "smtp-server"; "tcp" ]
+                   ~local_ip_address
+                   ~remote_ip_address
+                   err))))
     in
     Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:start_server
   ;;

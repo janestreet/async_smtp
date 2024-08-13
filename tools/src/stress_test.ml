@@ -168,12 +168,12 @@ let send ~config ~client_config envelope =
            (Host_and_port.create ~host ~port)
            ~config:client_config
            ~f:(fun client ->
-           Smtp_client.send_envelope client ~log envelope
-           >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
-           >>| Or_error.join
-           >>|? ignore)))
+             Smtp_client.send_envelope client ~log envelope
+             >>|? Smtp_client.Envelope_status.ok_or_error ~allow_rejected_recipients:false
+             >>| Or_error.join
+             >>|? ignore)))
      >>| Result.iter_error ~f:(fun log_arg ->
-           [%log.global.error_format !"buh???: %{Error#hum}" log_arg]))
+       [%log.global.error_format !"buh???: %{Error#hum}" log_arg]))
 ;;
 
 let main
@@ -221,7 +221,7 @@ let main
   in
   let envelopes = List.init num_copies ~f:(fun _ -> envelopes) |> List.concat in
   throttle
-    := Throttle.create ~continue_on_error:true ~max_concurrent_jobs:concurrent_senders;
+  := Throttle.create ~continue_on_error:true ~max_concurrent_jobs:concurrent_senders;
   let%bind server_config, client_config =
     Config.server_and_client_config ~concurrent_receivers config
   in
@@ -294,8 +294,8 @@ let command =
       let dir =
         flag "-dir" (optional string) ~doc:" Working dir"
         |> map ~f:(function
-             | Some dir -> dir
-             | None -> Core_unix.mkdtemp "/tmp/stress-test-")
+          | Some dir -> dir
+          | None -> Core_unix.mkdtemp "/tmp/stress-test-")
       and host =
         flag
           "-host"

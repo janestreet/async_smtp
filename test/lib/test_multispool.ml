@@ -5,9 +5,9 @@ open Expect_test_helpers_core
 open Expect_test_helpers_async
 
 module Widgetspool = Multispool.Make (struct
-  include Widget
-  module Name_generator = Common.Test_name_generator
-end)
+    include Widget
+    module Name_generator = Common.Test_name_generator
+  end)
 
 let chdir_or_error dir =
   Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () -> Sys.chdir dir)
@@ -338,9 +338,9 @@ let%expect_test "File Behavior" =
 ;;
 
 module Widgetspool_monitor = Multispool.Monitor.Make (struct
-  include Widget
-  module Name_generator = Common.Test_name_generator
-end)
+    include Widget
+    module Name_generator = Common.Test_name_generator
+  end)
 
 let create_spool_and_monitor
   ?(max_checked_out_age = Time_float.Span.of_day 1.)
@@ -590,12 +590,12 @@ let%expect_test "Monitor: Queue entry too old" =
       let%bind () = touch (Queue Widget.Queue.Queue1) "foo" ~monitor in
       [%expect
         {|
-         ((
-           Too_old
-           ((filename foo)
-            (mtime    <omitted>))
-           (Queue Queue1)))
-         |}];
+        ((
+          Too_old
+          ((filename foo)
+           (mtime    <omitted>))
+          (Queue Queue1)))
+        |}];
       return ())
   |> Deferred.Or_error.ok_exn
 ;;

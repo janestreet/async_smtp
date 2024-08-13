@@ -17,7 +17,7 @@ Users wishing to act as SMTP clients (i.e. to send an email) should look at the
   Simplemail.send
     ~to_:[Email_address.of_string_exn "example@example.com"]
     ~subject:"Example message"
-    (Simplemail.Content.text "This is an example message.")
+    (Simplemail.Content.text_utf8 "This is an example message.")
 #+END_SRC
 
 ~async_smtp~ supports more advanced features including TLS and various modes of

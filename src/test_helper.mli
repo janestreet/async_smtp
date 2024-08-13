@@ -89,8 +89,8 @@ val manual_client
       -> server:(string -> unit Deferred.t)
       -> unit Deferred.t)
      -> unit Deferred.t)
-    server_flags
-    smtp_flags
+      server_flags
+      smtp_flags
 
 (** Like [manual_client] but you provide the server side of the protocol.
 
@@ -101,5 +101,5 @@ val manual_server
          -> server:(string -> unit Deferred.t)
          -> unit Deferred.t)
      -> unit Deferred.t)
-    client_flags
-    smtp_flags
+      client_flags
+      smtp_flags

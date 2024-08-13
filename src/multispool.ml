@@ -939,9 +939,9 @@ module Monitor = struct
           t.private_problems
           ~init:Problem.Set.empty
           ~f:(fun ~key:problem ~data:count new_problems ->
-          if count > alert_after_cycles
-          then Set.add new_problems problem
-          else new_problems)
+            if count > alert_after_cycles
+            then Set.add new_problems problem
+            else new_problems)
       in
       let starts = Set.to_list (Set.diff new_problems old_problems) in
       let ends = Set.to_list (Set.diff old_problems new_problems) in

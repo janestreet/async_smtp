@@ -25,21 +25,21 @@ end = struct
 end
 
 module For_string = Make (struct
-  include String
+    include String
 
-  let drop_first_char t = slice t 1 (length t)
-  let to_string_monoid = String_monoid.of_string
-end)
+    let drop_first_char t = slice t 1 (length t)
+    let to_string_monoid = String_monoid.of_string
+  end)
 
 let decode_line_string = For_string.decode
 let encode_line_string = For_string.encode
 
 module For_bigstring = Make (struct
-  include Bigstring
+    include Bigstring
 
-  let drop_first_char t = sub_shared t ~pos:1 ~len:(length t - 1)
-  let to_string_monoid = String_monoid.of_bigstring
-end)
+    let drop_first_char t = sub_shared t ~pos:1 ~len:(length t - 1)
+    let to_string_monoid = String_monoid.of_bigstring
+  end)
 
 let decode_line_bigstring = For_bigstring.decode
 let encode_line_bigstring = For_bigstring.encode

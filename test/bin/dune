@@ -1,7 +1,8 @@
 (executables
  (modes byte exe)
  (names envelope_selector spool_memory_test test_spool)
- (libraries async_smtp async_smtp_types core_unix.command_unix core
-   email_message core_unix.filename_unix test_async_smtp)
+ (libraries async async_smtp async_smtp_types core_unix.command_unix core
+   email_message.email_address email_message core_unix.filename_unix
+   test_async_smtp)
  (preprocess
   (pps ppx_jane)))

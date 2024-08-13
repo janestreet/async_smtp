@@ -140,8 +140,8 @@ let create_inbound_envelope t message =
   let sender =
     Message.sender message
     |> Option.map ~f:(function
-         | `String str -> str
-         | `Sender sender -> Smtp_envelope.Sender.to_string sender)
+      | `String str -> str
+      | `Sender sender -> Smtp_envelope.Sender.to_string sender)
   in
   inbound_envelope.Inbound_envelope.mail_from <- sender;
   t.inbound_envelopes <- inbound_envelope :: t.inbound_envelopes
@@ -175,7 +175,7 @@ let create_outbound_envelope t message =
   Option.iter inbound_envelope ~f:(fun in_ ->
     let out = Outbound_envelope.create outbound_id in
     in_.Inbound_envelope.outbound_envelopes
-      <- out :: in_.Inbound_envelope.outbound_envelopes;
+    <- out :: in_.Inbound_envelope.outbound_envelopes;
     let recipients =
       Smtp_mail_log.Message.recipients message
       |> Option.value_map

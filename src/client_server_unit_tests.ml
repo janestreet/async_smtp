@@ -90,10 +90,10 @@ let%test_module _ =
                    ~config:client_config
                    (Host_and_port.create ~host:"localhost" ~port)
                    ~f:(fun client ->
-                   [%test_result: bool] (Client.is_using_tls client) ~expect:expect_tls;
-                   Client.send_envelope ~log client envelope
-                   >>|? Client.Envelope_status.ok_exn ~allow_rejected_recipients:false
-                   >>|? ignore)
+                     [%test_result: bool] (Client.is_using_tls client) ~expect:expect_tls;
+                     Client.send_envelope ~log client envelope
+                     >>|? Client.Envelope_status.ok_exn ~allow_rejected_recipients:false
+                     >>|? ignore)
                  >>| Or_error.ok_exn
                ; (let%map envelope' = Ivar.read finished in
                   if Smtp_envelope.compare envelope envelope' <> 0

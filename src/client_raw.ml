@@ -14,7 +14,7 @@ module Peer_info = struct
     ; greeting : string Set_once.Stable.V1.t
     ; hello :
         [ `Simple of string | `Extended of string * Smtp_extension.t list ]
-        Set_once.Stable.V1.t
+          Set_once.Stable.V1.t
     }
   [@@deriving sexp_of, fields ~getters ~fields]
 
@@ -86,8 +86,7 @@ end
 type t =
   { config : Config.t
   ; flows : Log.Flows.t (* The only allowed transition is from Plain to Tls. *)
-  ; mutable
-      mode :
+  ; mutable mode :
       [ `Bsmtp of Bsmtp.t
       | `Plain of Plain.t
       | `Emulate_tls_for_test of Plain.t
@@ -528,19 +527,19 @@ let maybe_start_tls t ~log ~component =
    | Some tls_options ->
      send_receive t ~log ~component ~here:[%here] Smtp_command.Start_tls
      >>=? (function
-     | `Bsmtp -> return (Ok ())
-     | `Received { Smtp_reply.code = `Service_ready_220; _ } ->
-       do_start_tls t ~log ~component tls_options
-     | `Received
-         { Smtp_reply.code =
-             ( `Command_not_recognized_500
-             | `Command_not_implemented_502
-             | `Parameter_not_implemented_504
-             | `Tls_temporarily_unavailable_454 )
-         ; _
-         } -> return (Ok ())
-     | `Received reply ->
-       return (Or_error.errorf !"Unexpected response to STARTTLS: %{Smtp_reply}" reply)))
+      | `Bsmtp -> return (Ok ())
+      | `Received { Smtp_reply.code = `Service_ready_220; _ } ->
+        do_start_tls t ~log ~component tls_options
+      | `Received
+          { Smtp_reply.code =
+              ( `Command_not_recognized_500
+              | `Command_not_implemented_502
+              | `Parameter_not_implemented_504
+              | `Tls_temporarily_unavailable_454 )
+          ; _
+          } -> return (Ok ())
+      | `Received reply ->
+        return (Or_error.errorf !"Unexpected response to STARTTLS: %{Smtp_reply}" reply)))
   >>=? fun () -> return (check_tls_security t)
 ;;
 
@@ -633,8 +632,8 @@ let maybe_auth t ~log ~component ~credentials =
   | _ ->
     return (Credentials.get_auth_client credentials ~tls:(is_using_tls t) (extensions t))
     >>=? (function
-    | `Anon -> Deferred.Or_error.ok_unit
-    | `Auth_with auth -> do_auth t ~log ~component auth)
+     | `Anon -> Deferred.Or_error.ok_unit
+     | `Auth_with auth -> do_auth t ~log ~component auth)
 ;;
 
 let with_quit t ~log ~component ~f =

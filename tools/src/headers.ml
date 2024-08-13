@@ -61,15 +61,15 @@ let match_header conds =
       conds
       ~init:Email_headers.Name.Map.empty
       ~f:(fun acc { Config.Header_cond.name; if_ } ->
-      let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
-      let cond =
-        match if_ with
-        | None -> cond
-        | Some (`Contains s) ->
-          let re = Re2.escape s |> Re2.create_exn in
-          fun ~name ~value -> cond ~name ~value && Re2.matches re value
-      in
-      Map.add_multi acc ~key:name ~data:cond)
+        let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
+        let cond =
+          match if_ with
+          | None -> cond
+          | Some (`Contains s) ->
+            let re = Re2.escape s |> Re2.create_exn in
+            fun ~name ~value -> cond ~name ~value && Re2.matches re value
+        in
+        Map.add_multi acc ~key:name ~data:cond)
   in
   fun ~name ~value ->
     match Map.find conds name with
@@ -83,15 +83,15 @@ let match_listed_header conds =
       conds
       ~init:Email_headers.Name.Map.empty
       ~f:(fun acc { Config.Listed_header_cond.name; if_; remove_duplicates } ->
-      let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
-      let cond =
-        match if_ with
-        | None -> cond
-        | Some (`Contains s) ->
-          let re = Re2.escape s |> Re2.create_exn in
-          fun ~name ~value -> cond ~name ~value && Re2.matches re value
-      in
-      Map.add_multi acc ~key:name ~data:(cond, remove_duplicates))
+        let cond ~name:other ~value:_ = Email_headers.Name.equal name other in
+        let cond =
+          match if_ with
+          | None -> cond
+          | Some (`Contains s) ->
+            let re = Re2.escape s |> Re2.create_exn in
+            fun ~name ~value -> cond ~name ~value && Re2.matches re value
+        in
+        Map.add_multi acc ~key:name ~data:(cond, remove_duplicates))
   in
   fun ~name ~value ->
     match Map.find conds name with

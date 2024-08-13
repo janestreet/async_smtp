@@ -127,8 +127,8 @@ module Resource = struct
            ~log
            (Address_and_route.address address)
            ~f:(fun client ->
-           Ivar.fill_exn result (Ok client);
-           Ivar.read close_finished |> Deferred.ok)
+             Ivar.fill_exn result (Ok client);
+             Ivar.read close_finished |> Deferred.ok)
        with
        | Ok () -> ()
        | Error e ->

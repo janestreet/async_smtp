@@ -7,11 +7,11 @@ module type With_info =
   Envelope_container_intf.With_info with type envelope_info := Envelope_info.t
 
 module Make_with_headers (S : sig
-  type t
+    type t
 
-  val headers : t -> Email_headers.t
-  val set_headers : t -> Email_headers.t -> t
-end) =
+    val headers : t -> Email_headers.t
+    val set_headers : t -> Email_headers.t -> t
+  end) =
 struct
   include S
 
@@ -66,14 +66,19 @@ struct
       Email_headers.smash_and_add ?normalize headers ~name ~value)
   ;;
 
-  let subject_decoded t = last_header t "Subject" ~normalize:`Whitespace_and_encoded_words
+  let subject_decoded t =
+    last_header
+      t
+      "Subject"
+      ~normalize:(`Whitespace_and_encoding (`Any_charset, `Pretend_all_charsets_are_same))
+  ;;
 end
 
 module Make_with_info (S : sig
-  type t
+    type t
 
-  val info : t -> Envelope_info.t
-end) =
+    val info : t -> Envelope_info.t
+  end) =
 struct
   include S
 

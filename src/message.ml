@@ -338,32 +338,32 @@ let of_envelope_batch
     ~how:`Sequential
     (Smtp_envelope.Routed.Batch.envelopes envelope_batch)
     ~f:(fun envelope ->
-    let headers =
-      Smtp_envelope.Bodiless.Routed.headers envelope
-      |> Data.map_headers ~encode_or_decode:`Encode
-    in
-    let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
-    let data = Email.create ~headers ~raw_content:data_raw_content in
-    let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
-    let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
-    let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
-    gen_id ()
-    >>|? fun id ->
-    ( { spool_dir
-      ; id
-      ; flows
-      ; parent_id
-      ; spool_date
-      ; next_hop_choices
-      ; retry_intervals
-      ; remaining_recipients
-      ; failed_recipients
-      ; relay_attempts
-      ; status
-      ; envelope_info
-      }
-    , data
-    , Smtp_envelope.Routed.of_bodiless envelope email_body ))
+      let headers =
+        Smtp_envelope.Bodiless.Routed.headers envelope
+        |> Data.map_headers ~encode_or_decode:`Encode
+      in
+      let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
+      let data = Email.create ~headers ~raw_content:data_raw_content in
+      let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
+      let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
+      let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
+      gen_id ()
+      >>|? fun id ->
+      ( { spool_dir
+        ; id
+        ; flows
+        ; parent_id
+        ; spool_date
+        ; next_hop_choices
+        ; retry_intervals
+        ; remaining_recipients
+        ; failed_recipients
+        ; relay_attempts
+        ; status
+        ; envelope_info
+        }
+      , data
+      , Smtp_envelope.Routed.of_bodiless envelope email_body ))
 ;;
 
 module On_disk = struct

@@ -135,10 +135,10 @@ let of_email ?(ignore_unparseable_recipient_header = false) email =
                | '\n' | '\r' -> false
                | _ -> true))
       |> List.concat_map ~f:(fun emails ->
-           match Email_address.list_of_string emails with
-           | Ok result -> result
-           | Error error ->
-             if ignore_unparseable_recipient_header then [] else Error.raise error))
+        match Email_address.list_of_string emails with
+        | Ok result -> result
+        | Error error ->
+          if ignore_unparseable_recipient_header then [] else Error.raise error))
   in
   Ok (create ~sender ~recipients ~rejected_recipients:[] ())
 ;;

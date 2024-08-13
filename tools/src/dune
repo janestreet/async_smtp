@@ -1,7 +1,8 @@
 (library
  (name async_smtp_tools)
  (public_name async_smtp.tools)
- (libraries async async_shell async_smtp core cryptokit email_message
-   core_unix.filename_unix re2 core_unix.uuid)
+ (libraries async async_log async_shell async_smtp async_smtp_types core
+   core_unix cryptokit email_message core_unix.filename_unix re2
+   core_unix.time_float_unix core_kernel.uuid core_unix.uuid)
  (preprocess
   (pps ppx_jane)))

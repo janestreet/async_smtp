@@ -202,9 +202,9 @@ module Simple : sig
 
   include
     S
-      with module State := State
-      with module Session := Session
-       and module Envelope := Envelope
+    with module State := State
+    with module Session := Session
+     and module Envelope := Envelope
 end = struct
   open Smtp_monad.Let_syntax
   module State = Unit

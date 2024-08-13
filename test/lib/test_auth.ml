@@ -23,42 +23,42 @@ let plugin ~login ~plain =
           [ Some
               (Smtp_server.Plugin.Extension.Start_tls
                  (module (
-                            struct
-                              type session = t
+                 struct
+                   type session = t
 
-                              let upgrade_to_tls ~log:_ t = return { t with tls = true }
-                            end :
-                              Smtp_server.Plugin.Start_tls with type session = t)))
+                   let upgrade_to_tls ~log:_ t = return { t with tls = true }
+                 end :
+                   Smtp_server.Plugin.Start_tls with type session = t)))
           ; Option.some_if
               plain
               (Smtp_server.Plugin.Extension.Auth
                  (module Smtp_auth.Plain.Server (struct
-                   type nonrec t = t
+                     type nonrec t = t
 
-                   let authenticate ~log:_ ?on_behalf_of:_ t ~username ~password =
-                     if check username password
-                     then return { t with authenticated = Some username }
-                     else
-                       Smtp_monad.reject
-                         ~here:[%here]
-                         Smtp_reply.authentication_credentials_invalid_535
-                   ;;
-                 end)))
+                     let authenticate ~log:_ ?on_behalf_of:_ t ~username ~password =
+                       if check username password
+                       then return { t with authenticated = Some username }
+                       else
+                         Smtp_monad.reject
+                           ~here:[%here]
+                           Smtp_reply.authentication_credentials_invalid_535
+                     ;;
+                   end)))
           ; Option.some_if
               login
               (Smtp_server.Plugin.Extension.Auth
                  (module Smtp_auth.Login.Server (struct
-                   type nonrec t = t
+                     type nonrec t = t
 
-                   let authenticate ~log:_ t ~username ~password =
-                     if check username password
-                     then return { t with authenticated = Some username }
-                     else
-                       Smtp_monad.reject
-                         ~here:[%here]
-                         Smtp_reply.authentication_credentials_invalid_535
-                   ;;
-                 end)))
+                     let authenticate ~log:_ t ~username ~password =
+                       if check username password
+                       then return { t with authenticated = Some username }
+                       else
+                         Smtp_monad.reject
+                           ~here:[%here]
+                           Smtp_reply.authentication_credentials_invalid_535
+                     ;;
+                   end)))
           ]
       ;;
     end
@@ -410,57 +410,57 @@ let%expect_test "AUTH LOGIN with client going first" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:true ~plain:true)
     (fun ~client ~server ->
-    let%bind () = server "220 [SMTP TEST SERVER]" in
-    let%bind () = client "EHLO [SMTP TEST CLIENT]" in
-    let%bind () =
-      server "250-Ok: Continue, extensions follow:\n250-8BITMIME\n250 AUTH PLAIN LOGIN"
-    in
-    let%bind () = client "AUTH LOGIN dXNlcm5hbWU=" in
-    let%bind () = server "334 UGFzc3dvcmQ6" in
-    let%bind () = client "cGFzc3dvcmQ=" in
-    let%bind () = server "235 Authentication successful" in
-    client "QUIT")
+       let%bind () = server "220 [SMTP TEST SERVER]" in
+       let%bind () = client "EHLO [SMTP TEST CLIENT]" in
+       let%bind () =
+         server "250-Ok: Continue, extensions follow:\n250-8BITMIME\n250 AUTH PLAIN LOGIN"
+       in
+       let%bind () = client "AUTH LOGIN dXNlcm5hbWU=" in
+       let%bind () = server "334 UGFzc3dvcmQ6" in
+       let%bind () = client "cGFzc3dvcmQ=" in
+       let%bind () = server "235 Authentication successful" in
+       client "QUIT")
 ;;
 
 let%expect_test "AUTH PLAIN with server going first" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:true ~plain:true)
     (fun ~client ~server ->
-    let%bind () = server "220 [SMTP TEST SERVER]" in
-    let%bind () = client "EHLO [SMTP TEST CLIENT]" in
-    let%bind () =
-      server "250-Ok: Continue, extensions follow:\n250-8BITMIME\n250 AUTH PLAIN LOGIN"
-    in
-    let%bind () = client "AUTH PLAIN" in
-    let%bind () =
-      server
-        "334 UmVxdWlyZSAke09OX0JFSEFMRn1cTlVMTCR7VVNFUk5BTUV9XE5VTEwke1BBU1NXT1JEfQ=="
-    in
-    let%bind () = client "Ym9iAHVzZXJuYW1lAHBhc3N3b3Jk" in
-    let%bind () = server "235 Authentication successful" in
-    client "QUIT")
+       let%bind () = server "220 [SMTP TEST SERVER]" in
+       let%bind () = client "EHLO [SMTP TEST CLIENT]" in
+       let%bind () =
+         server "250-Ok: Continue, extensions follow:\n250-8BITMIME\n250 AUTH PLAIN LOGIN"
+       in
+       let%bind () = client "AUTH PLAIN" in
+       let%bind () =
+         server
+           "334 UmVxdWlyZSAke09OX0JFSEFMRn1cTlVMTCR7VVNFUk5BTUV9XE5VTEwke1BBU1NXT1JEfQ=="
+       in
+       let%bind () = client "Ym9iAHVzZXJuYW1lAHBhc3N3b3Jk" in
+       let%bind () = server "235 Authentication successful" in
+       client "QUIT")
 ;;
 
 let%expect_test "AUTH LOGIN when not advertised" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:false ~plain:false)
     (fun ~client ~server ->
-    let%bind () = server "220 [SMTP TEST SERVER]" in
-    let%bind () = client "EHLO [SMTP TEST CLIENT]" in
-    let%bind () = server "250-Ok: Continue, extensions follow:\n250 8BITMIME" in
-    let%bind () = client "AUTH LOGIN" in
-    let%bind () = server "502 Smtp_command not implemented: AUTH LOGIN" in
-    client "QUIT")
+       let%bind () = server "220 [SMTP TEST SERVER]" in
+       let%bind () = client "EHLO [SMTP TEST CLIENT]" in
+       let%bind () = server "250-Ok: Continue, extensions follow:\n250 8BITMIME" in
+       let%bind () = client "AUTH LOGIN" in
+       let%bind () = server "502 Smtp_command not implemented: AUTH LOGIN" in
+       client "QUIT")
 ;;
 
 let%expect_test "AUTH PLAIN when not advertised" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:false ~plain:false)
     (fun ~client ~server ->
-    let%bind () = server "220 [SMTP TEST SERVER]" in
-    let%bind () = client "EHLO [SMTP TEST CLIENT]" in
-    let%bind () = server "250-Ok: Continue, extensions follow:\n250 8BITMIME" in
-    let%bind () = client "AUTH PLAIN 1234" in
-    let%bind () = server "502 Smtp_command not implemented: AUTH PLAIN" in
-    client "QUIT")
+       let%bind () = server "220 [SMTP TEST SERVER]" in
+       let%bind () = client "EHLO [SMTP TEST CLIENT]" in
+       let%bind () = server "250-Ok: Continue, extensions follow:\n250 8BITMIME" in
+       let%bind () = client "AUTH PLAIN 1234" in
+       let%bind () = server "502 Smtp_command not implemented: AUTH PLAIN" in
+       client "QUIT")
 ;;

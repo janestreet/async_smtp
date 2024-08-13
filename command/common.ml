@@ -18,7 +18,7 @@ module Command : sig
         | `Rpc of Rpc.Connection.t
         ]
         -> unit Deferred.t)
-       Param.t
+         Param.t
     -> t
 end = struct
   include Command

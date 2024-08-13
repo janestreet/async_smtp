@@ -118,10 +118,10 @@ module Stable = struct
     include V1_no_sexp
 
     include Sexpable.Of_stringable (struct
-      type nonrec t = t
+        type nonrec t = t
 
-      let of_string s = Or_error.ok_exn (of_string s)
-      let to_string t = to_string t
-    end)
+        let of_string s = Or_error.ok_exn (of_string s)
+        let to_string t = to_string t
+      end)
   end
 end

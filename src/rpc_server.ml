@@ -17,7 +17,10 @@ let start (config, server_events) ~log ~plugin_rpcs =
     implementations () @ List.map plugin_rpcs ~f:(Rpc.Implementation.lift ~f:ignore)
   in
   let implementations =
-    Rpc.Implementations.create_exn ~implementations ~on_unknown_rpc:`Raise
+    Rpc.Implementations.create_exn
+      ~implementations
+      ~on_unknown_rpc:`Raise
+      ~on_exception:Log_on_background_exn
   in
   let%bind _tcp_server =
     Rpc.Connection.serve ~implementations ~where_to_listen ~initial_connection_state ()

@@ -103,8 +103,8 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
     ~how:`Sequential
     messages_with_data
     ~f:(fun (meta, data, envelope) ->
-    let id = Message.id meta in
-    enqueue spool queue ~meta ~id ~data >>|? fun () -> meta, envelope)
+      let id = Message.id meta in
+      enqueue spool queue ~meta ~id ~data >>|? fun () -> meta, envelope)
 ;;
 
 let with_file
@@ -332,10 +332,10 @@ let send_to_hops t ~log ~client_cache ~on_error data_file =
               ~how:`Sequential
               rejected_recipients
               ~f:(fun (recipient, reject) ->
-              match%map on_error ~log reject with
-              | `Fail_permanently -> `Fst recipient
-              | `Try_later -> `Snd recipient
-              | `Done -> `Trd recipient)
+                match%map on_error ~log reject with
+                | `Fail_permanently -> `Fst recipient
+                | `Try_later -> `Snd recipient
+                | `Done -> `Trd recipient)
             >>| List.partition3_map ~f:Fn.id
           in
           Message.set_remaining_recipients t temporarily_failed_recipients;

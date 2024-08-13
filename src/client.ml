@@ -45,7 +45,7 @@ module Envelope_status = struct
     then
       rejected_recipients
       |> List.map ~f:(fun (email, reject) ->
-           sprintf !"%{Email_address} (%{Smtp_reply})" email reject)
+        sprintf !"%{Email_address} (%{Smtp_reply})" email reject)
       |> String.concat ~sep:", "
       |> sprintf "%s %s" err
     else ok
@@ -154,77 +154,78 @@ module Expert = struct
         ~here:[%here]
         command
       >>=? (function
-             | `Bsmtp -> return (Ok (Ok ()))
-             | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> return (Ok (Ok ()))
-             | `Received reply ->
-               Log.info
-                 log
-                 (lazy
-                   (Log.Message.create
-                      ~here:[%here]
-                      ~flows
-                      ~component:(component @ [ "sender" ])
-                      ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
-                      ~command
-                      ~reply
-                      "send rejected"));
-               return (Ok (Error (`Rejected_sender reply))))
+              | `Bsmtp -> return (Ok (Ok ()))
+              | `Received { Smtp_reply.code = `Ok_completed_250; _ } ->
+                return (Ok (Ok ()))
+              | `Received reply ->
+                Log.info
+                  log
+                  (lazy
+                    (Log.Message.create
+                       ~here:[%here]
+                       ~flows
+                       ~component:(component @ [ "sender" ])
+                       ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
+                       ~command
+                       ~reply
+                       "send rejected"));
+                return (Ok (Error (`Rejected_sender reply))))
       >>=?? fun () ->
       Deferred.Or_error.List.map
         ~how:`Sequential
         (Smtp_envelope.Info.recipients envelope_info)
         ~f:(fun recipient ->
-        let command = Smtp_command.Recipient (recipient |> Email_address.to_string) in
-        send_receive
-          t
-          ~log
-          ~flows
-          ~component:(component @ [ "recipient" ])
-          ~here:[%here]
-          command
-        >>|? function
-        | `Bsmtp -> First recipient
-        | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> First recipient
-        | `Received reply ->
-          Log.info
-            log
-            (lazy
-              (Log.Message.create
-                 ~here:[%here]
-                 ~flows
-                 ~component:(component @ [ "recipient" ])
-                 ~recipients:[ `Email recipient ]
-                 ~command
-                 ~reply
-                 "send rejected"));
-          Second (recipient, reply))
+          let command = Smtp_command.Recipient (recipient |> Email_address.to_string) in
+          send_receive
+            t
+            ~log
+            ~flows
+            ~component:(component @ [ "recipient" ])
+            ~here:[%here]
+            command
+          >>|? function
+          | `Bsmtp -> First recipient
+          | `Received { Smtp_reply.code = `Ok_completed_250; _ } -> First recipient
+          | `Received reply ->
+            Log.info
+              log
+              (lazy
+                (Log.Message.create
+                   ~here:[%here]
+                   ~flows
+                   ~component:(component @ [ "recipient" ])
+                   ~recipients:[ `Email recipient ]
+                   ~command
+                   ~reply
+                   "send rejected"));
+            Second (recipient, reply))
       >>|? List.partition_map ~f:Fn.id
       >>|? (function
-             | [], rejected_recipients ->
-               Error (`Rejected_all_recipients rejected_recipients)
-             | accepted_recipients, rejected_recipients ->
-               Ok (accepted_recipients, rejected_recipients))
+              | [], rejected_recipients ->
+                Error (`Rejected_all_recipients rejected_recipients)
+              | accepted_recipients, rejected_recipients ->
+                Ok (accepted_recipients, rejected_recipients))
       >>=?? fun (accepted_recipients, rejected_recipients) ->
       let command = Smtp_command.Data in
       send_receive t ~log ~flows ~component:(component @ [ "data" ]) ~here:[%here] command
       >>=? (function
-             | `Bsmtp -> return (Ok (Ok ()))
-             | `Received { Smtp_reply.code = `Start_mail_input_354; _ } ->
-               return (Ok (Ok ()))
-             | `Received reply ->
-               Log.info
-                 log
-                 (lazy
-                   (Log.Message.create
-                      ~here:[%here]
-                      ~flows
-                      ~component:(component @ [ "data" ])
-                      ~command
-                      ~reply
-                      "send rejected"));
-               return
-                 (Ok
-                    (Error (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
+              | `Bsmtp -> return (Ok (Ok ()))
+              | `Received { Smtp_reply.code = `Start_mail_input_354; _ } ->
+                return (Ok (Ok ()))
+              | `Received reply ->
+                Log.info
+                  log
+                  (lazy
+                    (Log.Message.create
+                       ~here:[%here]
+                       ~flows
+                       ~component:(component @ [ "data" ])
+                       ~command
+                       ~reply
+                       "send rejected"));
+                return
+                  (Ok
+                     (Error (`Rejected_sender_and_recipients (reply, rejected_recipients)))))
       >>=?? fun () ->
       Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () ->
         Log.debug

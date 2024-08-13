@@ -17,15 +17,15 @@ module Time = Time_float_unix
 
 include (
   String :
-    sig
-      type t = string [@@deriving sexp_of]
+  sig
+    type t = string [@@deriving sexp_of]
 
-      val to_string : t -> string
-      val of_string : string -> t
+    val to_string : t -> string
+    val of_string : string -> t
 
-      include Comparable.S_plain with type t := t
-      include Hashable.S_plain with type t := t
-    end)
+    include Comparable.S_plain with type t := t
+    include Hashable.S_plain with type t := t
+  end)
 
 let urlbase64_encode_float ?(length = 6) f =
   match Int64.of_float f with

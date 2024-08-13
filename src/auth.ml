@@ -30,16 +30,16 @@ module Plain = struct
   let mechanism = "PLAIN"
 
   module Server (Session : sig
-    type t
+      type t
 
-    val authenticate
-      :  log:Mail_log.t
-      -> ?on_behalf_of:string
-      -> t
-      -> username:string
-      -> password:string
-      -> t Smtp_monad.t
-  end) : Server with type session = Session.t = struct
+      val authenticate
+        :  log:Mail_log.t
+        -> ?on_behalf_of:string
+        -> t
+        -> username:string
+        -> password:string
+        -> t Smtp_monad.t
+    end) : Server with type session = Session.t = struct
     open Smtp_monad.Let_syntax
 
     type session = Session.t
@@ -69,10 +69,10 @@ module Plain = struct
   end
 
   module Client (Cred : sig
-    val on_behalf_of : string option
-    val username : string
-    val password : string
-  end) : Client = struct
+      val on_behalf_of : string option
+      val username : string
+      val password : string
+    end) : Client = struct
     let require_tls = true
     let mechanism = mechanism
 
@@ -98,15 +98,15 @@ module Login = struct
   let mechanism = "LOGIN"
 
   module Server (Session : sig
-    type t
+      type t
 
-    val authenticate
-      :  log:Mail_log.t
-      -> t
-      -> username:string
-      -> password:string
-      -> t Smtp_monad.t
-  end) : Server with type session = Session.t = struct
+      val authenticate
+        :  log:Mail_log.t
+        -> t
+        -> username:string
+        -> password:string
+        -> t Smtp_monad.t
+    end) : Server with type session = Session.t = struct
     type session = Session.t
 
     let mechanism = mechanism
@@ -120,9 +120,9 @@ module Login = struct
   end
 
   module Client (Cred : sig
-    val username : string
-    val password : string
-  end) : Client = struct
+      val username : string
+      val password : string
+    end) : Client = struct
     let require_tls = true
     let mechanism = mechanism
 

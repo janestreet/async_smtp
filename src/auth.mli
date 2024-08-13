@@ -65,38 +65,38 @@ end
 
 module Login : sig
   module Server (Session : sig
-    type t
+      type t
 
-    val authenticate
-      :  log:Mail_log.t
-      -> t
-      -> username:string
-      -> password:string
-      -> t Smtp_monad.t
-  end) : Server with type session = Session.t
+      val authenticate
+        :  log:Mail_log.t
+        -> t
+        -> username:string
+        -> password:string
+        -> t Smtp_monad.t
+    end) : Server with type session = Session.t
 
   module Client (C : sig
-    val username : string
-    val password : string
-  end) : Client
+      val username : string
+      val password : string
+    end) : Client
 end
 
 module Plain : sig
   module Server (Session : sig
-    type t
+      type t
 
-    val authenticate
-      :  log:Mail_log.t
-      -> ?on_behalf_of:string
-      -> t
-      -> username:string
-      -> password:string
-      -> t Smtp_monad.t
-  end) : Server with type session = Session.t
+      val authenticate
+        :  log:Mail_log.t
+        -> ?on_behalf_of:string
+        -> t
+        -> username:string
+        -> password:string
+        -> t Smtp_monad.t
+    end) : Server with type session = Session.t
 
   module Client (C : sig
-    val on_behalf_of : string option
-    val username : string
-    val password : string
-  end) : Client
+      val on_behalf_of : string option
+      val username : string
+      val password : string
+    end) : Client
 end

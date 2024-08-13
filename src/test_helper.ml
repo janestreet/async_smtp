@@ -153,11 +153,12 @@ module Default_plugin : Server.Plugin.S with type State.t = unit = struct
   module Envelope = Server.Plugin.Simple.Envelope
 end
 
-module Safe_plugin (Info : sig
-  val level : [ Log.Level.t | `None ]
-  val tag : string
-end)
-(P : Server.Plugin.S) : Server.Plugin.S with type State.t = P.State.t = struct
+module Safe_plugin
+    (Info : sig
+       val level : [ Log.Level.t | `None ]
+       val tag : string
+     end)
+    (P : Server.Plugin.S) : Server.Plugin.S with type State.t = P.State.t = struct
   let rpcs () = []
   let with_stdout_log f = with_stdout_log ~tag:Info.tag ~level:Info.level f
 

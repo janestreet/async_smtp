@@ -198,11 +198,11 @@ module Count = struct
     Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client ()
     >>| Client_side_filter.filter_opt client_side_filter
     >>| List.filter ~f:(fun message_info ->
-          let status = Smtp_spool.Spooled_message_info.status message_info in
-          match which with
-          | `All -> true
-          | `Only_frozen -> is_frozen status
-          | `Only_active -> is_active status)
+      let status = Smtp_spool.Spooled_message_info.status message_info in
+      match which with
+      | `All -> true
+      | `Only_frozen -> is_frozen status
+      | `Only_active -> is_active status)
     >>| (List.length :> _ -> _)
   ;;
 

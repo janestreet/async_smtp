@@ -1,7 +1,7 @@
 (executables
  (modes byte exe)
  (names run_async_smtp sendmail inline_image)
- (libraries async core async_smtp core_unix.command_unix
-   core_unix.filename_unix)
+ (libraries async core async_smtp async_smtp_types core_unix.command_unix
+   core_unix.filename_unix resource_cache)
  (preprocess
   (pps ppx_jane)))

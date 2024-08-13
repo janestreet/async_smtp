@@ -1,6 +1,6 @@
 (library
  (name test_async_smtp)
- (libraries core async async_smtp expect_test_helpers_async
+ (libraries core async async_smtp email_message expect_test_helpers_async
    expect_test_helpers_core)
  (preprocess
   (pps ppx_jane)))
