@@ -81,7 +81,7 @@ let try_with_out_of_memory f =
 let read_data ~max_size ~close_started ~timeouts reader =
   let max_len = max_size |> Byte_units.bytes_int_exn in
   let write_string s buf =
-    let%bind.Result buf = buf in
+    let%bind.Result buf in
     (* [Bigbuffer] does not bound its underlying buffer. It's possible for [buf] to
        resize to something between [max_len] and [2 * max_len]. *)
     if Bigbuffer.length buf + String.length s > max_len
