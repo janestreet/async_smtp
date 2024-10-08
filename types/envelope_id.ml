@@ -62,31 +62,29 @@ let create () =
   t
 ;;
 
-let%test_module "urlbase64_encode_float" =
-  (module struct
-    let%expect_test _ =
-      printf "%s" (urlbase64_encode_float 1234.1235453123);
-      [%expect_exact {|AAAATS|}]
-    ;;
+module%test [@name "urlbase64_encode_float"] _ = struct
+  let%expect_test _ =
+    printf "%s" (urlbase64_encode_float 1234.1235453123);
+    [%expect_exact {|AAAATS|}]
+  ;;
 
-    let%expect_test _ =
-      printf "%s" (urlbase64_encode_float 1234.);
-      [%expect_exact {|AAAATS|}]
-    ;;
+  let%expect_test _ =
+    printf "%s" (urlbase64_encode_float 1234.);
+    [%expect_exact {|AAAATS|}]
+  ;;
 
-    let%expect_test _ =
-      printf "%s" (urlbase64_encode_float 1235.);
-      [%expect_exact {|AAAATT|}]
-    ;;
+  let%expect_test _ =
+    printf "%s" (urlbase64_encode_float 1235.);
+    [%expect_exact {|AAAATT|}]
+  ;;
 
-    let%expect_test _ =
-      printf "%s" (urlbase64_encode_float 123456.);
-      [%expect_exact {|AAAeJA|}]
-    ;;
+  let%expect_test _ =
+    printf "%s" (urlbase64_encode_float 123456.);
+    [%expect_exact {|AAAeJA|}]
+  ;;
 
-    let%expect_test _ =
-      printf "%s" (urlbase64_encode_float Int64.(to_float (max_value - 1024L)));
-      [%expect_exact {|____wA|}]
-    ;;
-  end)
-;;
+  let%expect_test _ =
+    printf "%s" (urlbase64_encode_float Int64.(to_float (max_value - 1024L)));
+    [%expect_exact {|____wA|}]
+  ;;
+end
