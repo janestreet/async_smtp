@@ -291,43 +291,41 @@ let decorate t ~additional_lines =
   { t with raw_message = t.raw_message @ additional_lines }
 ;;
 
-let%test_module _ =
-  (module struct
-    let check reply = [%test_eq: t] reply (of_string (to_string reply))
+module%test _ = struct
+  let check reply = [%test_eq: t] reply (of_string (to_string reply))
 
-    let%test_unit _ =
-      List.iter (Lazy.force Code.all) ~f:(fun code ->
-        check { code; raw_message = [ "test" ] };
-        check { code; raw_message = [ "test0"; "test2"; "test3" ] })
-    ;;
+  let%test_unit _ =
+    List.iter (Lazy.force Code.all) ~f:(fun code ->
+      check { code; raw_message = [ "test" ] };
+      check { code; raw_message = [ "test0"; "test2"; "test3" ] })
+  ;;
 
-    let%test_unit _ = check (service_ready_220 "test")
-    let%test_unit _ = check closing_connection_221
-    let%test_unit _ = check (ok_completed_250 "test")
-    let%test_unit _ = check start_mail_input_354
-    let%test_unit _ = check service_unavailable_421
-    let%test_unit _ = check (local_error_451 "test")
-    let%test_unit _ = check (command_not_recognized_500 "test")
-    let%test_unit _ = check (syntax_error_501 "test")
-    let%test_unit _ = check (command_not_implemented_502 (Smtp_command.Hello "Test"))
-    let%test_unit _ = check (bad_sequence_of_commands_503 (Smtp_command.Hello "Test"))
-    let%test_unit _ = check exceeded_storage_allocation_552
-    let%test_unit _ = check (transaction_failed_554 "test")
-    let%test_unit _ = check (start_authentication_input_334 "")
-    let%test_unit _ = check (start_authentication_input_334 "abc")
-    let%test_unit _ = check (start_authentication_input_334 "abc\ndef")
-    let check_multiline a b = [%test_eq: t] b (of_string a)
+  let%test_unit _ = check (service_ready_220 "test")
+  let%test_unit _ = check closing_connection_221
+  let%test_unit _ = check (ok_completed_250 "test")
+  let%test_unit _ = check start_mail_input_354
+  let%test_unit _ = check service_unavailable_421
+  let%test_unit _ = check (local_error_451 "test")
+  let%test_unit _ = check (command_not_recognized_500 "test")
+  let%test_unit _ = check (syntax_error_501 "test")
+  let%test_unit _ = check (command_not_implemented_502 (Smtp_command.Hello "Test"))
+  let%test_unit _ = check (bad_sequence_of_commands_503 (Smtp_command.Hello "Test"))
+  let%test_unit _ = check exceeded_storage_allocation_552
+  let%test_unit _ = check (transaction_failed_554 "test")
+  let%test_unit _ = check (start_authentication_input_334 "")
+  let%test_unit _ = check (start_authentication_input_334 "abc")
+  let%test_unit _ = check (start_authentication_input_334 "abc\ndef")
+  let check_multiline a b = [%test_eq: t] b (of_string a)
 
-    let%test_unit _ =
-      check_multiline
-        "250-Ok: test1\r\n250-test2\r\n250 test3"
-        (ok_completed_250 "test1\ntest2\ntest3")
-    ;;
+  let%test_unit _ =
+    check_multiline
+      "250-Ok: test1\r\n250-test2\r\n250 test3"
+      (ok_completed_250 "test1\ntest2\ntest3")
+  ;;
 
-    let%test_unit _ =
-      check_multiline
-        "250-Ok: test1\r\n250-test2\r\n250 test3"
-        (ok_completed_250 "test1\r\ntest2\r\ntest3")
-    ;;
-  end)
-;;
+  let%test_unit _ =
+    check_multiline
+      "250-Ok: test1\r\n250-test2\r\n250 test3"
+      (ok_completed_250 "test1\r\ntest2\r\ntest3")
+  ;;
+end

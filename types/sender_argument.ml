@@ -70,32 +70,26 @@ let list_of_string ~allowed_extensions str =
 ;;
 
 (* Test parsing of commands to server *)
-let%test_module _ =
-  (module struct
-    let check str extn =
-      let e = of_string str |> Or_error.ok_exn in
-      Poly.equal e extn
-    ;;
+module%test _ = struct
+  let check str extn =
+    let e = of_string str |> Or_error.ok_exn in
+    Poly.equal e extn
+  ;;
 
-    let%test _ = check "AUTH=<>" (Auth None)
+  let%test _ = check "AUTH=<>" (Auth None)
 
-    let%test _ =
-      check
-        "AUTH=<hello@world>"
-        (Auth (Some (Email_address.of_string_exn "<hello@world>")))
-    ;;
-  end)
-;;
+  let%test _ =
+    check "AUTH=<hello@world>" (Auth (Some (Email_address.of_string_exn "<hello@world>")))
+  ;;
+end
 
 (* Test to_string and of_string functions for symmetry *)
-let%test_module _ =
-  (module struct
-    let check extn =
-      let e = of_string (to_string extn) |> Or_error.ok_exn in
-      Poly.equal extn e
-    ;;
+module%test _ = struct
+  let check extn =
+    let e = of_string (to_string extn) |> Or_error.ok_exn in
+    Poly.equal extn e
+  ;;
 
-    let%test _ = check (Auth None)
-    let%test _ = check (Auth (Some (Email_address.of_string_exn "<hello@world>")))
-  end)
-;;
+  let%test _ = check (Auth None)
+  let%test _ = check (Auth (Some (Email_address.of_string_exn "<hello@world>")))
+end

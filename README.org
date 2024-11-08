@@ -24,4 +24,4 @@ Users wishing to act as SMTP clients (i.e. to send an email) should look at the
 SMTP authentication. See the ~sample~ directory for some examples.
 
 If you need help, run into bugs, or have a feature request, you can contact the
-developers at <app-mailcore-dev@janestreet.com>.
+developers at <opensource-contacts@janestreet.com>.

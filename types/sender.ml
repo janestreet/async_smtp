@@ -90,26 +90,24 @@ module Caseless = struct
   include Hashable.Make_plain (T)
 end
 
-let%test_module _ =
-  (module struct
-    let check ~should_fail allowed_extensions str =
-      match of_string_with_arguments ~allowed_extensions str with
-      | Ok mail_from ->
-        (not should_fail) && String.equal str (to_string_with_arguments mail_from)
-      | Error _ -> should_fail
-    ;;
+module%test _ = struct
+  let check ~should_fail allowed_extensions str =
+    match of_string_with_arguments ~allowed_extensions str with
+    | Ok mail_from ->
+      (not should_fail) && String.equal str (to_string_with_arguments mail_from)
+    | Error _ -> should_fail
+  ;;
 
-    let%test _ = check ~should_fail:false [] "foo@bar.com"
-    let%test _ = check ~should_fail:false [] "<>"
-    let%test _ = check ~should_fail:true [] "<> <>"
-    let%test _ = check ~should_fail:false [ Auth [] ] "<> AUTH=<>"
-    let%test _ = check ~should_fail:false [ Auth [] ] "foo bar <foo@bar.com> AUTH=<>"
-    let%test _ = check ~should_fail:false [ Auth [] ] "<foo@bar.com> AUTH=foobar"
-    let%test _ = check ~should_fail:false [] "<foo@bar.com>"
-    let%test _ = check ~should_fail:true [] "<foo@bar.com> AUTH=foobar"
-    let%test _ = check ~should_fail:true [ Auth [] ] "<foo@bar.com> FOOBAR=foobar"
-  end)
-;;
+  let%test _ = check ~should_fail:false [] "foo@bar.com"
+  let%test _ = check ~should_fail:false [] "<>"
+  let%test _ = check ~should_fail:true [] "<> <>"
+  let%test _ = check ~should_fail:false [ Auth [] ] "<> AUTH=<>"
+  let%test _ = check ~should_fail:false [ Auth [] ] "foo bar <foo@bar.com> AUTH=<>"
+  let%test _ = check ~should_fail:false [ Auth [] ] "<foo@bar.com> AUTH=foobar"
+  let%test _ = check ~should_fail:false [] "<foo@bar.com>"
+  let%test _ = check ~should_fail:true [] "<foo@bar.com> AUTH=foobar"
+  let%test _ = check ~should_fail:true [ Auth [] ] "<foo@bar.com> FOOBAR=foobar"
+end
 
 module Stable = struct
   include Stable0
