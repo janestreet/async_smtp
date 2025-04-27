@@ -18,6 +18,14 @@ end
 open! Core
 open Or_error.Let_syntax
 
+module For_test = struct
+  type t =
+    [ `Null
+    | `Email of Email_address.For_test.t
+    ]
+  [@@deriving sexp_of]
+end
+
 module T = struct
   type t =
     [ `Null
@@ -37,22 +45,29 @@ include T
 include Hashable.Make_plain (T)
 include Comparable.Make_plain (T)
 
-let of_string_with_arguments ?default_domain ~allowed_extensions str =
-  let%bind mail_from =
-    Or_error.try_with (fun () -> Mail_from_lexer.parse_mail_from (Lexing.from_string str))
+let of_string_with_arguments_string ?default_domain str =
+  let%map sender, args_str =
+    Or_error.try_with_join (fun () ->
+      Angstrom.parse_string ~consume:All Sender_parser.sender_with_args str
+      |> Result.map_error ~f:Error.of_string)
     |> Or_error.tag ~tag:(sprintf "Failed to parse [Sender.t] from \"%s\"" str)
   in
-  let%bind all_args =
-    Sender_argument.list_of_string ~allowed_extensions mail_from.suffix
+  let sender =
+    match sender with
+    | `Email email ->
+      (* populate the domain if missing *)
+      if Option.is_none (Email_address.domain email) && Option.is_some default_domain
+      then `Email (Email_address.set_domain email default_domain)
+      else sender
+    | `Null -> sender
   in
-  match mail_from.sender with
-  | `Null -> Ok (`Null, all_args)
-  | `Email email ->
-    let domain = Option.first_some email.domain default_domain in
-    let email_address =
-      Email_address.create ?prefix:mail_from.prefix ?domain email.local_part
-    in
-    Ok (`Email email_address, all_args)
+  sender, args_str
+;;
+
+let of_string_with_arguments ?default_domain ~allowed_extensions str =
+  let%bind sender, args_str = of_string_with_arguments_string ?default_domain str in
+  let%bind args = Sender_argument.list_of_string ~allowed_extensions args_str in
+  Ok (sender, args)
 ;;
 
 let of_string ?default_domain str =

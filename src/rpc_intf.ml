@@ -91,7 +91,8 @@ let retry_interval = binable (module Smtp_envelope.Retry_interval.Stable.V2)
 let error = binable (module Error.Stable.V2)
 let smtp_event = binable (module Smtp_events.Event)
 let id = binable (module Spool.Stable.Message_id.V1)
-let spool_status = binable (module Spool.Stable.Status.V2)
+let spool_status_v2 = binable (module Spool.Stable.Status.V2)
+let spool_status = binable (module Spool.Stable.Status.V3)
 let spool_event = binable (module Spool.Stable.Event.V1)
 let send_info = binable (module Spool.Stable.Send_info.V1)
 let recover_info = binable (module Spool.Stable.Recover_info.V2)
@@ -121,7 +122,28 @@ module Spool = struct
   end
 
   let prefix = "spool"
-  let status = rpc ~name:(prefix ^- "status") unit spool_status ~version:2
+
+  module Status = struct
+    let v2 = rpc ~name:(prefix ^- "status") unit spool_status_v2 ~version:2
+    let v3 = rpc ~name:(prefix ^- "status") unit spool_status ~version:3
+
+    let callee =
+      let open Babel.Callee.Rpc in
+      singleton v2 |> map_response ~f:Spool.Stable.Status.V2.of_v3 |> add ~rpc:v3
+    ;;
+
+    let caller =
+      let open Babel.Caller.Rpc in
+      singleton v2 |> map_response ~f:Spool.Stable.Status.V2.to_v3 |> add ~rpc:v3
+    ;;
+
+    let dispatch client =
+      let open Deferred.Or_error.Let_syntax in
+      let%bind client = Versioned_rpc.Connection_with_menu.create client in
+      Babel.Caller.Rpc.dispatch_multi caller client ()
+    ;;
+  end
+
   let freeze = rpc ~name:(prefix ^- "freeze") (list id) (or_error unit) ~version:1
 
   let send =

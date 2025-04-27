@@ -12,8 +12,8 @@ val of_list : t list -> t
 val tag : tag:string -> ?here:Source_code_position.t -> t -> t
 val tag' : ?tag:string -> ?here:Source_code_position.t -> t -> t
 
-(** Reject message to send. The server will send an appropriate generic error if
-    this was not set. *)
+(** Reject message to send. The server will send an appropriate generic error if this was
+    not set. *)
 val reject : t -> Smtp_reply.t option
 
 val error : t -> Error.t

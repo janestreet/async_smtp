@@ -563,11 +563,10 @@ let with_flow_and_component ~flows ~component t =
       (`Call
         (fun err ->
           [%log.global.error_sexp
-            Error.sexp_of_t err [@@tags
-                                  [ ( Message.Tag.component
-                                    , sprintf !"%{Component}" (component @ [ "_LOG" ]) )
-                                  ]
-                                  @ List.map flows ~f:(fun f -> Message.Tag.flow, f)]]))
+            Error.sexp_of_t err
+            [@@tags
+              [ Message.Tag.component, sprintf !"%{Component}" (component @ [ "_LOG" ]) ]
+              @ List.map flows ~f:(fun f -> Message.Tag.flow, f)]]))
     ()
 ;;
 

@@ -8,6 +8,7 @@ module Smtp_client = struct
   module Credentials = Credentials
 end
 
+module Address_and_route = Address_and_route
 module Email_address = Email_message.Email_address
 module Email = Email_message.Email
 module Email_headers = Email_message.Email_headers

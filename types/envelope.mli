@@ -20,8 +20,8 @@ val set : (?email:Email.t -> t -> unit -> t) Envelope_info.set
 val set' : t -> ?info:Envelope_info.t -> ?email:Email.t -> unit -> t
 
 (** Extracts sender and recipients from the headers. The recipients are parsed from the
-    "To", "Cc" and "Bcc" headers. If [~ignore_unparseable_recipient_header=true], then
-    an unparseable header will be ignored rather than erroring. *)
+    "To", "Cc" and "Bcc" headers. If [~ignore_unparseable_recipient_header=true], then an
+    unparseable header will be ignored rather than erroring. *)
 val of_email
   :  ?ignore_unparseable_recipient_header:bool (** default: false *)
   -> Email.t

@@ -9,6 +9,7 @@ let server_config =
   ; max_concurrent_receive_jobs_per_port = 1
   ; timeouts = Smtp_server.Config.default.timeouts
   ; rpc_port = 2210
+  ; rpc_heartbeat_config = None
   ; malformed_emails = `Reject
   ; max_message_size = Byte_units.of_megabytes 1.
   ; tls_options =
@@ -33,8 +34,8 @@ let spool_config =
       Resource_cache.Address_config.default
       |> Resource_cache.Address_config.Stable.V2.of_v3
       |> Resource_cache.Address_config.Stable.V1.of_v2
+  ; connection_cache_warming = None
   ; client = Smtp_client.Config.default
-  ; load_balance = false
   }
 ;;
 
@@ -56,7 +57,7 @@ module Server = Smtp_server.Make (struct
       ;;
 
       let process ~state:_ ~log:_ ~flows _session t email =
-        let spool = Set_once.get_exn the_spool [%here] in
+        let spool = Set_once.get_exn the_spool in
         let envelope = smtp_envelope t email in
         let routed_envelope =
           Smtp_envelope.Routed.create ~envelope ~next_hop_choices ~retry_intervals
@@ -83,7 +84,7 @@ let main () =
   handle_signals ();
   let log = Lazy.force Log.Global.log in
   let%bind spool = Smtp_spool.create ~config:spool_config ~log () >>| Or_error.ok_exn in
-  Set_once.set_exn the_spool [%here] spool;
+  Set_once.set_exn the_spool spool;
   let%bind server =
     Server.start ~server_state:() ~log:(Lazy.force Log.Global.log) ~config:server_config
     >>| Or_error.ok_exn

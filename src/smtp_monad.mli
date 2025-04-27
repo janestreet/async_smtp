@@ -15,8 +15,8 @@ val reject : (Smtp_reply.t -> _ t) with_here
 val tag : tag:string -> ('a t -> 'a t) with_maybe_here
 val tag' : ?tag:string -> ('a t -> 'a t) with_maybe_here
 
-(** Helpers to convert to an ['a t].
-    Unlike [try_with*] below, these will not capture raised exceptions. *)
+(** Helpers to convert to an ['a t]. Unlike [try_with*] below, these will not capture
+    raised exceptions. *)
 val ok : 'a Deferred.t -> 'a t
 
 val of_or_error : ('a Deferred.Or_error.t -> 'a t) with_tag

@@ -28,6 +28,7 @@ module type For_test = sig
     :  server_state:server_state
     -> log:Mail_log.t
     -> ?max_message_size:Byte_units.t
+    -> ?timeouts:Config.Timeouts.t
     -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
     -> ?malformed_emails:[ `Reject | `Wrap ]
@@ -1092,6 +1093,7 @@ module For_test (P : Plugin.S) = struct
     ~server_state
     ~log
     ?(max_message_size = Byte_units.of_bytes_int Int.max_value_30_bits)
+    ?(timeouts = Config.Timeouts.default)
     ?tls_options
     ?(emulate_tls = false)
     ?(malformed_emails = `Reject)
@@ -1110,7 +1112,7 @@ module For_test (P : Plugin.S) = struct
       ~reader
       ~server_events:(Smtp_events.create ())
       ~close_started:(Deferred.never ())
-      ~timeouts:Config.Timeouts.default
+      ~timeouts
       ~raw_writer:writer
       ~session_flows:(Mail_log.Flows.create `Server_session)
       ~local_ip_address

@@ -28,7 +28,7 @@ module Peer_info = struct
   ;;
 
   let set field t value =
-    match Set_once.set (Field.get field t) [%here] value with
+    match Set_once.set (Field.get field t) value with
     | Ok () -> Ok ()
     | Error error -> Error (Error.tag error ~tag:(Field.name field))
   ;;

@@ -18,19 +18,22 @@ depends: [
   "async_sendfile"
   "async_shell"
   "async_ssl"
+  "babel"
   "bin_prot"
   "core"
   "core_kernel"
   "core_unix"
   "email_message"
   "ppx_jane"
+  "ppx_stable"
   "re2"
   "resource_cache"
   "sexp_macro"
   "textutils"
+  "angstrom"       {>= "0.15.0"}
   "base64"         {>= "3.4.0"}
   "cryptokit"      {>= "1.16" & < "1.17"}
-  "dune"           {>= "3.11.0"}
+  "dune"           {>= "3.17.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "SMTP client and server"

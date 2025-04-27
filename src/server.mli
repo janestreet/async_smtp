@@ -32,6 +32,7 @@ module type For_test = sig
     :  server_state:server_state
     -> log:Mail_log.t
     -> ?max_message_size:Byte_units.t
+    -> ?timeouts:Config.Timeouts.t
     -> ?tls_options:Config.Tls_options.t
     -> ?emulate_tls:bool
     -> ?malformed_emails:[ `Reject | `Wrap ]

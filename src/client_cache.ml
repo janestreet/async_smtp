@@ -1,39 +1,3 @@
-module Stable = struct
-  open Core.Core_stable
-
-  module Address_and_route = struct
-    module V1 = struct
-      type t =
-        { address : Host_and_port.V1.t
-        ; route : string option
-        }
-      [@@deriving sexp, bin_io]
-
-      let%expect_test _ =
-        print_endline [%bin_digest: t];
-        [%expect {| 72331b37f209d3a3e9f43e2a7ce58395 |}]
-      ;;
-    end
-
-    module V2 = struct
-      type t =
-        { address : Host_and_port.V1.t
-        ; credentials : Credentials.Stable.V3.t option
-        ; route : string option
-        }
-      [@@deriving sexp, bin_io, stable_record ~version:V1.t ~remove:[ credentials ]]
-
-      let%expect_test _ =
-        print_endline [%bin_digest: t];
-        [%expect {| 760560ddfd777807461844e9cf47ad0d |}]
-      ;;
-
-      let of_v1 = of_V1_t ~credentials:None
-      let to_v1 = to_V1_t
-    end
-  end
-end
-
 open Core
 open Async
 module Log = Mail_log
@@ -66,23 +30,6 @@ module Tcp_options = struct
     ; time_source
     }
   ;;
-end
-
-module Address_and_route = struct
-  module Stable = Stable.Address_and_route
-
-  module T = struct
-    type t = Stable.V2.t =
-      { address : Host_and_port.t
-      ; credentials : Credentials.t option
-      ; route : string option
-      }
-    [@@deriving compare, hash, sexp_of, fields ~getters]
-  end
-
-  include T
-  include Comparable.Make_plain (T)
-  include Hashable.Make_plain (T)
 end
 
 module Resource = struct
@@ -187,10 +134,7 @@ module Status = struct
   end
 end
 
-type t =
-  { cache : Client_cache.t
-  ; load_balance : bool
-  }
+type t = Client_cache.t
 
 let init
   ?buffer_age_limit
@@ -203,7 +147,7 @@ let init
   ~log
   ~cache_config
   ~client_config
-  ~load_balance
+  ~connection_cache_warming
   ()
   =
   let config = Config.to_cache_config cache_config in
@@ -218,14 +162,28 @@ let init
       ()
   in
   let args = Resource.Common_args.create ~component ~tcp_options ~log ~client_config in
-  { cache = Client_cache.init ~config args; load_balance }
+  let cache = Client_cache.init ~config args in
+  Option.iter
+    connection_cache_warming
+    ~f:(fun (connection_cache_warming : Spool_config.Connection_cache_warming.t) ->
+      Client_cache.keep_cache_warm
+        cache
+        ~on_error_opening_resource:(fun ~key:address ~error ->
+          [%log.global.info
+            "Failed to open connection when warming cache"
+              (address : Address_and_route.t)
+              (error : Error.t)])
+        ~num_resources_to_keep_open_per_key:
+          connection_cache_warming.num_connections_per_address
+        connection_cache_warming.addresses_to_keep_warm);
+  cache
 ;;
 
-let close_and_flush t = Client_cache.close_and_flush t.cache
-let close_finished t = Client_cache.close_finished t.cache
-let close_started t = Client_cache.close_started t.cache
-let status t = Client_cache.status t.cache
-let config t = Config.of_cache_config (Client_cache.config t.cache)
+let close_and_flush t = Client_cache.close_and_flush t
+let close_finished t = Client_cache.close_finished t
+let close_started t = Client_cache.close_started t
+let status t = Client_cache.status t
+let config t = Config.of_cache_config (Client_cache.config t)
 
 module Tcp = struct
   let with_' ?give_up ~f ~cache:t ?route ?credentials addresses =
@@ -244,8 +202,7 @@ module Tcp = struct
       Client_cache.with_any_loop
         ~open_timeout:(Time_ns.Span.of_sec 10.)
         ?give_up
-        ~load_balance:t.load_balance
-        t.cache
+        t
         addresses
         ~f
     with

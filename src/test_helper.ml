@@ -18,6 +18,8 @@ type 'a client_flags =
   -> ?client_log:[ Log.Level.t | `None ]
   -> 'a
 
+let timeout = Time_float.Span.of_int_sec 1
+
 let stdout_log ~tag ~level () =
   match level with
   | `None -> Log.create ~level:`Error ~output:[] ~on_error:(`Call ignore) ()
@@ -89,7 +91,7 @@ let print_and_ignore_exn identity f =
   match%map Monitor.try_with ~run:`Schedule ~rest:`Log ~extract_exn:true f with
   | Ok () -> ()
   | Error exn ->
-    Ref.set_temporarily Backtrace.elide true ~f:(fun () ->
+    Dynamic.with_temporarily Backtrace.elide true ~f:(fun () ->
       printf !"%s_ERROR: %{sexp:Exn.t}\n" identity exn)
 ;;
 
@@ -127,9 +129,7 @@ let run ~echo ~client ~server =
       ]
   in
   (* Hack to ensure the tests terminate in case of protocol errors *)
-  let shutdown_later () =
-    don't_wait_for (Clock.after (Time_float.Span.of_sec 1.) >>= shutdown_now)
-  in
+  let shutdown_later () = don't_wait_for (Clock.after timeout >>= shutdown_now) in
   Monitor.protect ~run:`Schedule ~rest:`Log ~finally:shutdown_now (fun () ->
     Deferred.all_unit
       [ print_and_ignore_exn "client" (fun () -> client client_r client_w)
@@ -264,6 +264,7 @@ let server_impl
   with_stdout_log ~tag:"server" ~level:server_log (fun ~log ->
     S.session
       ~server_state:()
+      ~timeouts:{ receive = timeout; receive_after_close = timeout }
       ~log
       ?max_message_size
       ?malformed_emails
@@ -287,8 +288,8 @@ let client_impl
         ~config:
           { Client_config.greeting = Some client_greeting
           ; tls = []
-          ; send_receive_timeout = `This (Time_float.Span.of_sec 1.)
-          ; final_ok_timeout = `This (Time_float.Span.of_sec 1.)
+          ; send_receive_timeout = `This timeout
+          ; final_ok_timeout = `This timeout
           }
         ?credentials
         ~log
@@ -305,22 +306,15 @@ let client_impl
     | Error err -> printf !"client_ERROR: %{Error#hum}\n" err)
 ;;
 
+let timeout = Time_ns.Span.of_sec 0.1
+
 let gen_impl ~f r w =
   let send msg =
     Writer.write_line w msg;
-    match%map Clock.with_timeout (Time_float.Span.of_sec 1.0) (Writer.flushed w) with
-    | `Timeout ->
-      failwith "Failed to flush in time, maybe you should read something first"
-    | `Result () -> ()
+    Writer.flushed w
   in
   let receive msg =
-    match%map Clock.with_timeout (Time_float.Span.of_sec 1.0) (Reader.read_line r) with
-    | `Timeout ->
-      failwithf
-        !"Expected %{sexp:string} but got timeout, maybe you need to send something \
-          first?"
-        msg
-        ()
+    match%map Clock_ns.with_timeout timeout (Reader.read_line r) with
     | `Result `Eof ->
       failwithf
         !"Expected %{sexp:string} but reached EOF, maybe you're expecting too much?"
@@ -336,12 +330,33 @@ let gen_impl ~f r w =
           msg
           line
           ()
+    | `Timeout ->
+      failwithf
+        !"Expected %{sexp:string} but did not receive within %{sexp:Time_ns.Span.t}, \
+          check your protocol and expectations."
+        msg
+        timeout
+        ()
   in
   let send msg = String.split_lines msg |> Deferred.List.iter ~f:send ~how:`Sequential in
   let receive msg =
     String.split_lines msg |> Deferred.List.iter ~f:receive ~how:`Sequential
   in
-  f ~send ~receive
+  let expect_remote_close () =
+    match%map
+      Clock_ns.with_timeout
+        timeout
+        (Deferred.all_unit [ Reader.close_finished r; Writer.close_finished w ])
+    with
+    | `Result () -> ()
+    | `Timeout ->
+      failwithf
+        !"Expected remote to close within %{sexp:Time_ns.Span.t} but this didn't happen, \
+          check your protocol and expectations."
+        timeout
+        ()
+  in
+  f ~send ~receive ~expect_remote_close
 ;;
 
 let smtp
@@ -388,12 +403,16 @@ let manual_client
          ?server_log
          ?plugin
          ?plugin_log)
-    ~client:(gen_impl ~f:(fun ~send ~receive -> f ~client:send ~server:receive))
+    ~client:
+      (gen_impl ~f:(fun ~send ~receive ~expect_remote_close ->
+         f ~client:send ~server:receive ~expect_server_close:expect_remote_close))
 ;;
 
 let manual_server ?tls ?credentials ?client_greeting ?client_log envelopes f =
   run
     ~echo:false
-    ~server:(gen_impl ~f:(fun ~send ~receive -> f ~client:receive ~server:send))
+    ~server:
+      (gen_impl ~f:(fun ~send ~receive ~expect_remote_close ->
+         f ~client:receive ~server:send ~expect_client_close:expect_remote_close))
     ~client:(client_impl ?tls ?credentials ?client_greeting ?client_log ~envelopes)
 ;;

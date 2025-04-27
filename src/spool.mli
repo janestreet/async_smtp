@@ -2,19 +2,19 @@
 
     Async_smtp uses a spool directory structure heavily inspired by that of Exim (see [1]
     and [2] for details on that). On startup, async_smtp takes out a lock on the spool
-    directory (using the [Lock_file] module with the file $spool_dir/lock) and assumes that
-    no other process will be manipulating the files or directories below it without using
-    the async_smtp RPC interface.
+    directory (using the [Lock_file] module with the file $spool_dir/lock) and assumes
+    that no other process will be manipulating the files or directories below it without
+    using the async_smtp RPC interface.
 
     The lifetime of a message looks like this:
 
-    When async_smtp accepts a message it immediately processes it, possibly expanding it to
-    multiple additional messages (at least one per recipient). Each of the expanded
+    When async_smtp accepts a message it immediately processes it, possibly expanding it
+    to multiple additional messages (at least one per recipient). Each of the expanded
     messages are added to the spool (by calling [Spool.add]), writing it first to
     $spool_dir/tmp/$msgid (with a timestamp, as well as information about whether the
-    message is frozen or not, the last relay attempt, and the parent message ID if any) and
-    then renaming it to $spool_dir/active/$msgid (to minimize the chance of a message being
-    sent multiple times in case of a crash).
+    message is frozen or not, the last relay attempt, and the parent message ID if any)
+    and then renaming it to $spool_dir/active/$msgid (to minimize the chance of a message
+    being sent multiple times in case of a crash).
 
     Newly spooled messages are also immediately written to a queue. A background loop
     iterates over this queue, processing and relaying messages in accordance with the
@@ -24,8 +24,8 @@
     On success, the message is removed from the active directory.
 
     On failure, the [last_relay_attempt_date] is immediately updated in the on disk spool
-    file (again using tmp to make the change as atomic as possible). If the message has any
-    remaining retry intervals in [envelope_routed.retry_intervals] then async_smtp
+    file (again using tmp to make the change as atomic as possible). If the message has
+    any remaining retry intervals in [envelope_routed.retry_intervals] then async_smtp
     schedules a retry for after the interval has elapsed (rewriting the spooled message
     with the interval popped off the list of remaining retry intervals only after the
     interval has elapsed). If there are no remaining retry intervals then the message is
@@ -35,16 +35,17 @@
     If async_smtp crashes (or is shutdown) and the spool has contents then it is reloaded
     as follows:
 
-    If there are any contents of $spool_dir/tmp then async_smtp will refuse to
-    start. Such messages indicate that mailcore died while changing a message on
-    disk, which is a serious problem.
+    If there are any contents of $spool_dir/tmp then async_smtp will refuse to start. Such
+    messages indicate that mailcore died while changing a message on disk, which is a
+    serious problem.
 
-    The contents of $spool_dir/active are read in and re-queued based on the
-    last attempted relay time and the remaining retry intervals as above.
+    The contents of $spool_dir/active are read in and re-queued based on the last
+    attempted relay time and the remaining retry intervals as above.
 
-    [1] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-how_exim_receives_and_delivers_mail.html
-    [2] http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html
-*)
+    [1]
+    http://www.exim.org/exim-html-current/doc/html/spec_html/ch-how_exim_receives_and_delivers_mail.html
+    [2]
+    http://www.exim.org/exim-html-current/doc/html/spec_html/ch-format_of_spool_files.html *)
 open! Core
 
 open! Async
@@ -58,10 +59,13 @@ type t
     that for the purposes of locking, the spool directory assumed to NOT be on an NFS file
     system. *)
 val create
-  :  ?presend:(log:Mail_log.t -> Message.t -> [ `Send_now | `Send_at of Time_float.t ])
-       (** Immediately prior to sending a message, [presend] is called and can decide to delay
-      it to a later time. Example use case is rate limiting outbound messages.
-      default: `Send_now for all messages *)
+  :  ?presend:
+       (log:Mail_log.t
+        -> Message.t
+        -> [ `Send_now | `Send_at of Time_float.t | `Freeze | `Remove ] Deferred.t)
+       (** Immediately prior to sending a message, [presend] is called and can decide to
+           delay it to a later time. Example use case is rate limiting outbound messages.
+           default: `Send_now for all messages *)
   -> ?on_error:
        (log:Mail_log.t
         -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
@@ -69,20 +73,20 @@ val create
         -> Smtp_reply.t
         -> [ `Fail_permanently | `Try_later | `Done ] Deferred.Or_error.t)
        (** Upon receiving an error reply for a SMTP relay attempt, [on_error] is called to
-      determine how to handle the error. This callback can make decisions based on the
-      contents of the SMTP reply, the history of previous relay attempts, and other
-      information. `Fail_permanently will cause the message to be frozen (saved on disk
-      but not attempted again), while `Try_later will cause the message to be retried
-      according to [Message.retry_intervals]. `Done will cause the spool to treat the
-      message as handled. `Done can be used for [on-error] to let the spool know that it
-      has enqueued a bounce message to the sender of the failed message, and the spool
-      should stop worrying about the failed message.
+           determine how to handle the error. This callback can make decisions based on
+           the contents of the SMTP reply, the history of previous relay attempts, and
+           other information. `Fail_permanently will cause the message to be frozen (saved
+           on disk but not attempted again), while `Try_later will cause the message to be
+           retried according to [Message.retry_intervals]. `Done will cause the spool to
+           treat the message as handled. `Done can be used for [on-error] to let the spool
+           know that it has enqueued a bounce message to the sender of the failed message,
+           and the spool should stop worrying about the failed message.
 
-      Example use case is detecting and handling emails rate-limited or deemed malicious
-      by the recipient email server.
+           Example use case is detecting and handling emails rate-limited or deemed
+           malicious by the recipient email server.
 
-      default: use [Smtp_reply.is_permanent_error] on the reply to choose between
-      `Fail_permanently and `Try_later, sends no bounce messages *)
+           default: use [Smtp_reply.is_permanent_error] on the reply to choose between
+           `Fail_permanently and `Try_later, sends no bounce messages *)
   -> config:Config.t
   -> log:Mail_log.t
   -> unit
@@ -94,6 +98,11 @@ val create
 val add
   :  t
   -> ?initial_status:[ `Frozen | `Send_now ] (** default: `Send_now *)
+  -> ?set_related_ids:bool
+       (** Set the [related_ids] field for each message. Defaults to [false].
+
+           If [true], [related_ids] will contain the IDs of all messages in the same
+           batch. This allows tracking relationships between messages. *)
   -> flows:Mail_log.Flows.t
   -> original_msg:Smtp_envelope.t
   -> Smtp_envelope.Routed.Batch.t list
@@ -188,6 +197,7 @@ module Status : sig
 end
 
 val status : t -> Status.t
+val get_message : t -> Message_id.t -> Message.t option
 
 (** This is not necessarily a snapshot of the spool at any given point in time. The only
     way to obtain such a snapshot would be to pause the server and we don't want to do
@@ -203,7 +213,8 @@ val client_cache : t -> Client_cache.t
 
 module Event : sig
   type spool_event =
-    [ `Spooled
+    [ `Presend of [ `Send_now | `Send_at of Time_float.t | `Freeze | `Remove ]
+    | `Spooled
     | `Delivered
     | `Frozen
     | `Removed
@@ -228,8 +239,15 @@ module Stable : sig
   module Message_id = Message.Stable.Id
 
   module Status : sig
-    module V2 : sig
+    module V3 : sig
       type t = Status.t [@@deriving bin_io]
+    end
+
+    module V2 : sig
+      type t [@@deriving bin_io]
+
+      val to_v3 : t -> V3.t
+      val of_v3 : V3.t -> t
     end
   end
 
