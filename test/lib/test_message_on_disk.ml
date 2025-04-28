@@ -59,6 +59,7 @@ let test email_str =
         ~log:(Lazy.force Log.Global.log)
         ~initial_status:`Frozen
         envelope_batch
+        ~set_related_ids:true
         ~flows:Smtp_mail_log.Flows.none
         ~original_msg
       >>| ok_exn

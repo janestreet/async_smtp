@@ -21,6 +21,11 @@ type t =
 val of_string : ?default_domain:string -> string -> t Or_error.t
 val of_string_exn : ?default_domain:string -> string -> t
 
+val of_string_with_arguments_string
+  :  ?default_domain:string
+  -> string
+  -> (t * string) Or_error.t
+
 val of_string_with_arguments
   :  ?default_domain:string
   -> allowed_extensions:Smtp_extension.t list (* default: [] *)
@@ -39,6 +44,10 @@ module Caseless : sig
 
   include Comparable.S_plain with type t := t
   include Hashable.S_plain with type t := t
+end
+
+module For_test : sig
+  type nonrec t = t [@@deriving sexp_of]
 end
 
 module Stable : sig

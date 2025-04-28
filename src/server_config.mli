@@ -59,6 +59,7 @@ type t =
   ; max_concurrent_receive_jobs_per_port : int
   ; timeouts : Timeouts.t
   ; rpc_port : int
+  ; rpc_heartbeat_config : Rpc.Connection.Heartbeat_config.t option
   ; malformed_emails : [ `Reject | `Wrap ]
   ; max_message_size : Byte_units.t
   ; tls_options : Tls_options.t option

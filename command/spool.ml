@@ -144,7 +144,8 @@ module Status = struct
 
   let dispatch ~format ?client_side_filter client =
     let%map status =
-      Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client ()
+      Smtp_rpc_intf.Spool.Status.dispatch client
+      >>| ok_exn
       >>| Client_side_filter.filter_opt client_side_filter
     in
     printf "%s\n" (Smtp_spool.Status.to_formatted_string ~format status)
@@ -195,7 +196,8 @@ module Count = struct
   ;;
 
   let dispatch ~which ?client_side_filter client =
-    Rpc.Rpc.dispatch_exn Smtp_rpc_intf.Spool.status client ()
+    Smtp_rpc_intf.Spool.Status.dispatch client
+    >>| ok_exn
     >>| Client_side_filter.filter_opt client_side_filter
     >>| List.filter ~f:(fun message_info ->
       let status = Smtp_spool.Spooled_message_info.status message_info in

@@ -2,8 +2,8 @@ open! Core
 
 type 'a t =
   { envelope : 'a
-  (** Next hops to try. If the first one fails, we are done, otherwise try
-      sending to the second one, etc. *)
+  (** Next hops to try. If the first one fails, we are done, otherwise try sending to the
+      second one, etc. *)
   ; next_hop_choices : Host_and_port.t list
   ; retry_intervals : Retry_interval.t list
   }

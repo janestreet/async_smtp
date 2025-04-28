@@ -80,23 +80,9 @@ module Stable = struct
       ; mutable status : Status.V1.t
       ; mutable envelope_info : Smtp_envelope.Info.V2.t
       }
-    [@@deriving sexp, bin_io]
+    [@@deriving sexp, bin_io, stable_record ~version:V1.t ~modify:[ envelope_info ]]
 
-    let of_v1 (v1 : V1.t) =
-      { spool_dir = v1.spool_dir
-      ; id = v1.id
-      ; flows = v1.flows
-      ; parent_id = v1.parent_id
-      ; spool_date = v1.spool_date
-      ; next_hop_choices = v1.next_hop_choices
-      ; retry_intervals = v1.retry_intervals
-      ; remaining_recipients = v1.remaining_recipients
-      ; failed_recipients = v1.failed_recipients
-      ; relay_attempts = v1.relay_attempts
-      ; status = v1.status
-      ; envelope_info = Smtp_envelope.Info.V2.of_v1 v1.envelope_info
-      }
-    ;;
+    let of_v1 = of_V1_t ~modify_envelope_info:Smtp_envelope.Info.V2.of_v1
 
     let%expect_test _ =
       print_endline [%bin_digest: t];
@@ -119,22 +105,11 @@ module Stable = struct
       ; mutable status : Status.V1.t
       ; mutable envelope_info : Smtp_envelope.Info.V2.t
       }
-    [@@deriving sexp, bin_io]
+    [@@deriving sexp, bin_io, stable_record ~version:V2.t ~modify:[ next_hop_choices ]]
 
-    let of_v2 (v2 : V2.t) =
-      { spool_dir = v2.spool_dir
-      ; id = v2.id
-      ; flows = v2.flows
-      ; parent_id = v2.parent_id
-      ; spool_date = v2.spool_date
-      ; next_hop_choices = Core.List.map v2.next_hop_choices ~f:(fun (`Inet i) -> i)
-      ; retry_intervals = v2.retry_intervals
-      ; remaining_recipients = v2.remaining_recipients
-      ; failed_recipients = v2.failed_recipients
-      ; relay_attempts = v2.relay_attempts
-      ; status = v2.status
-      ; envelope_info = v2.envelope_info
-      }
+    let of_v2 =
+      of_V2_t ~modify_next_hop_choices:(fun next_hop_choices ->
+        Core.List.map next_hop_choices ~f:(fun (`Inet i) -> i))
     ;;
 
     let of_v1 v1 = of_v2 (V2.of_v1 v1)
@@ -142,6 +117,35 @@ module Stable = struct
     let%expect_test _ =
       print_endline [%bin_digest: t];
       [%expect {| 7c91581c5678eddbae053a4a79d731a0 |}]
+    ;;
+  end
+
+  module V4 = struct
+    type t =
+      { spool_dir : string
+      ; id : Id.V1.t
+      ; flows : Mail_log.Flows.V1.t [@default Unstable_mail_log.Flows.none]
+      ; parent_id : Smtp_envelope.Id.V1.t
+      ; related_ids : Id.V1.t list
+      ; spool_date : Time.V1.t
+      ; next_hop_choices : Host_and_port.V1.t list
+      ; mutable retry_intervals : Retry_interval.V2.t list
+      ; mutable remaining_recipients : Email_address.V1.t list
+      ; mutable failed_recipients : Email_address.V1.t list
+      ; mutable relay_attempts : (Time.V1.t * Error.V1.t) list
+      ; mutable status : Status.V1.t
+      ; mutable envelope_info : Smtp_envelope.Info.V2.t
+      }
+    [@@deriving sexp, bin_io, stable_record ~version:V3.t ~remove:[ related_ids ]]
+
+    let to_v3 = to_V3_t
+    let of_v3 = of_V3_t ~related_ids:[]
+    let of_v2 v2 = of_v3 (V3.of_v2 v2)
+    let of_v1 v1 = of_v3 (V3.of_v1 v1)
+
+    let%expect_test _ =
+      print_endline [%bin_digest: t];
+      [%expect {| 6a29555ee0a86522df7d11a2a07191ad |}]
     ;;
   end
 end
@@ -279,11 +283,12 @@ end
 
 (* A value of type t should only be modified via [On_disk_spool].  This guarantees
    that all changes are properly flushed to disk. *)
-type t = Stable.V3.t =
+type t = Stable.V4.t =
   { spool_dir : string
   ; id : Id.t
   ; flows : Mail_log.Flows.t
   ; parent_id : Smtp_envelope.Id.t
+  ; related_ids : Id.t list
   ; spool_date : Time.t
   ; next_hop_choices : Host_and_port.t list
   ; mutable retry_intervals : Smtp_envelope.Retry_interval.t list
@@ -328,62 +333,74 @@ let of_envelope_batch
   ~failed_recipients
   ~relay_attempts
   ~parent_id
+  ~set_related_ids
   ~status
   ~flows
   =
+  let open Deferred.Or_error.Let_syntax in
   let email_body = Smtp_envelope.Routed.Batch.email_body envelope_batch in
   (* We make sure to only map the email body once. *)
   let data_raw_content = Data.map_raw_content email_body ~encode_or_decode:`Encode in
-  Deferred.Or_error.List.map
-    ~how:`Sequential
-    (Smtp_envelope.Routed.Batch.envelopes envelope_batch)
-    ~f:(fun envelope ->
-      let headers =
-        Smtp_envelope.Bodiless.Routed.headers envelope
-        |> Data.map_headers ~encode_or_decode:`Encode
-      in
-      let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
-      let data = Email.create ~headers ~raw_content:data_raw_content in
-      let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
-      let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
-      let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
-      gen_id ()
-      >>|? fun id ->
-      ( { spool_dir
-        ; id
-        ; flows
-        ; parent_id
-        ; spool_date
-        ; next_hop_choices
-        ; retry_intervals
-        ; remaining_recipients
-        ; failed_recipients
-        ; relay_attempts
-        ; status
-        ; envelope_info
-        }
-      , data
-      , Smtp_envelope.Routed.of_bodiless envelope email_body ))
+  let%map envelopes_with_message_ids =
+    Deferred.Or_error.List.map
+      ~how:`Sequential
+      (Smtp_envelope.Routed.Batch.envelopes envelope_batch)
+      ~f:(fun envelope ->
+        let%map id = gen_id () in
+        id, envelope)
+  in
+  let messages_in_batch = List.map envelopes_with_message_ids ~f:Tuple2.get1 in
+  List.map envelopes_with_message_ids ~f:(fun (id, envelope) ->
+    let headers =
+      Smtp_envelope.Bodiless.Routed.headers envelope
+      |> Data.map_headers ~encode_or_decode:`Encode
+    in
+    let envelope_info = Smtp_envelope.Bodiless.Routed.envelope_info envelope in
+    let data = Email.create ~headers ~raw_content:data_raw_content in
+    let next_hop_choices = Smtp_envelope.Bodiless.Routed.next_hop_choices envelope in
+    let retry_intervals = Smtp_envelope.Bodiless.Routed.retry_intervals envelope in
+    let remaining_recipients = Smtp_envelope.Bodiless.Routed.recipients envelope in
+    let related_ids = if set_related_ids then messages_in_batch else [] in
+    let message =
+      { spool_dir
+      ; id
+      ; flows
+      ; parent_id
+      ; related_ids
+      ; spool_date
+      ; next_hop_choices
+      ; retry_intervals
+      ; remaining_recipients
+      ; failed_recipients
+      ; relay_attempts
+      ; status
+      ; envelope_info
+      }
+    in
+    message, data, Smtp_envelope.Routed.of_bodiless envelope email_body)
 ;;
 
 module On_disk = struct
   module Metadata = struct
     module T = struct
-      include Stable.V3
+      include Stable.V4
 
       let t_of_sexp sexp =
         try t_of_sexp sexp with
-        | error_from_v3 ->
-          (try Stable.V2.t_of_sexp sexp |> Stable.V3.of_v2 with
-           | error_from_v2 ->
-             (try Stable.V1.t_of_sexp sexp |> Stable.V3.of_v1 with
-              | error_from_v1 ->
-                raise_s
-                  [%message
-                    "[On_disk.Metadata.t_of_sexp]"
-                      (error_from_v3 : exn)
-                      (error_from_v2 : exn)
-                      (error_from_v1 : exn)]))
+        | error_from_v4 ->
+          (try Stable.V3.t_of_sexp sexp |> Stable.V4.of_v3 with
+           | error_from_v3 ->
+             (try Stable.V2.t_of_sexp sexp |> Stable.V4.of_v2 with
+              | error_from_v2 ->
+                (try Stable.V1.t_of_sexp sexp |> Stable.V4.of_v1 with
+                 | error_from_v1 ->
+                   raise_s
+                     [%message
+                       "[On_disk.Metadata.t_of_sexp]"
+                         (error_from_v4 : exn)
+                         (error_from_v3 : exn)
+                         (error_from_v2 : exn)
+                         (error_from_v1 : exn)])))
       ;;
     end
 

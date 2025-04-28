@@ -14,12 +14,11 @@ open Async_smtp_types
     should not be used thereafter.
 
     This client logs aggressively; while this produces a lot of garbage it is extremely
-    helpful when debugging issues down the line. The client includes a [session_id]
-    that can be set when creating the client.  The [session_id] is extended
-    with additional information about the client state.
+    helpful when debugging issues down the line. The client includes a [session_id] that
+    can be set when creating the client. The [session_id] is extended with additional
+    information about the client state.
 
-    See [Client_raw] if you need a lower-level interface.
-*)
+    See [Client_raw] if you need a lower-level interface. *)
 
 module Peer_info : sig
   type t
@@ -68,8 +67,8 @@ val send_envelope
 
 (** Standard SMTP over tcp *)
 module Tcp : sig
-  (** Establish a connection to the given address and perform the appropriate
-      SMTP handshake. Use [send_envelope] to (attempt) to deliver messages. *)
+  (** Establish a connection to the given address and perform the appropriate SMTP
+      handshake. Use [send_envelope] to (attempt) to deliver messages. *)
   val with_
     : (?config:Client_config.t
        -> ?credentials:Credentials.t (** default: [Credentials.Anon] *)
@@ -90,10 +89,10 @@ module Expert : sig
     -> ?component:Mail_log.Component.t
          (** Send the raw data of the [Email.t].
 
-        [send_data] must:
-        - not include a trailing "\r\n.\r\n"
-        - dot escape the content
-        - use \r\n as the end of line marker *)
+             [send_data] must:
+             - not include a trailing "\r\n.\r\n"
+             - dot escape the content
+             - use \r\n as the end of line marker *)
     -> send_data:(t -> unit Deferred.Or_error.t)
     -> Smtp_envelope.Info.t
     -> Envelope_status.t Deferred.Or_error.t

@@ -7,8 +7,8 @@ module type State = T
 module type Start_tls = sig
   type session
 
-  (** [upgrade_to_tls] is called when initiating an upgrade to TLS.
-      [Session.greeting] will be called to send a suitable greeting after the upgrade. *)
+  (** [upgrade_to_tls] is called when initiating an upgrade to TLS. [Session.greeting]
+      will be called to send a suitable greeting after the upgrade. *)
   val upgrade_to_tls : log:Mail_log.t -> session -> session Smtp_monad.t
 end
 
@@ -24,14 +24,12 @@ module type Session = sig
   type state
   type t
 
-  (** [connect] is called when a client first connects, before any messages are
-      accepted.
+  (** [connect] is called when a client first connects, before any messages are accepted.
 
       [Ok session] accepts the connection, creating a session.
 
-      [Error err] terminates the connection, sending the reject
-      (or [service_unavailable]).
-  *)
+      [Error err] terminates the connection, sending the reject (or
+      [service_unavailable]). *)
   val connect
     :  state:state
     -> log:Mail_log.t
@@ -46,12 +44,12 @@ module type Session = sig
 
       [Ok session] allows the SMTP session to continue.
 
-      [Error err] terminates the connection, sending the reject
-      (or [service_unavailable]). *)
+      [Error err] terminates the connection, sending the reject (or
+      [service_unavailable]). *)
   val helo : state:state -> log:Mail_log.t -> t -> string -> t Smtp_monad.t
 
-  (** [extensions] that are supported including the associated implementations.
-      It is assumed that this will only change after [connect], [helo] and
+  (** [extensions] that are supported including the associated implementations. It is
+      assumed that this will only change after [connect], [helo] and
       [Start_tls.upgrade_to_tls]. *)
   val extensions : state:state -> t -> t Extension.t list
 
@@ -69,8 +67,8 @@ module type Envelope = sig
 
   (** [mail_from] is called in the event of a "MAIL FROM" SMTP command.
 
-      [Ok t] creates an envelope that is updated by [rcpt_to] and finally processed
-      by [data].
+      [Ok t] creates an envelope that is updated by [rcpt_to] and finally processed by
+      [data].
 
       [Error err] sends the reject (or [service_unavailable]) *)
   val mail_from
@@ -83,8 +81,7 @@ module type Envelope = sig
 
   (** [rcpt_to] is called in the event of a "RCPT TO" SMTP command.
 
-      [Ok t] augments the envelope in the pipeline and passes it on to the next
-      phase.
+      [Ok t] augments the envelope in the pipeline and passes it on to the next phase.
 
       [Error err] sends the reject (or [service_unavailable]). *)
   val rcpt_to
@@ -95,15 +92,15 @@ module type Envelope = sig
     -> Email_address.t
     -> t Smtp_monad.t
 
-  (** [accept_data] is called when the [DATA] command is received to decide
-      whether or not to accept the message data. *)
+  (** [accept_data] is called when the [DATA] command is received to decide whether or not
+      to accept the message data. *)
   val accept_data : state:state -> log:Mail_log.t -> session -> t -> t Smtp_monad.t
 
-  (** [process] is called when the message body has been received
-      (after the DATA command and [accept_data]).
+  (** [process] is called when the message body has been received (after the DATA command
+      and [accept_data]).
 
-      The returned string is used to construct the SMTP reply.
-      [Ok str] results in "250 Ok: <str>". *)
+      The returned string is used to construct the SMTP reply. [Ok str] results in "250
+      Ok: <str>". *)
   val process
     :  state:state
     -> log:Mail_log.t
@@ -125,8 +122,8 @@ end
 (** [Simple] provides a basic plugin implementation of [S] to be used as the foundation
     for a plugin that overrides only specific callbacks.
 
-    NOTE: [Envelope.process] is unimplemented. It will unconditionally return back
-    "554 Message processing not implemented". *)
+    NOTE: [Envelope.process] is unimplemented. It will unconditionally return back "554
+    Message processing not implemented". *)
 module Simple : sig
   module State : State with type t = unit
 

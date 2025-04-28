@@ -83,7 +83,15 @@ let enqueue meta_spool queue ~meta ~id ~data =
   Deferred.Or_error.ok_unit
 ;;
 
-let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
+let enqueue
+  spool
+  ~log:_
+  ~initial_status
+  ~set_related_ids
+  envelope_batch
+  ~flows
+  ~original_msg
+  =
   let parent_id = Smtp_envelope.id original_msg in
   Message.Queue.of_status' initial_status
   |> Deferred.return
@@ -96,6 +104,7 @@ let enqueue spool ~log:_ ~initial_status envelope_batch ~flows ~original_msg =
     ~failed_recipients:[]
     ~relay_attempts:[]
     ~parent_id
+    ~set_related_ids
     ~status:initial_status
     ~flows
   >>=? fun messages_with_data ->
@@ -145,20 +154,21 @@ let with_file
   >>| Or_error.join
 ;;
 
-let freeze t ~log =
-  with_file t (fun _data_file ->
-    Log.info
-      log
-      (lazy
-        (Log.Message.create
-           ~here:[%here]
-           ~flows:(Message.flows t)
-           ~component:[ "spool" ]
-           ~spool_id:(Message.Id.to_string (Message.id t))
-           "frozen"));
-    Message.set_status t `Frozen;
-    return (Ok (`Sync_meta, ())))
+let freeze_without_file t ~log =
+  Log.info
+    log
+    (lazy
+      (Log.Message.create
+         ~here:[%here]
+         ~flows:(Message.flows t)
+         ~component:[ "spool" ]
+         ~spool_id:(Message.Id.to_string (Message.id t))
+         "frozen"));
+  Message.set_status t `Frozen;
+  return (Ok (`Sync_meta, ()))
 ;;
+
+let freeze t ~log = with_file t (fun _data_file -> freeze_without_file t ~log)
 
 let mark_for_send_now ~retry_intervals t ~log =
   with_file t (fun _data_file ->
@@ -177,20 +187,30 @@ let mark_for_send_now ~retry_intervals t ~log =
     return (Ok (`Sync_meta, ())))
 ;;
 
-let remove t ~log =
-  with_file t (fun _data_file ->
-    Log.info
-      log
-      (lazy
-        (Log.Message.create
-           ~here:[%here]
-           ~flows:(Message.flows t)
-           ~component:[ "spool" ]
-           ~spool_id:(Message.Id.to_string (Message.id t))
-           "removing"));
-    Message.set_status t `Removed;
-    return (Ok (`Sync_meta, ())))
+let mark_for_send_at_without_file t ~at ~log:_ =
+  Message.set_status t (`Send_at at);
+  return (Ok (`Sync_meta, ()))
 ;;
+
+let mark_for_send_at t ~at ~log =
+  with_file t (fun _data_file -> mark_for_send_at_without_file t ~at ~log)
+;;
+
+let remove_without_file t ~log =
+  Log.info
+    log
+    (lazy
+      (Log.Message.create
+         ~here:[%here]
+         ~flows:(Message.flows t)
+         ~component:[ "spool" ]
+         ~spool_id:(Message.Id.to_string (Message.id t))
+         "removing"));
+  Message.set_status t `Removed;
+  return (Ok (`Sync_meta, ()))
+;;
+
+let remove t ~log = with_file t (fun _data_file -> remove_without_file t ~log)
 
 let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_file =
   let send_data client =
@@ -355,37 +375,49 @@ let send_to_hops t ~log ~client_cache ~on_error data_file =
             | `Rejected_body (r, _) ) -> on_error ~log r))
 ;;
 
-let do_send t ~log ~client_cache ~on_error =
+let do_send_without_file t ~log ~client_cache ~on_error ~get_envelope =
   let last_relay_error t =
     match Message.last_relay_attempt t with
     | None -> Error.of_string "No relay attempt"
     | Some (_, e) -> e
   in
-  with_file t (fun get_envelope ->
-    Message.set_status t `Sending;
-    match%map send_to_hops t ~log ~client_cache ~on_error get_envelope with
-    | `Done ->
-      Message.set_status t `Delivered;
-      Ok (`Unlink, `Delivered)
-    | (`Fail_permanently | `Try_later) as fail ->
-      (match fail, Message.retry_intervals t with
-       | `Fail_permanently, _ | `Try_later, [] ->
-         let delivery_failure = last_relay_error t in
-         Message.set_status t `Frozen;
-         Ok (`Sync_meta, `Failed delivery_failure)
-       | `Try_later, r :: rs ->
-         let delivery_failure = last_relay_error t in
-         Message.set_status
-           t
-           (`Send_at
-             (Time_float.add (Time_float.now ()) (Smtp_envelope.Retry_interval.to_span r)));
-         Message.set_retry_intervals t rs;
-         Ok (`Sync_meta, `Failed delivery_failure)))
+  Message.set_status t `Sending;
+  match%bind send_to_hops t ~log ~client_cache ~on_error get_envelope with
+  | `Done ->
+    Message.set_status t `Delivered;
+    Deferred.Or_error.return (`Unlink, (`Delivered, None))
+  | (`Fail_permanently | `Try_later) as fail ->
+    (match fail, Message.retry_intervals t with
+     | `Fail_permanently, _ | `Try_later, [] ->
+       let delivery_failure = last_relay_error t in
+       let%map.Deferred.Or_error action, () = freeze_without_file t ~log in
+       action, (`Frozen, Some delivery_failure)
+     | `Try_later, r :: rs ->
+       let delivery_failure = last_relay_error t in
+       let at = Time_float.(add (now ()) (Smtp_envelope.Retry_interval.to_span r)) in
+       let%map.Deferred.Or_error action, () = mark_for_send_at_without_file t ~at ~log in
+       Message.set_retry_intervals t rs;
+       action, (`Delayed_to at, Some delivery_failure))
 ;;
 
-let send t ~log ~client_cache ~on_error =
+let do_send t ~log ~client_cache ~presend ~on_error =
+  with_file t (fun get_envelope ->
+    match%bind presend ~log with
+    | `Freeze ->
+      let%map.Deferred.Or_error action, () = freeze_without_file t ~log in
+      action, (`Frozen, None)
+    | `Remove ->
+      let%map.Deferred.Or_error action, () = remove_without_file t ~log in
+      action, (`Removed, None)
+    | `Send_at at ->
+      let%map.Deferred.Or_error action, () = mark_for_send_at_without_file t ~at ~log in
+      action, (`Delayed_to at, None)
+    | `Send_now -> do_send_without_file t ~log ~client_cache ~on_error ~get_envelope)
+;;
+
+let send t ~log ~client_cache ~presend ~on_error =
   match Message.status t with
-  | `Send_now | `Send_at _ -> do_send t ~log ~client_cache ~on_error
+  | `Send_now | `Send_at _ -> do_send t ~log ~client_cache ~presend ~on_error
   | `Frozen -> return (Or_error.error_string "Message.send: message is frozen")
   | `Removed -> return (Or_error.error_string "Message.send: message is removed")
   | `Quarantined _ ->

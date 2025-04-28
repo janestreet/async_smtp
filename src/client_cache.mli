@@ -2,31 +2,6 @@ open! Core
 open Async
 module Config = Resource_cache.Address_config
 
-module Address_and_route : sig
-  type t =
-    { address : Host_and_port.t
-    ; credentials : Credentials.t option
-    ; route : string option
-    }
-  [@@deriving sexp_of]
-
-  include Comparable.S_plain with type t := t
-  include Hashable.S_plain with type t := t
-
-  module Stable : sig
-    module V1 : sig
-      type t [@@deriving sexp, bin_io]
-    end
-
-    module V2 : sig
-      type nonrec t = t [@@deriving sexp, bin_io]
-
-      val of_v1 : V1.t -> t
-      val to_v1 : t -> V1.t
-    end
-  end
-end
-
 module Status : sig
   include Resource_cache.Status.S with type Key.t = Address_and_route.t
 
@@ -44,7 +19,7 @@ val init
      -> log:Mail_log.t
      -> cache_config:Config.t
      -> client_config:Client_config.t
-     -> load_balance:bool
+     -> connection_cache_warming:Spool_config.Connection_cache_warming.t option
      -> unit
      -> t)
       Tcp.Aliases.with_connect_options
@@ -56,9 +31,8 @@ val status : t -> Status.t
 val config : t -> Config.t
 
 module Tcp : sig
-  (** [with_'] concurrently tries to get a cached connection for one of [addresses].
-      [`Ok] and [`Error_opening_resource] return back the [Smtp_socket_address.t] that was
-      used. *)
+  (** [with_'] concurrently tries to get a cached connection for one of [addresses]. [`Ok]
+      and [`Error_opening_resource] return back the [Smtp_socket_address.t] that was used. *)
   val with_'
     :  ?give_up:unit Deferred.t
     -> f:(flows:Mail_log.Flows.t -> Client.t -> 'a Deferred.Or_error.t)

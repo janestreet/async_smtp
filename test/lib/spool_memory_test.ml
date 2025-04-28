@@ -26,6 +26,7 @@ let main ~tmp_dir ~iterations ~msg_size =
       ~log
       ~initial_status:`Frozen
       envelope_batch
+      ~set_related_ids:true
       ~flows:Smtp_mail_log.Flows.none
       ~original_msg:envelope
     >>| ok_exn

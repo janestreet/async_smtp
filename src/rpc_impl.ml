@@ -6,7 +6,6 @@ module Monitor = struct
     let seqnum = ref 0 in
     let error_stream =
       Bus.create_exn
-        [%here]
         Arity1
         ~on_subscription_after_first_write:Allow
         ~on_callback_raise:Error.raise
@@ -28,10 +27,13 @@ module Monitor = struct
           Deferred.unit)
     in
     Log.Global.set_output (send_errors :: Log.Global.get_output ());
-    Rpc.Pipe_rpc.implement Rpc_intf.Monitor.errors (fun () () ->
-      [%log.global.debug_string "received error stream subscription"];
-      let pipe = Async_bus.pipe1_exn error_stream [%here] in
-      return (Ok pipe))
+    Rpc.Pipe_rpc.implement
+      Rpc_intf.Monitor.errors
+      (fun () () ->
+        [%log.global.debug_string "received error stream subscription"];
+        let pipe = Async_bus.pipe1_exn error_stream in
+        return (Ok pipe))
+      ~leave_open_on_exception:true
   ;;
 
   let rpcs () = [ errors () ]
@@ -40,12 +42,15 @@ end
 module Spool = struct
   module Cache = struct
     let status =
-      Rpc.Pipe_rpc.implement Rpc_intf.Spool.Cache.status (fun spool update_interval ->
-        let cache = Spool.client_cache spool in
-        let r, w = Pipe.create () in
-        Clock.every' ~stop:(Pipe.closed w) update_interval (fun () ->
-          Pipe.write w (Client_cache.status cache));
-        return (Ok r))
+      Rpc.Pipe_rpc.implement
+        Rpc_intf.Spool.Cache.status
+        (fun spool update_interval ->
+          let cache = Spool.client_cache spool in
+          let r, w = Pipe.create () in
+          Clock.every' ~stop:(Pipe.closed w) update_interval (fun () ->
+            Pipe.write w (Client_cache.status cache));
+          return (Ok r))
+        ~leave_open_on_exception:true
     ;;
 
     let config =
@@ -59,9 +64,12 @@ module Spool = struct
     let rpcs = [ status; config ]
   end
 
-  let status =
-    Rpc.Rpc.implement Rpc_intf.Spool.status (fun spool () -> return (Spool.status spool))
-  ;;
+  module Status = struct
+    let rpcs =
+      Babel.Callee.implement_multi_exn Rpc_intf.Spool.Status.callee ~f:(fun spool _ () ->
+        return (Spool.status spool))
+    ;;
+  end
 
   let freeze =
     Rpc.Rpc.implement Rpc_intf.Spool.freeze (fun spool msgids ->
@@ -83,19 +91,25 @@ module Spool = struct
   ;;
 
   let events =
-    Rpc.Pipe_rpc.implement Rpc_intf.Spool.events (fun spool () ->
-      let pipe = Spool.event_stream spool in
-      return (Ok pipe))
+    Rpc.Pipe_rpc.implement
+      Rpc_intf.Spool.events
+      (fun spool () ->
+        let pipe = Spool.event_stream spool in
+        return (Ok pipe))
+      ~leave_open_on_exception:true
   ;;
 
-  let rpcs = [ status; freeze; send; remove; recover; events ] @ Cache.rpcs
+  let rpcs = [ freeze; send; remove; recover; events ] @ Status.rpcs @ Cache.rpcs
 end
 
 module Smtp_events = struct
   let events =
-    Rpc.Pipe_rpc.implement Rpc_intf.Smtp_events.events (fun server_events () ->
-      let pipe = Smtp_events.event_stream server_events in
-      return (Ok pipe))
+    Rpc.Pipe_rpc.implement
+      Rpc_intf.Smtp_events.events
+      (fun server_events () ->
+        let pipe = Smtp_events.event_stream server_events in
+        return (Ok pipe))
+      ~leave_open_on_exception:true
   ;;
 
   let rpcs = [ events ]
@@ -120,11 +134,14 @@ module Gc = struct
   ;;
 
   let stat_pipe =
-    Rpc.Pipe_rpc.implement Rpc_intf.Gc.stat_pipe (fun () () ->
-      let r, w = Pipe.create () in
-      Clock.every' ~stop:(Pipe.closed w) (Time_float.Span.of_sec 15.) (fun () ->
-        Pipe.write w (Gc.quick_stat ()));
-      return (Ok r))
+    Rpc.Pipe_rpc.implement
+      Rpc_intf.Gc.stat_pipe
+      (fun () () ->
+        let r, w = Pipe.create () in
+        Clock.every' ~stop:(Pipe.closed w) (Time_float.Span.of_sec 15.) (fun () ->
+          Pipe.write w (Gc.quick_stat ()));
+        return (Ok r))
+      ~leave_open_on_exception:true
   ;;
 
   let rpcs = [ stat; quick_stat; full_major; major; minor; compact; stat_pipe ]

@@ -120,7 +120,8 @@ module Component : sig
   val is_unknown : t -> bool
 end
 
-(** Special tags that are used by the mailcoregrep utility in order to parse the log messages *)
+(** Special tags that are used by the mailcoregrep utility in order to parse the log
+    messages *)
 module Session_marker : sig
   type t =
     [ `Connected
@@ -251,9 +252,8 @@ type t = Log.t
     The "component" tag (if present) will be prepended or added if missing with
     [component].
 
-    The given flows will be added as additional 'flow' tags (potentially adding
-    a duplicate).
-*)
+    The given flows will be added as additional 'flow' tags (potentially adding a
+    duplicate). *)
 val with_flow_and_component : flows:Flows.t -> component:Component.t -> t -> t
 
 (* This function is to give external users of this library a chance to control
@@ -273,15 +273,12 @@ val adjust_log_levels
 (** [message] outputs the given message (if appropriate for the current log level).
 
     Use [Message.create], [Message.debug] or [Message.of_error] to create the [Message.t].
-    e.g.
-    [ Mail_log.info log (lazy Message.create ~component:"world" "hello"); ]
+    e.g. [ Mail_log.info log (lazy Message.create ~component:"world" "hello"); ]
 
-    Special notes about the behaviour of these functions:
- * The message is dropped without forcing if [level] is less that [Log.level t].
- * If the message has no loglevel set the level to match.
- * If [t] has information attached to it via [with_flow_and_component],
-    add that information to the message.
-*)
+    Special notes about the behaviour of these functions: * The message is dropped without
+    forcing if [level] is less that [Log.level t]. * If the message has no loglevel set
+    the level to match. * If [t] has information attached to it via
+    [with_flow_and_component], add that information to the message. *)
 val message : t -> level:Log.Level.t -> Message.t Lazy.t -> unit
 
 val message' : t -> level:Log.Level.t -> Message.t -> unit

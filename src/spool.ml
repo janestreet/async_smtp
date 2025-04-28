@@ -38,13 +38,30 @@ module Stable = struct
   end
 
   module Spooled_message_info = struct
+    module V3 = struct
+      type t =
+        { message : Message.V4.t
+        ; file_size : Byte_units.V1.t option
+        ; envelope : Smtp_envelope.V2.t option
+        }
+      [@@deriving bin_io]
+
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| 4f0e4c8fae172cc9a1c2af02d24047ff |}]
+      ;;
+    end
+
     module V2 = struct
       type t =
         { message : Message.V3.t
         ; file_size : Byte_units.V1.t option
         ; envelope : Smtp_envelope.V2.t option
         }
-      [@@deriving bin_io]
+      [@@deriving bin_io, stable_record ~version:V3.t ~modify:[ message ]]
+
+      let of_v3 = of_V3_t ~modify_message:Message.V4.to_v3
+      let to_v3 = to_V3_t ~modify_message:Message.V4.of_v3
 
       let%expect_test _ =
         print_endline [%bin_digest: t];
@@ -54,8 +71,20 @@ module Stable = struct
   end
 
   module Status = struct
+    module V3 = struct
+      type t = Spooled_message_info.V3.t list [@@deriving bin_io]
+
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| 8b4a0fae72e23152fa35fc5d804b0e32 |}]
+      ;;
+    end
+
     module V2 = struct
       type t = Spooled_message_info.V2.t list [@@deriving bin_io]
+
+      let to_v3 = Core.List.map ~f:Spooled_message_info.V2.to_v3
+      let of_v3 = Core.List.map ~f:Spooled_message_info.V2.of_v3
 
       let%expect_test _ =
         print_endline [%bin_digest: t];
@@ -67,7 +96,8 @@ module Stable = struct
   module Event = struct
     module V1 = struct
       type spool_event =
-        [ `Spooled
+        [ `Presend of [ `Send_now | `Send_at of Time.V1.t | `Freeze | `Remove ]
+        | `Spooled
         | `Delivered
         | `Frozen
         | `Removed
@@ -84,7 +114,7 @@ module Stable = struct
 
       let%expect_test _ =
         print_endline [%bin_digest: t];
-        [%expect {| 3893496c65649603f1214af29823f7d9 |}]
+        [%expect {| 04e301d2f60a79fb948ed32d1de0c9fd |}]
       ;;
     end
   end
@@ -103,7 +133,8 @@ module Log = Mail_log
 module Event = struct
   module T = struct
     type spool_event =
-      [ `Spooled
+      [ `Presend of [ `Send_now | `Send_at of Time.t | `Freeze | `Remove ]
+      | `Spooled
       | `Delivered
       | `Frozen
       | `Removed
@@ -129,6 +160,7 @@ module Event = struct
       | `Spool_event (spool_event, id, _info) ->
         let event_string =
           match spool_event with
+          | `Presend _ -> "presend"
           | `Spooled -> "spooled"
           | `Frozen -> "frozen"
           | `Removed -> "removed"
@@ -173,6 +205,7 @@ module Event = struct
     Bus.write event_stream t
   ;;
 
+  let presend send_at = event_gen (`Presend send_at) ~time:(`Of_msg Message.spool_date)
   let spooled = event_gen `Spooled ~time:(`Of_msg Message.spool_date)
   let delivered = event_gen `Delivered ~time:`Now
   let frozen = event_gen `Frozen ~time:`Now
@@ -191,7 +224,10 @@ type t =
   ; log : Log.t
   ; mutable is_killed : bool
   ; killed_and_flushed : unit Ivar.t
-  ; presend : log:Log.t -> Message.t -> [ `Send_now | `Send_at of Time_float.t ]
+  ; presend :
+      log:Log.t
+      -> Message.t
+      -> [ `Send_now | `Send_at of Time_float.t | `Freeze | `Remove ] Deferred.t
   ; on_error :
       log:Log.t
       -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
@@ -246,12 +282,55 @@ let recovered_event t from_where = with_event_writer t ~f:(Event.recovered from_
 let quarantined_event t reason = with_event_writer t ~f:(Event.quarantined reason)
 
 let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
+  let spool_dir = Config.spool_dir config in
+  Log.info
+    log
+    (lazy
+      (Log.Message.create
+         ~here:[%here]
+         ~flows:Log.Flows.none
+         ~component:[ "spool" ]
+         ~tags:[ "spool-dir", spool_dir ]
+         "initializing"));
+  Message_spool.create spool_dir
+  >>|? fun spool ->
+  let event_stream =
+    Bus.create_exn
+      Arity1
+      ~on_subscription_after_first_write:Allow
+      ~on_callback_raise:Error.raise
+  in
+  Clock.every (sec 30.) (fun () ->
+    Log.debug
+      log
+      (lazy
+        (Log.Message.create
+           ~here:[%here]
+           ~flows:Log.Flows.none
+           ~component:[ "spool"; "event-stream" ]
+           "ping"));
+    Bus.write event_stream (Time.now (), `Ping));
+  let active_send_jobs = Message_id.Table.create () in
+  let messages = Message_id.Table.create () in
+  let client_cache =
+    Client_cache.init
+      ~log
+      ~component:[ "spool"; "client_cache" ]
+      ~cache_config:
+        (config.connection_cache
+         |> Resource_cache.Address_config.Stable.V1.to_v2
+         |> Resource_cache.Address_config.Stable.V2.to_v3)
+      ~client_config:config.client
+      ~connection_cache_warming:config.connection_cache_warming
+      ()
+  in
+  let killed_and_flushed = Ivar.create () in
   (* Wrap the [presend] and [on_error] callbacks to perform some logging and error
      handling by default. *)
   let presend ~log message =
     let component = [ "spool"; "plugin-callback"; "presend" ] in
     let flows = Message.flows message in
-    let decision =
+    let%map decision =
       presend ~log:(Log.with_flow_and_component ~flows ~component log) message
     in
     Log.info
@@ -266,7 +345,10 @@ let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
            ~spool_id:(Message.id message |> Message.Id.to_string)
            ~flows
            (Sexp.to_string
-              [%sexp (decision : [ `Send_now | `Send_at of Time_float_unix.t ])])));
+              [%sexp
+                (decision
+                 : [ `Send_now | `Send_at of Time_float_unix.t | `Freeze | `Remove ])])));
+    Event.presend decision ~here:[%here] ~log event_stream message;
     decision
   in
   let on_error ~log ~load_envelope message reply =
@@ -313,50 +395,6 @@ let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
       (* Default to try later upon errors to give us more chances to handle the reject. *)
       `Try_later
   in
-  let spool_dir = Config.spool_dir config in
-  Log.info
-    log
-    (lazy
-      (Log.Message.create
-         ~here:[%here]
-         ~flows:Log.Flows.none
-         ~component:[ "spool" ]
-         ~tags:[ "spool-dir", spool_dir ]
-         "initializing"));
-  Message_spool.create spool_dir
-  >>|? fun spool ->
-  let event_stream =
-    Bus.create_exn
-      [%here]
-      Arity1
-      ~on_subscription_after_first_write:Allow
-      ~on_callback_raise:Error.raise
-  in
-  Clock.every (sec 30.) (fun () ->
-    Log.debug
-      log
-      (lazy
-        (Log.Message.create
-           ~here:[%here]
-           ~flows:Log.Flows.none
-           ~component:[ "spool"; "event-stream" ]
-           "ping"));
-    Bus.write event_stream (Time.now (), `Ping));
-  let active_send_jobs = Message_id.Table.create () in
-  let messages = Message_id.Table.create () in
-  let client_cache =
-    Client_cache.init
-      ~log
-      ~component:[ "spool"; "client_cache" ]
-      ~cache_config:
-        (config.connection_cache
-         |> Resource_cache.Address_config.Stable.V1.to_v2
-         |> Resource_cache.Address_config.Stable.V2.to_v3)
-      ~client_config:config.client
-      ~load_balance:config.load_balance
-      ()
-  in
-  let killed_and_flushed = Ivar.create () in
   Fields.create
     ~spool
     ~active_send_jobs
@@ -416,8 +454,12 @@ let with_spooled_message t message ~f =
   | `Ok result -> return result
 ;;
 
-let rec enqueue ?don't_retry ?at t spooled_msg =
+let rec enqueue ?don't_re_enqueue ?at t spooled_msg =
   let msgid = Message.id spooled_msg in
+  let error_opt = function
+    | None -> return (Ok ())
+    | Some error -> return (Error error)
+  in
   let%bind () =
     match at with
     | None -> Deferred.unit
@@ -435,71 +477,55 @@ let rec enqueue ?don't_retry ?at t spooled_msg =
   let status = Message.status spooled_msg in
   match status with
   | `Delivered | `Sending | `Frozen | `Removed | `Quarantined _ ->
-    (* Only actually call [send] if the status is [`Send_now]. Between the time an
-       async job was scheduled and the time it gets run, the status of the message
-       can change. We make sure not to try to send if we have manually intervened,
-       causing a permanent status change. *)
-    Or_error.errorf !"Not attempting delivery for status %{sexp: Message.Status.t}" status
-    |> return
+    (* Only actually call [send] if the status is [`Send_now] or [`Send_at _]. Between the
+       time an async job was scheduled and the time it gets run, the status of the message
+       can change. We make sure not to try to send if we have manually intervened, causing
+       a permanent status change. *)
+    Deferred.Or_error.errorf
+      !"Not attempting delivery for status %{sexp: Message.Status.t}"
+      status
   | `Send_now | `Send_at _ ->
     (match%bind
        with_spooled_message' t spooled_msg ~f:(fun () ->
-         match
-           (* If we call [presend] before, the information it used to make the decision
-              may be outdated by the time we send. If we call [presend] after, the message
-              has already been sent. Calling [presend] here prevents both problems. *)
-           presend t spooled_msg ~log:t.log
-         with
-         | `Send_now ->
-           Message_spool.send
-             spooled_msg
-             ~log:t.log
-             ~client_cache:t.client_cache
-             ~on_error:(on_error t spooled_msg)
-         | `Send_at at -> Ok (`Delayed_to at) |> return)
+         Message_spool.send
+           spooled_msg
+           ~log:t.log
+           ~client_cache:t.client_cache
+             (* Curry [spooled_message] to [on_error] and [presend].
+
+                note: a [Message.t] is mutable, so it shouldn't actually matter if we
+                curry here or pass it as an argument in [Message_spool.send]. *)
+           ~on_error:(t.on_error spooled_msg)
+           ~presend:(t.presend spooled_msg))
      with
      | `Spool_is_killed -> return (Error spool_is_killed_error)
-     | `Ok spool_send_result ->
+     | `Ok (Error error) ->
+       Log.error
+         t.log
+         (lazy
+           (Log.Message.of_error
+              ~here:[%here]
+              ~flows:(Message.flows spooled_msg)
+              ~component:[ "spool"; "send" ]
+              ~spool_id:(Message_id.to_string msgid)
+              error));
+       return (Error error)
+     | `Ok (Ok (`Delayed_to at, maybe_error)) ->
+       (match don't_re_enqueue with
+        | Some () -> error_opt maybe_error
+        | None ->
+          (* Use the Async queue to store messages waiting for retry. *)
+          enqueue ~at t spooled_msg)
+     | `Ok (Ok (((`Delivered | `Frozen | `Removed) as spool_send_result), maybe_error)) ->
        (match spool_send_result with
-        | Error e ->
-          Log.error
-            t.log
-            (lazy
-              (Log.Message.of_error
-                 ~here:[%here]
-                 ~flows:(Message.flows spooled_msg)
-                 ~component:[ "spool"; "send" ]
-                 ~spool_id:(Message_id.to_string msgid)
-                 e));
-          return (Error e)
-        | Ok `Delivered ->
+        | `Delivered ->
           remove_message t spooled_msg;
-          delivered_event t ~here:[%here] spooled_msg;
-          return (Ok ())
-        | Ok (`Delayed_to at) -> enqueue ~at t spooled_msg
-        | Ok (`Failed relay_attempt) ->
-          (match don't_retry with
-           | Some () -> return (Error relay_attempt)
-           | None ->
-             (* Use the Async queue to store the messages waiting for retry. *)
-             (match Message.status spooled_msg with
-              | `Send_now -> enqueue t spooled_msg
-              | `Send_at at -> enqueue ~at t spooled_msg
-              | `Frozen ->
-                frozen_event t ~here:[%here] spooled_msg;
-                return (Error relay_attempt)
-              | `Delivered | `Sending | `Removed | `Quarantined _ ->
-                Log.error
-                  t.log
-                  (lazy
-                    (Log.Message.create
-                       ~here:[%here]
-                       ~flows:(Message.flows spooled_msg)
-                       ~component:[ "spool"; "send" ]
-                       ~spool_id:(Message_id.to_string msgid)
-                       ~tags:[ "status", sprintf !"%{sexp:Message.Status.t}" status ]
-                       "Unexpected status after [Message_spool.send]"));
-                return (Error relay_attempt)))))
+          delivered_event t ~here:[%here] spooled_msg
+        | `Frozen -> frozen_event t ~here:[%here] spooled_msg
+        | `Removed ->
+          remove_message t spooled_msg;
+          removed_event ~here:[%here] t spooled_msg);
+       error_opt maybe_error)
 ;;
 
 let schedule t msg =
@@ -609,7 +635,7 @@ let load t =
 ;;
 
 let create
-  ?(presend = fun ~log:_ _message -> `Send_now)
+  ?(presend = fun ~log:_ _message -> return `Send_now)
   ?(on_error =
     fun ~log:_ ~load_envelope:_ _message reply ->
       if Smtp_reply.is_permanent_error reply
@@ -625,7 +651,14 @@ let create
   load t >>=? fun () -> return (Ok t)
 ;;
 
-let add t ?(initial_status = `Send_now) ~flows ~original_msg envelope_batches =
+let add
+  t
+  ?(initial_status = `Send_now)
+  ?(set_related_ids = false)
+  ~flows
+  ~original_msg
+  envelope_batches
+  =
   Deferred.Or_error.List.concat_map
     envelope_batches
     ~how:`Parallel
@@ -635,13 +668,14 @@ let add t ?(initial_status = `Send_now) ~flows ~original_msg envelope_batches =
         ~log:t.log
         ~flows:(Log.Flows.extend flows `Outbound_envelope)
         ~initial_status:(initial_status :> Message.Status.t)
+        ~set_related_ids
         envelope_batch
         ~original_msg
       >>|? fun spooled_msgs ->
       List.map spooled_msgs ~f:(fun (msg, envelope) ->
         add_message t msg;
-        don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit));
         spooled_event t ~here:[%here] msg;
+        don't_wait_for (enqueue t msg >>| (ignore : unit Or_error.t -> unit));
         Message.id msg, envelope))
 ;;
 
@@ -655,6 +689,7 @@ let quarantine t ~reason ~flows ~original_msg envelope_batches =
         ~log:t.log
         ~flows:(Log.Flows.extend flows `Outbound_envelope)
         ~initial_status:(`Quarantined reason)
+        ~set_related_ids:false
         envelope_batch
         ~original_msg
       >>|? fun quarantined_msgs ->
@@ -710,7 +745,7 @@ let send_msgs ?(retry_intervals = []) t ids =
       Message_spool.mark_for_send_now ~retry_intervals msg ~log:t.log)
     >>=? fun () ->
     Option.iter event ~f:(fun event -> event t msg);
-    enqueue ~don't_retry:() t msg
+    enqueue ~don't_re_enqueue:() t msg
   in
   Deferred.List.map ids ~how:`Parallel ~f:(fun id ->
     get_msg t id ~f:(fun msg ->
@@ -802,7 +837,7 @@ let send ?retry_intervals t send_info =
 ;;
 
 module Spooled_message_info = struct
-  type t = Stable.Spooled_message_info.V2.t =
+  type t = Stable.Spooled_message_info.V3.t =
     { message : Message.t
     ; file_size : Byte_units.t option
     ; envelope : Smtp_envelope.t option
@@ -973,6 +1008,8 @@ let status t =
     { Spooled_message_info.message; envelope = None; file_size = None })
 ;;
 
+let get_message t msg_id = Hashtbl.find t.messages msg_id
+
 let status_from_disk config =
   Message_spool.load (Config.spool_dir config)
   >>=? fun spool ->
@@ -1012,5 +1049,5 @@ let event_stream t =
          ~flows:Log.Flows.none
          ~component:[ "spool"; "event-stream" ]
          "subscription"));
-  Async_bus.pipe1_exn t.event_stream [%here]
+  Async_bus.pipe1_exn t.event_stream
 ;;

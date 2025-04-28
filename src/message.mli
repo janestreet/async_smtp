@@ -46,6 +46,7 @@ val spool_dir : t -> string
 val id : t -> Id.t
 val flows : t -> Mail_log.Flows.t
 val parent_id : t -> Smtp_envelope.Id.t
+val related_ids : t -> Id.t list
 val spool_date : t -> Time_float.t
 val next_hop_choices : t -> Host_and_port.t list
 val envelope_info : t -> Smtp_envelope.Info.t
@@ -53,8 +54,8 @@ val time_on_spool : t -> Time_float.Span.t
 val status : t -> Status.t
 val set_status : t -> Status.t -> unit
 
-(** The head of this list is the time at which we should attempt a delivery
-    after the next time a delivery fails. *)
+(** The head of this list is the time at which we should attempt a delivery after the next
+    time a delivery fails. *)
 val retry_intervals : t -> Smtp_envelope.Retry_interval.t list
 
 val set_retry_intervals : t -> Smtp_envelope.Retry_interval.t list -> unit
@@ -63,8 +64,8 @@ val remaining_recipients : t -> Email_address.Stable.V1.t list
 val set_remaining_recipients : t -> Email_address.t list -> unit
 
 (** Currently not used, but saved to disk to aid in triaging frozen messages and failed
-    deliveries. Addresses on this list will not be included in remaining_recipients,
-    and would otherwise be lost to the ether. *)
+    deliveries. Addresses on this list will not be included in remaining_recipients, and
+    would otherwise be lost to the ether. *)
 val failed_recipients : t -> Email_address.Stable.V1.t list
 
 val set_failed_recipients : t -> Email_address.t list -> unit
@@ -92,6 +93,7 @@ val of_envelope_batch
   -> failed_recipients:Email_address.t list
   -> relay_attempts:(Time_float.t * Error.t) list
   -> parent_id:Smtp_envelope.Id.t
+  -> set_related_ids:bool
   -> status:Status.t
   -> flows:Mail_log.Flows.t
   -> (t * Data.t * Smtp_envelope.Routed.t) list Deferred.Or_error.t
@@ -127,9 +129,13 @@ module Stable : sig
   end
 
   module V3 : sig
+    type t [@@deriving sexp, bin_io]
+  end
+
+  module V4 : sig
     type nonrec t = t [@@deriving sexp, bin_io]
 
-    val of_v1 : V1.t -> t
-    val of_v2 : V2.t -> t
+    val of_v3 : V3.t -> t
+    val to_v3 : t -> V3.t
   end
 end

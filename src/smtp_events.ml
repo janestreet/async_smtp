@@ -30,7 +30,6 @@ let envelope_received t envelope =
 let create () =
   let event_stream =
     Bus.create_exn
-      [%here]
       Arity1
       ~on_subscription_after_first_write:Allow
       ~on_callback_raise:Error.raise
@@ -38,4 +37,4 @@ let create () =
   { event_stream }
 ;;
 
-let event_stream t = Async_bus.pipe1_exn t.event_stream [%here]
+let event_stream t = Async_bus.pipe1_exn t.event_stream

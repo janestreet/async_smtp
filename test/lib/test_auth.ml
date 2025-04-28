@@ -3,7 +3,7 @@ open Poly
 open Async
 open Async_smtp
 
-let () = Backtrace.elide := true
+let () = Dynamic.set_root Backtrace.elide true
 let valid_username = "username"
 let valid_password = "password"
 
@@ -409,7 +409,7 @@ let%expect_test "ANON does not bypass invalid credential failure" =
 let%expect_test "AUTH LOGIN with client going first" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:true ~plain:true)
-    (fun ~client ~server ->
+    (fun ~client ~server ~expect_server_close:_ ->
        let%bind () = server "220 [SMTP TEST SERVER]" in
        let%bind () = client "EHLO [SMTP TEST CLIENT]" in
        let%bind () =
@@ -425,7 +425,7 @@ let%expect_test "AUTH LOGIN with client going first" =
 let%expect_test "AUTH PLAIN with server going first" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:true ~plain:true)
-    (fun ~client ~server ->
+    (fun ~client ~server ~expect_server_close:_ ->
        let%bind () = server "220 [SMTP TEST SERVER]" in
        let%bind () = client "EHLO [SMTP TEST CLIENT]" in
        let%bind () =
@@ -444,7 +444,7 @@ let%expect_test "AUTH PLAIN with server going first" =
 let%expect_test "AUTH LOGIN when not advertised" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:false ~plain:false)
-    (fun ~client ~server ->
+    (fun ~client ~server ~expect_server_close:_ ->
        let%bind () = server "220 [SMTP TEST SERVER]" in
        let%bind () = client "EHLO [SMTP TEST CLIENT]" in
        let%bind () = server "250-Ok: Continue, extensions follow:\n250 8BITMIME" in
@@ -456,7 +456,7 @@ let%expect_test "AUTH LOGIN when not advertised" =
 let%expect_test "AUTH PLAIN when not advertised" =
   Smtp_expect_test_helper.manual_client
     ~plugin:(plugin ~login:false ~plain:false)
-    (fun ~client ~server ->
+    (fun ~client ~server ~expect_server_close:_ ->
        let%bind () = server "220 [SMTP TEST SERVER]" in
        let%bind () = client "EHLO [SMTP TEST CLIENT]" in
        let%bind () = server "250-Ok: Continue, extensions follow:\n250 8BITMIME" in

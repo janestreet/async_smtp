@@ -24,7 +24,7 @@ module Id = struct
       Smtp_envelope.filter_headers envelope ~f:(fun ~name ~value ->
         if String.equal name header_name && Hashtbl.mem messages (Uuid.of_string value)
         then (
-          Set_once.set_exn id_ref [%here] (Uuid.of_string value);
+          Set_once.set_exn id_ref (Uuid.of_string value);
           false)
         else true)
     in
