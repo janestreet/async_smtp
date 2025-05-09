@@ -93,6 +93,10 @@ module Expert : sig
              - not include a trailing "\r\n.\r\n"
              - dot escape the content
              - use \r\n as the end of line marker *)
+    -> ?spool_date:Time_float.t
+         (** The time when this message was spooled. If provided, a
+             "time-on-spool-seconds" tag will be added to the "sending" and "sent" log
+             lines. *)
     -> send_data:(t -> unit Deferred.Or_error.t)
     -> Smtp_envelope.Info.t
     -> Envelope_status.t Deferred.Or_error.t
