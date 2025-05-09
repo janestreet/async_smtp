@@ -212,7 +212,15 @@ let remove_without_file t ~log =
 
 let remove t ~log = with_file t (fun _data_file -> remove_without_file t ~log)
 
-let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_file =
+let send_envelope_via_sendfile
+  client
+  ~log
+  ~flows
+  ~component
+  ~spool_date
+  envelope_info
+  data_file
+  =
   let send_data client =
     let socket_fd = Writer.fd (Client_raw.writer client) in
     Async_sendfile.sendfile
@@ -220,7 +228,14 @@ let send_envelope_via_sendfile client ~log ~flows ~component envelope_info data_
       ~file:(On_disk_spool.Data_file.path data_file)
       ()
   in
-  Client.Expert.send_envelope client ~log ~flows ~component ~send_data envelope_info
+  Client.Expert.send_envelope
+    client
+    ~log
+    ~flows
+    ~component
+    ~spool_date
+    ~send_data
+    envelope_info
 ;;
 
 let send_to_hops t ~log ~client_cache ~on_error data_file =
@@ -256,6 +271,7 @@ let send_to_hops t ~log ~client_cache ~on_error data_file =
           ~log
           ~flows
           ~component:[ "spool"; "send" ]
+          ~spool_date:(Message.spool_date t)
           envelope_info
           data_file)
   with

@@ -120,13 +120,24 @@ let flush_writer_with_timeout ~timeout ~writer =
 ;;
 
 module Expert = struct
-  let send_envelope t ~log ?flows ?(component = []) ~send_data envelope_info =
+  let send_envelope t ~log ?flows ?(component = []) ?spool_date ~send_data envelope_info =
     let flows =
       match flows with
       | None -> Log.Flows.create `Outbound_envelope
       | Some flows -> flows
     in
     let component = component @ [ "send-envelope" ] in
+    let time_on_spool_tag () =
+      match spool_date with
+      | None -> []
+      | Some spool_date ->
+        [ ( "time-on-spool-seconds"
+          , Time_float.diff (Time_float.now ()) spool_date
+            |> Time_float.Span.to_sec
+            |> Float.to_int
+            |> Int.to_string )
+        ]
+    in
     with_reset t ~log ~flows ~component ~f:(fun t ->
       Log.info
         log
@@ -139,6 +150,7 @@ module Expert = struct
              ?remote_ip_address:(remote_ip_address t)
              ?local_ip_address:(local_ip_address t)
              ~session_marker:`Sending
+             ~tags:(time_on_spool_tag ())
              "sending"));
       let command =
         Smtp_command.Sender
@@ -168,6 +180,9 @@ module Expert = struct
                        ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
                        ~command
                        ~reply
+                       ?remote_address:(remote_address t)
+                       ?remote_ip_address:(remote_ip_address t)
+                       ?local_ip_address:(local_ip_address t)
                        "send rejected"));
                 return (Ok (Error (`Rejected_sender reply))))
       >>=?? fun () ->
@@ -197,6 +212,9 @@ module Expert = struct
                    ~recipients:[ `Email recipient ]
                    ~command
                    ~reply
+                   ?remote_address:(remote_address t)
+                   ?remote_ip_address:(remote_ip_address t)
+                   ?local_ip_address:(local_ip_address t)
                    "send rejected"));
             Second (recipient, reply))
       >>|? List.partition_map ~f:Fn.id
@@ -222,6 +240,9 @@ module Expert = struct
                        ~component:(component @ [ "data" ])
                        ~command
                        ~reply
+                       ?remote_address:(remote_address t)
+                       ?remote_ip_address:(remote_ip_address t)
+                       ?local_ip_address:(local_ip_address t)
                        "send rejected"));
                 return
                   (Ok
@@ -287,7 +308,7 @@ module Expert = struct
                  ?remote_address:(remote_address t)
                  ?remote_ip_address:(remote_ip_address t)
                  ?local_ip_address:(local_ip_address t)
-                 ~tags:[ "remote-id", remote_id ]
+                 ~tags:([ "remote-id", remote_id ] @ time_on_spool_tag ())
                  "sent"));
           Ok (remote_id, rejected_recipients)
         | `Received reply ->
@@ -300,6 +321,9 @@ module Expert = struct
                  ~component
                  ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                  ~reply
+                 ?remote_address:(remote_address t)
+                 ?remote_ip_address:(remote_ip_address t)
+                 ?local_ip_address:(local_ip_address t)
                  "send rejected"));
           Error (`Rejected_body (reply, rejected_recipients))))
   ;;
