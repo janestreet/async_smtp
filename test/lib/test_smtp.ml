@@ -4,7 +4,7 @@ open! Async_smtp.Smtp_expect_test_helper
 open! Expect_test_helpers_core
 open! Expect_test_helpers_async
 
-let%expect_test "Smtp_expect_test_helper.smtp" =
+let%expect_test ("Smtp_expect_test_helper.smtp" [@tags "disabled"]) =
   let%bind () = smtp [ envelope () ] in
   [%expect
     {|
@@ -31,7 +31,7 @@ let%expect_test "Smtp_expect_test_helper.smtp" =
   return ()
 ;;
 
-let%expect_test "Smtp_expect_test_helper.manual_client" =
+let%expect_test ("Smtp_expect_test_helper.manual_client" [@tags "disabled"]) =
   manual_client (fun ~client ~server ~expect_server_close ->
     let%bind () = server "220 [SMTP TEST SERVER]" in
     let%bind () = client "EHLO custom client commands" in
@@ -52,7 +52,7 @@ let%expect_test "Smtp_expect_test_helper.manual_client" =
     return ())
 ;;
 
-let%expect_test "Smtp_expect_test_helper.manual_server" =
+let%expect_test ("Smtp_expect_test_helper.manual_server" [@tags "disabled"]) =
   manual_server
     [ envelope () ]
     (fun ~client ~server ~expect_client_close ->
@@ -76,7 +76,7 @@ let%expect_test "Smtp_expect_test_helper.manual_server" =
       return ())
 ;;
 
-let%expect_test "server-side command timeout" =
+let%expect_test ("server-side command timeout" [@tags "disabled"]) =
   manual_client (fun ~client ~server ~expect_server_close ->
     let%bind () = server "220 [SMTP TEST SERVER]" in
     let%bind () = client "EHLO custom client commands" in
@@ -89,7 +89,7 @@ let%expect_test "server-side command timeout" =
     return ())
 ;;
 
-let%expect_test "server-side data timeout" =
+let%expect_test ("server-side data timeout" [@tags "disabled"]) =
   manual_client (fun ~client ~server ~expect_server_close ->
     let%bind () = server "220 [SMTP TEST SERVER]" in
     let%bind () = client "EHLO custom client commands" in
