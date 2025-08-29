@@ -226,14 +226,45 @@ let receive ?on_eof ?timeout ?flows t ~log ~component ~here =
   | Some reader ->
     (match%map Clock.with_timeout timeout (read_reply ?on_eof reader) with
      | `Result (Ok v) ->
-       Log.debug log (lazy (Log.Message.create ~here ~flows ~component ~reply:v "<-"));
+       Log.debug
+         log
+         (lazy
+           (Log.Message.create
+              ~here
+              ~flows
+              ~component
+              ?remote_address:(remote_address t)
+              ?remote_ip_address:(remote_ip_address t)
+              ?local_ip_address:(local_ip_address t)
+              ~reply:v
+              "<-"));
        Ok (`Received v)
      | `Result (Error e) ->
-       Log.error log (lazy (Log.Message.of_error ~here ~flows ~component e));
+       Log.error
+         log
+         (lazy
+           (Log.Message.of_error
+              ~here
+              ~flows
+              ~component
+              ?remote_address:(remote_address t)
+              ?remote_ip_address:(remote_ip_address t)
+              ?local_ip_address:(local_ip_address t)
+              e));
        Error e
      | `Timeout ->
        let e = Error.createf !"Timeout %{Time_float.Span} waiting for reply" timeout in
-       Log.error log (lazy (Log.Message.of_error ~here ~flows ~component e));
+       Log.error
+         log
+         (lazy
+           (Log.Message.of_error
+              ~here
+              ~flows
+              ~component
+              ?remote_address:(remote_address t)
+              ?remote_ip_address:(remote_ip_address t)
+              ?local_ip_address:(local_ip_address t)
+              e));
        Error e)
 ;;
 
@@ -257,7 +288,18 @@ let send_gen ?command t ~log ?flows ~component ~here str =
     | Some flows -> Log.Flows.union t.flows flows
   in
   Deferred.Or_error.try_with_join ~run:`Schedule ~rest:`Log (fun () ->
-    Log.debug log (lazy (Log.Message.create ~here ~flows ~component ?command "->"));
+    Log.debug
+      log
+      (lazy
+        (Log.Message.create
+           ~here
+           ~flows
+           ~component
+           ?remote_address:(remote_address t)
+           ?remote_ip_address:(remote_ip_address t)
+           ?local_ip_address:(local_ip_address t)
+           ?command
+           "->"));
     Writer.write (writer t) str;
     Writer.write (writer t) "\r\n";
     writer_flushed_or_consumer_left str (writer t))
@@ -309,6 +351,9 @@ let do_quit t ~log ~component =
              ~here:[%here]
              ~flows:t.flows
              ~component
+             ?remote_address:(remote_address t)
+             ?local_ip_address:(local_ip_address t)
+             ?remote_ip_address:(remote_ip_address t)
              (Error.of_string "Unexpected EOF during QUIT")));
       Deferred.Or_error.return Smtp_reply.closing_connection_221
     in
@@ -317,7 +362,15 @@ let do_quit t ~log ~component =
       let error = Error.tag e ~tag:"Error sending QUIT" in
       Log.info
         log
-        (lazy (Log.Message.of_error ~here:[%here] ~flows:t.flows ~component error));
+        (lazy
+          (Log.Message.of_error
+             ~here:[%here]
+             ~flows:t.flows
+             ~component
+             ?remote_address:(remote_address t)
+             ?local_ip_address:(local_ip_address t)
+             ?remote_ip_address:(remote_ip_address t)
+             error));
       return (Ok ())
     | Ok result ->
       (match result with
@@ -412,6 +465,9 @@ let do_start_tls t ~log ~component tls_options =
            ~here:[%here]
            ~flows:t.flows
            ~component
+           ?remote_address:(remote_address t)
+           ?local_ip_address:(local_ip_address t)
+           ?remote_ip_address:(remote_ip_address t)
            "starting tls negotiation"));
     let old_reader = Plain.reader plain in
     let old_writer = Plain.writer plain in
@@ -445,6 +501,9 @@ let do_start_tls t ~log ~component tls_options =
            ~here:[%here]
            ~flows:t.flows
            ~component
+           ?remote_address:(remote_address t)
+           ?local_ip_address:(local_ip_address t)
+           ?remote_ip_address:(remote_ip_address t)
            "finished tls negotiation"));
     (* Make sure we forget all of the peer info except the host and port we talk
        to. *)
@@ -626,6 +685,9 @@ let maybe_auth t ~log ~component ~credentials =
            ~flows:t.flows
            ~here:[%here]
            ~component
+           ?remote_address:(remote_address t)
+           ?local_ip_address:(local_ip_address t)
+           ?remote_ip_address:(remote_ip_address t)
            ~command
            "AUTH required but not supported in BSMTP, continuing"));
     send_receive t ~log ~component ~here:[%here] command >>|? ignore
@@ -644,7 +706,15 @@ let with_quit t ~log ~component ~f =
     | Error err ->
       Log.error
         log
-        (lazy (Log.Message.of_error ~flows:t.flows ~here:[%here] ~component err))
+        (lazy
+          (Log.Message.of_error
+             ~flows:t.flows
+             ~here:[%here]
+             ~component
+             ?remote_address:(remote_address t)
+             ?remote_ip_address:(remote_ip_address t)
+             ?local_ip_address:(local_ip_address t)
+             err))
   in
   Monitor.protect ~run:`Schedule ~rest:`Log f ~finally:(fun () ->
     quit_and_cleanup_with_log t)

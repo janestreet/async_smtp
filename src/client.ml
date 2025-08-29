@@ -177,12 +177,12 @@ module Expert = struct
                        ~here:[%here]
                        ~flows
                        ~component:(component @ [ "sender" ])
-                       ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
-                       ~command
-                       ~reply
                        ?remote_address:(remote_address t)
                        ?remote_ip_address:(remote_ip_address t)
                        ?local_ip_address:(local_ip_address t)
+                       ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
+                       ~command
+                       ~reply
                        "send rejected"));
                 return (Ok (Error (`Rejected_sender reply))))
       >>=?? fun () ->
@@ -209,12 +209,12 @@ module Expert = struct
                    ~here:[%here]
                    ~flows
                    ~component:(component @ [ "recipient" ])
-                   ~recipients:[ `Email recipient ]
-                   ~command
-                   ~reply
                    ?remote_address:(remote_address t)
                    ?remote_ip_address:(remote_ip_address t)
                    ?local_ip_address:(local_ip_address t)
+                   ~recipients:[ `Email recipient ]
+                   ~command
+                   ~reply
                    "send rejected"));
             Second (recipient, reply))
       >>|? List.partition_map ~f:Fn.id
@@ -238,11 +238,11 @@ module Expert = struct
                        ~here:[%here]
                        ~flows
                        ~component:(component @ [ "data" ])
-                       ~command
-                       ~reply
                        ?remote_address:(remote_address t)
                        ?remote_ip_address:(remote_ip_address t)
                        ?local_ip_address:(local_ip_address t)
+                       ~command
+                       ~reply
                        "send rejected"));
                 return
                   (Ok
@@ -256,6 +256,9 @@ module Expert = struct
                ~here:[%here]
                ~flows
                ~component:(component @ [ "data" ])
+               ?remote_address:(remote_address t)
+               ?remote_ip_address:(remote_ip_address t)
+               ?local_ip_address:(local_ip_address t)
                "starting transmitting body"));
         send_data t
         >>=? fun () ->
@@ -274,6 +277,9 @@ module Expert = struct
                ~here:[%here]
                ~flows
                ~component:(component @ [ "data" ])
+               ?remote_address:(remote_address t)
+               ?remote_ip_address:(remote_ip_address t)
+               ?local_ip_address:(local_ip_address t)
                "finishing transmitting body"));
         receive
           t
@@ -291,6 +297,9 @@ module Expert = struct
                  ~here:[%here]
                  ~flows
                  ~component
+                 ?remote_address:(remote_address t)
+                 ?remote_ip_address:(remote_ip_address t)
+                 ?local_ip_address:(local_ip_address t)
                  ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                  "delivered"));
           Ok ("bsmtp", rejected_recipients)
@@ -303,11 +312,11 @@ module Expert = struct
                  ~here:[%here]
                  ~flows
                  ~component
-                 ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
-                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                  ?remote_address:(remote_address t)
                  ?remote_ip_address:(remote_ip_address t)
                  ?local_ip_address:(local_ip_address t)
+                 ~sender:(`Sender (Smtp_envelope.Info.sender envelope_info))
+                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
                  ~tags:([ "remote-id", remote_id ] @ time_on_spool_tag ())
                  "sent"));
           Ok (remote_id, rejected_recipients)
@@ -319,11 +328,11 @@ module Expert = struct
                  ~here:[%here]
                  ~flows
                  ~component
-                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
-                 ~reply
                  ?remote_address:(remote_address t)
                  ?remote_ip_address:(remote_ip_address t)
                  ?local_ip_address:(local_ip_address t)
+                 ~recipients:(List.map accepted_recipients ~f:(fun e -> `Email e))
+                 ~reply
                  "send rejected"));
           Error (`Rejected_body (reply, rejected_recipients))))
   ;;
