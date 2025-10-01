@@ -6,7 +6,7 @@ module Stable0 = struct
       [ `Null
       | `Email of Email_address.Stable.V1.t
       ]
-    [@@deriving bin_io, compare, hash]
+    [@@deriving bin_io, compare, hash, stable_witness]
 
     let%expect_test _ =
       print_endline [%bin_digest: t];

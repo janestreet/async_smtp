@@ -31,6 +31,6 @@ let start (config, server_events) ~log ~plugin_rpcs =
       ?heartbeat_config
       ()
   in
-  [%log.info_format log "RPC server listening on %d" (Server_config.rpc_port config)];
+  [%log.t.info_format log "RPC server listening on %d" (Server_config.rpc_port config)];
   Deferred.unit
 ;;

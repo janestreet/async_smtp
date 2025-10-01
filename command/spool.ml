@@ -60,42 +60,42 @@ module Client_side_filter = struct
 
   let matches ~now t msg =
     let module S = Smtp_spool.Spooled_message_info in
-    let or_matches m field ~f =
+    let and_matches m field ~f =
       match m with
-      | true -> true
-      | false as default -> Option.value_map ~default (Field.get field t) ~f
+      | false -> false
+      | true -> Option.value_map ~default:true (Field.get field t) ~f
     in
-    let or_matches_re m field ~get_values ~value_to_string =
-      or_matches m field ~f:(fun re ->
+    let and_matches_re m field ~get_values ~value_to_string =
+      and_matches m field ~f:(fun re ->
         get_values msg |> List.map ~f:value_to_string |> List.exists ~f:(Re2.matches re))
     in
     Fields.fold
-      ~init:false
+      ~init:true
       ~next_hop:
-        (or_matches_re
+        (and_matches_re
            ~get_values:S.next_hop_choices
            ~value_to_string:Host_and_port.to_string)
       ~sender:
-        (or_matches_re
+        (and_matches_re
            ~get_values:(fun msg -> [ S.envelope_info msg |> Smtp_envelope.Info.sender ])
            ~value_to_string:Smtp_envelope.Sender.to_string)
       ~recipient:
-        (or_matches_re
+        (and_matches_re
            ~get_values:(fun msg -> S.envelope_info msg |> Smtp_envelope.Info.recipients)
            ~value_to_string:Email_address.to_string)
       ~queue:
-        (or_matches ~f:(fun queue ->
+        (and_matches ~f:(fun queue ->
            S.status msg
            |> Smtp_spool_message.Queue.of_status
            |> Option.value_map
                 ~default:false
                 ~f:([%compare.equal: Smtp_spool_message.Queue.t] queue)))
       ~younger_than:
-        (or_matches ~f:(fun younger_than ->
-           Time.Span.(Time.diff now (S.spool_date msg) < younger_than)))
+        (and_matches ~f:(fun younger_than ->
+           Time.( >= ) (S.spool_date msg) (Time.sub now younger_than)))
       ~older_than:
-        (or_matches ~f:(fun older_than ->
-           Time.Span.(Time.diff now (S.spool_date msg) > older_than)))
+        (and_matches ~f:(fun older_than ->
+           Time.( <= ) (S.spool_date msg) (Time.sub now older_than)))
   ;;
 
   let filter ?now t msgs =
