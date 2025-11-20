@@ -1,8 +1,8 @@
 open! Core
 open Email_message
 
-(* Two envelopes are equal when they produce the same SMTP output. In
-   particular, ids are ignored for comparison. Same is true for hashing. *)
+(* Two envelopes are equal when they produce the same SMTP output. In particular, ids are
+   ignored for comparison. Same is true for hashing. *)
 
 type t [@@deriving sexp_of]
 type envelope = t [@@deriving sexp_of]

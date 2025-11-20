@@ -59,8 +59,7 @@ module Utils = struct
   ;;
 end
 
-(* Spool loading and creation functionality shared by [Make] and [Monitor.Make]
-   functors *)
+(* Spool loading and creation functionality shared by [Make] and [Monitor.Make] functors *)
 module Shared = struct
   type spool = string [@@deriving sexp]
 
@@ -112,8 +111,8 @@ module Shared = struct
     (match%bind dir_looks_like_a_spool dir with
      | true -> Deferred.Or_error.ok_unit
      | false ->
-       (* Spool directory does not look like a spool.  Fail if the directory is non-empty,
-          otherwise create registry and checkout directories if specified.  This protects
+       (* Spool directory does not look like a spool. Fail if the directory is non-empty,
+          otherwise create registry and checkout directories if specified. This protects
           against creating spools in random directories with existing data *)
        visit_spool_directories ?create_if_missing dir)
     >>=? fun () ->
@@ -171,9 +170,9 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
 
   module With_touch = struct
     (* [With_touch] encapsulates filesystem operations and supports [Monitor]'s
-       [alert_after_cycles] parameter.  The mtimes on .registry/ files and any files
+       [alert_after_cycles] parameter. The mtimes on .registry/ files and any files
        involved in a rename are updated, creating a distinct (potential) [Problem.t] for
-       each phase of an entry's life.  This way, similar phases of an entry's life won't
+       each phase of an entry's life. This way, similar phases of an entry's life won't
        create identical [Problem.t]s (which could lead to spurious alerts). *)
 
     let unlink ~dir ~filename t =
@@ -257,8 +256,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
     S.Throttle.enqueue (fun () -> Utils.ls_sorted queue_dir)
     >>|? fun entries ->
     List.filter_map entries ~f:(fun name ->
-      (* Checkout directories live within queue directories. We want to skip
-         over these. *)
+      (* Checkout directories live within queue directories. We want to skip over these. *)
       if String.equal name checkout then None else Some (Entry.create t queue ~name))
   ;;
 
@@ -369,7 +367,7 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
         (`Ok (Checked_out_entry.create entry.spool entry.queue ~name:entry.name contents))
   ;;
 
-  (* Common handler for user-supplied callback functionality.  The low-level user-facing
+  (* Common handler for user-supplied callback functionality. The low-level user-facing
      [with_entry] function uses this, as well as the higher-level [iter] and
      [iter_available] functions *)
   let with_checkout ~f checkout =
@@ -512,9 +510,9 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
 
     let update_entry_cache t =
       let open Deferred.Or_error.Let_syntax in
-      (* DO NOT CHANGE THE ORDER OF THESE OPERATIONS.  It is important to clear the
-         inotify pipe _BEFORE_ listing the directory entries.  If the directory is read
-         before clearing inotify, this may happen:
+      (* DO NOT CHANGE THE ORDER OF THESE OPERATIONS. It is important to clear the inotify
+         pipe _BEFORE_ listing the directory entries. If the directory is read before
+         clearing inotify, this may happen:
 
          - Directory listing
          - File is added and inotity event appears
@@ -523,10 +521,10 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
          The new file would not be seen until another inotify even triggers the next
          directory listing, which could be a long time!
 
-         Why clear the inotify pipe at all?  We can't rely on the pipe having every event
+         Why clear the inotify pipe at all? We can't rely on the pipe having every event
          ever, as it is possible for the queue to overflow (the [Queue_overflow] event).
          So, we ultimately use inotify to tell us something has changed, and that change
-         will be reflected in the directory listing.  Clearing the pipe is an optimization
+         will be reflected in the directory listing. Clearing the pipe is an optimization
          so that we don't iterate over a bunch of extraneous events. *)
       let%bind t = clear_inotify_pipe t in
       let%bind entry_cache = list t.spool t.queue in
@@ -547,8 +545,8 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
                if List.is_empty t.entry_cache
                then
                  (* Directory is currently empty, wait for inotify to notify us of queue
-                    activity.  We really use this as an indication that something has
-                    changed to trigger a new directory listing.  Any inotify event will
+                    activity. We really use this as an indication that something has
+                    changed to trigger a new directory listing. Any inotify event will
                     satisfy [wait_for_inotify_event], even though we probably only care
                     about [Moved Into] events (and [Queue_overflow], in theory). *)
                  wait_for_inotify_event t stop
@@ -560,14 +558,14 @@ module Make_base (S : Multispool_intf.Spoolable.S) = struct
                match t.test_mode_last_moved_into with
                | `Enabled (Some last_moved_into) when Entry.name entry = last_moved_into
                  ->
-                 (* TESTING ONLY.  Treat the file referenced by the most recent [Moved
-                    Into] inotify event as the last cache entry so that we do not process
-                    any files that appear in a queue during a traversal with readdir(3).
-                    This lets a test validate that order is preserved if readdir(3)'s
-                    non-determinism is eliminated.  For this to work, the test must use a
-                    [Name_generator.next] implementation that guarantees that lexicographic
-                    ordering is the same as time ordering
-                    (e.g. [For_testing.Lexicographic_time_order_name_generator].  See
+                 (* TESTING ONLY. Treat the file referenced by the most recent
+                    [Moved Into] inotify event as the last cache entry so that we do not
+                    process any files that appear in a queue during a traversal with
+                    readdir(3). This lets a test validate that order is preserved if
+                    readdir(3)'s non-determinism is eliminated. For this to work, the test
+                    must use a [Name_generator.next] implementation that guarantees that
+                    lexicographic ordering is the same as time ordering (e.g.
+                    [For_testing.Lexicographic_time_order_name_generator]. See
                     test/feature_subtree/feature_test_multispool.ml for dependent tests. *)
                  []
                | _ -> entry_cache

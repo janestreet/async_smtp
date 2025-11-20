@@ -159,7 +159,8 @@ let command_timeout_421 =
 
 let local_error_451 msg = create `Local_error_451 "Local error: %s" msg
 
-(* We use [`Other] here as [`Message_rate_exceeded] reserved [452], yet insufficent system storage is also a [452]:
+(* We use [`Other] here as [`Message_rate_exceeded] reserved [452], yet insufficent system
+   storage is also a [452]:
 
    https://www.rfc-editor.org/rfc/rfc5321#section-4.2.2
 *)
@@ -220,8 +221,8 @@ let to_string t =
   let code = code t in
   let rec to_string_lines acc = function
     | [] ->
-      (* This code should never be reached as [raw_message] is guaranteed
-         to be non empty, by [create] and [parse]. *)
+      (* This code should never be reached as [raw_message] is guaranteed to be non empty,
+         by [create] and [parse]. *)
       assert false
     | [ s ] -> sprintf "%d %s" code s :: acc |> List.rev
     | s :: ss -> to_string_lines (sprintf "%d-%s" code s :: acc) ss

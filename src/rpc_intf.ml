@@ -102,8 +102,8 @@ let cache_status_v2 = binable (module Client_cache.Status.Stable.V2)
 let cache_config = binable (module Client_cache.Config.Stable.V1)
 
 module Monitor = struct
-  (* Including a sequence number. We broadcast a heartbeat message (with error =
-     None) every 10 seconds..  *)
+  (* Including a sequence number. We broadcast a heartbeat message (with error = None)
+     every 10 seconds.. *)
   let errors = pipe_rpc ~name:"errors" unit (pair (int, option error)) error
 end
 

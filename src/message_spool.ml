@@ -276,8 +276,8 @@ let send_to_hops t ~log ~client_cache ~on_error data_file =
           data_file)
   with
   | `Ok (hop, Error e) ->
-    (* The client logs many common failures, so this might be repetitive. But
-       duplication in the error case is better than missing potential errors. *)
+    (* The client logs many common failures, so this might be repetitive. But duplication
+       in the error case is better than missing potential errors. *)
     let e = Error.tag ~tag:"Unable to send envelope" e in
     Log.info
       log
@@ -342,10 +342,10 @@ let send_to_hops t ~log ~client_cache ~on_error data_file =
        (* Already logged by the client *)
        return `Done
      | Error e ->
-       (* We are being conservative here for simplicity - if we get a permanent error
-          from one hop, we assume that we would get the same error from the remaining
-          hops, and call [on_error] to decide what to do. In order to send bounce
-          messages, [on_error] needs the full envelope. *)
+       (* We are being conservative here for simplicity - if we get a permanent error from
+          one hop, we assume that we would get the same error from the remaining hops, and
+          call [on_error] to decide what to do. In order to send bounce messages,
+          [on_error] needs the full envelope. *)
        let on_error ~log reply =
          let load_envelope () =
            let%map.Deferred.Or_error email =

@@ -2,8 +2,8 @@ open! Core
 open Email_message
 
 module Base : sig
-  (* The "exists" query can equally be accomplished using [sexp query], but
-     not the "all" one. *)
+  (* The "exists" query can equally be accomplished using [sexp query], but not the "all"
+     one. *)
 
   type t =
     [ Email_selector.Base.t

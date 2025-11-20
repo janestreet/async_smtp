@@ -22,8 +22,8 @@ module Level = struct
   module T = struct
     include Log.Level
 
-    (* Stable comparison functions as [Log.Level.compare] doesn't compare s..t [`Debug <
-       `Info < `Error] *)
+    (* Stable comparison functions as [Log.Level.compare] doesn't compare s..t
+       [`Debug < `Info < `Error] *)
     let severity = function
       | `Debug -> 0
       | `Info -> 1

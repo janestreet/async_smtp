@@ -13,35 +13,29 @@ module Mail_fingerprint : sig
   val of_email : Email.t -> compute_md5:bool -> t
 end
 
-(* A flow is a causal chain of events. If an event B is caused by an event A
-   (such as an outgoing email caused by an incoming email) then the log message
-   for B will contain all the flow ids of the the log message for A.
+(* A flow is a causal chain of events. If an event B is caused by an event A (such as an
+   outgoing email caused by an incoming email) then the log message for B will contain all
+   the flow ids of the the log message for A.
 
    Each message will have multiple flow IDs indicating what it is related to.
 
-   [`Server] -
-   Included on all log messages related to a SMTP session on the server side
-   and all log messages relating to any envelope received on the session.
-   Issued when a TCP session is established (or an SMTP session is otherwise established)
+   [`Server] - Included on all log messages related to a SMTP session on the server side
+   and all log messages relating to any envelope received on the session. Issued when a
+   TCP session is established (or an SMTP session is otherwise established)
 
-   [`Client] -
-   Included on all log messages related to a SMTP session on the client side
-   No new messages are generated here, so these flow IDs are short lived.
-   NB: When a Client session is established this will be the only ID until an envelope
-   is sent, at which point the IDs relevant to the envelope will also be included.
+   [`Client] - Included on all log messages related to a SMTP session on the client side
+   No new messages are generated here, so these flow IDs are short lived. NB: When a
+   Client session is established this will be the only ID until an envelope is sent, at
+   which point the IDs relevant to the envelope will also be included.
 
-   [`Inbound_envelope] -
-   Include on all log messages related to an Inbound envelope,
-   and any outbound messages generated from it.
-   It is issued upon 'MAIL FROM',
+   [`Inbound_envelope] - Include on all log messages related to an Inbound envelope, and
+   any outbound messages generated from it. It is issued upon 'MAIL FROM',
 
-   [`Outbound_envelope] -
-   Included on all log messages related to an outbound envelope.
+   [`Outbound_envelope] - Included on all log messages related to an outbound envelope.
    This ID is issued when spooling a message, or when using the client directly,
 
-   [`Cached_connection] -
-   Included on all log messages related to opening/closing/using an SMTP connection.
-   Entries with the same ID are using the same underlying connection.
+   [`Cached_connection] - Included on all log messages related to opening/closing/using an
+   SMTP connection. Entries with the same ID are using the same underlying connection.
 *)
 module Flows : sig
   module Kind : sig
@@ -70,9 +64,8 @@ module Flows : sig
     end
   end
 
-  (* Represents a set of opaque flow ids.
-     The internal list representation is exposed for use when analysing logs, however
-     the order of elements is undefined. *)
+  (* Represents a set of opaque flow ids. The internal list representation is exposed for
+     use when analysing logs, however the order of elements is undefined. *)
 
   type t = private Id.t list [@@deriving sexp_of]
 
@@ -85,9 +78,8 @@ module Flows : sig
   val is_none : t -> bool
 
   (* The [Kind.t] is only informational and is included in the sexp for information only.
-     It is not recoverable and not intended for machine processing.
-     two flows that where created are never related.
-     [ not (are_related (create t) (create t)) ] *)
+     It is not recoverable and not intended for machine processing. two flows that where
+     created are never related. [ not (are_related (create t) (create t)) ] *)
 
   val create : Kind.t -> t
 
@@ -210,8 +202,8 @@ module Message : sig
 
   val sender : t -> [ `Sender of Smtp_envelope.Sender.t | `String of string ] option
 
-  (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient.
-     nb: [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
+  (* tag 'recipient', [`String _] if the value doesn't parse, one tag per recipient. nb:
+     [create ~recipients:[]] is encoded by a single recipient tag with an empty string.
   *)
 
   val recipients : t -> [ `Email of Email_address.t | `String of string ] list option
@@ -256,8 +248,8 @@ type t = Log.t
     duplicate). *)
 val with_flow_and_component : flows:Flows.t -> component:Component.t -> t -> t
 
-(* This function is to give external users of this library a chance to control
-   the verbosity of our logs. *)
+(* This function is to give external users of this library a chance to control the
+   verbosity of our logs. *)
 
 val adjust_log_levels
   :  ?minimum_level:

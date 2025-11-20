@@ -108,8 +108,8 @@ val add
   -> Smtp_envelope.Routed.Batch.t list
   -> (Message_id.t * Smtp_envelope.Routed.t) list Deferred.Or_error.t
 
-(* Move the message into a special quarantine directory where it can be manually
-   inspected and optionally manually injected back into the spool *)
+(* Move the message into a special quarantine directory where it can be manually inspected
+   and optionally manually injected back into the spool *)
 
 val quarantine
   :  t
@@ -176,12 +176,11 @@ module Spooled_message_info : sig
        | `Quarantined of Quarantine_reason.t
        ]
 
-  (* These will not be populated for information obtained using [status].  Use
-     [status_from_disk] if you want to see envelopes. Part of the reason is that
-     we don't hold envelopes in memory, so we can return status much faster if
-     we don't read the disk. A bigger part is that [status] is used to implement
-     the rpc call, and we don't want the result to contain sensitive
-     information.  *)
+  (* These will not be populated for information obtained using [status]. Use
+     [status_from_disk] if you want to see envelopes. Part of the reason is that we don't
+     hold envelopes in memory, so we can return status much faster if we don't read the
+     disk. A bigger part is that [status] is used to implement the rpc call, and we don't
+     want the result to contain sensitive information. *)
 
   val file_size : t -> Byte_units.t option
   val envelope : t -> Smtp_envelope.t option
