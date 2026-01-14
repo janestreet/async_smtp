@@ -281,8 +281,8 @@ module Data = struct
   ;;
 end
 
-(* A value of type t should only be modified via [On_disk_spool].  This guarantees
-   that all changes are properly flushed to disk. *)
+(* A value of type t should only be modified via [On_disk_spool]. This guarantees that all
+   changes are properly flushed to disk. *)
 type t = Stable.V4.t =
   { spool_dir : string
   ; id : Id.t

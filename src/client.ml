@@ -340,8 +340,7 @@ end
 
 let send_data_via_reader_writer t ~email =
   let block_length = ref 0 in
-  (* We will send at most [max_block_length + <max line length> + 1]
-     bytes per block. *)
+  (* We will send at most [max_block_length + <max line length> + 1] bytes per block. *)
   let max_block_length = 16 * 1024 in
   let timeout = Config.send_receive_timeout (config t) in
   let writer = writer t in

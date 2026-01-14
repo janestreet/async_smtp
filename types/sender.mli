@@ -1,13 +1,11 @@
 open! Core
 
-(*
-   From 3.7 Relaying:
+(* From 3.7 Relaying:
 
-   One way to prevent loops in error reporting is to specify a null reverse-path
-   in the MAIL command of a notification message.  When such a message is
-   transmitted the reverse-path MUST be set to null (see section 4.5.5 for
-   additional discussion).  A MAIL command with a null reverse-path appears as
-   follows:
+   One way to prevent loops in error reporting is to specify a null reverse-path in the
+   MAIL command of a notification message. When such a message is transmitted the
+   reverse-path MUST be set to null (see section 4.5.5 for additional discussion). A MAIL
+   command with a null reverse-path appears as follows:
 
    MAIL FROM:<>
 *)

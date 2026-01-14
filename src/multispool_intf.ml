@@ -380,7 +380,7 @@ module Monitor = struct
 
       type t =
         { check_every : Time_float.Span.t (* default: 15 seconds *)
-        ; alert_after_cycles : int (* default: 2 cycles   *)
+        ; alert_after_cycles : int (* default: 2 cycles *)
         }
 
       val create : ?check_every:Time_float.Span.t -> ?alert_after_cycles:int -> unit -> t

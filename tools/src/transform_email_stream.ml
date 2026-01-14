@@ -3,10 +3,10 @@ open Async
 open Async_smtp_types
 open Async_smtp
 
-(* We use this tool for testing Async_smtp.Server, but we use the server itself
-   to read in the test outputs. This clearly has the potential to mask bugs. To
-   deal with this we check in our test setup that reading and writing the exim
-   output without any sorting or filtering has no effect. *)
+(* We use this tool for testing Async_smtp.Server, but we use the server itself to read in
+   the test outputs. This clearly has the potential to mask bugs. To deal with this we
+   check in our test setup that reading and writing the exim output without any sorting or
+   filtering has no effect. *)
 
 module Envelope = Smtp_envelope
 module Sender_address = Envelope.Sender
@@ -85,9 +85,9 @@ module Bodies = struct
         |> Octet_stream.of_string ~encoding:Octet_stream.Encoding.default'
       in
       Envelope.modify_email ~f:(fun email ->
-        (* This tool is used to hide the message body to optimize the message
-           comparison. In the event of a parse error preserving the original content is
-           more useful then raising. *)
+        (* This tool is used to hide the message body to optimize the message comparison.
+           In the event of a parse error preserving the original content is more useful
+           then raising. *)
         Email.Content.map_data ~on_unparsable_content:`Skip email ~f:hash_data)
     | Some `whole ->
       let hash_body email =

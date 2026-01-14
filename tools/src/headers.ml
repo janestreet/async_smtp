@@ -173,11 +173,9 @@ let sort_emails_in_header pattern =
     | Some remove_duplicates ->
       (match Email_address.list_of_string value with
        | Error e ->
-         (* Not an error since this is not a reason to trigger the kill
-            switch. *)
+         (* Not an error since this is not a reason to trigger the kill switch. *)
          Async_log.Ppx_log_syntax.(
-           [%log.global.info_format
-             "could not parse %s: %s" value (Error.to_string_hum e)]);
+           [%log.info_format "could not parse %s: %s" value (Error.to_string_hum e)]);
          value
        | Ok emails -> f ~remove_duplicates emails |> String.concat ~sep:", "))
 ;;
@@ -250,8 +248,8 @@ let transform
   in
   normalize_whitespace_headers normalize_whitespace message
   |> filter_headers filter
-  (* Sorting twice since we want to dedup before masking, to sort before
-     deduping, and to sort after masking. *)
+  (* Sorting twice since we want to dedup before masking, to sort before deduping, and to
+     sort after masking. *)
   |> maybe_sort
   |> dedup_headers dedup
   |> hash_headers hash

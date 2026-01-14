@@ -174,7 +174,7 @@ let send ~config ~client_config envelope =
              >>| Or_error.join
              >>|? ignore)))
      >>| Result.iter_error ~f:(fun log_arg ->
-       [%log.global.error_format !"buh???: %{Error#hum}" log_arg]))
+       [%log.error_format !"buh???: %{Error#hum}" log_arg]))
 ;;
 
 let main

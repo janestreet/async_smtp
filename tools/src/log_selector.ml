@@ -100,9 +100,9 @@ let rec cnf = function
      | Or (q1, q2) -> cnf (Blang.and_ [ Blang.not_ q1; Blang.not_ q2 ])
      | If (c, q1, q2) -> cnf (Blang.if_ c (Blang.not_ q1) (Blang.not_ q2)))
   | If (c, qt, qf) ->
-    (* Using the disjunctive representation of [If].
-       Its more intuitive, and its cnf rewrite contains additional
-       non-negated disjuncts that make for a better [permissive_cnf] *)
+    (* Using the disjunctive representation of [If]. Its more intuitive, and its cnf
+       rewrite contains additional non-negated disjuncts that make for a better
+       [permissive_cnf] *)
     cnf (Blang.or_ [ Blang.and_ [ c; qt ]; Blang.and_ [ Blang.not_ c; qf ] ])
 ;;
 

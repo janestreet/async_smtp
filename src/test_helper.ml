@@ -57,9 +57,9 @@ let drain_and_closed r =
     ]
 ;;
 
-(* create a connected [Reader.t] and [Writer.t] pair.
-   [echo] can be used to print a copy of every line passing through the pipe.
-   We use [Unix.pipe] directly to avoid buffering issues. *)
+(* create a connected [Reader.t] and [Writer.t] pair. [echo] can be used to print a copy
+   of every line passing through the pipe. We use [Unix.pipe] directly to avoid buffering
+   issues. *)
 let rec mk_pipe ?echo here desc =
   let%bind `Reader r, `Writer w =
     Unix.pipe (Info.create ~here "[Smtp_expect_test_helper]" desc sexp_of_string)

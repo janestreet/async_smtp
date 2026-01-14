@@ -102,8 +102,8 @@ let cache_status_v2 = binable (module Client_cache.Status.Stable.V2)
 let cache_config = binable (module Client_cache.Config.Stable.V1)
 
 module Monitor = struct
-  (* Including a sequence number. We broadcast a heartbeat message (with error =
-     None) every 10 seconds..  *)
+  (* Including a sequence number. We broadcast a heartbeat message (with error = None)
+     every 10 seconds.. *)
   let errors = pipe_rpc ~name:"errors" unit (pair (int, option error)) error
 end
 
@@ -127,20 +127,42 @@ module Spool = struct
     let v2 = rpc ~name:(prefix ^- "status") unit spool_status_v2 ~version:2
     let v3 = rpc ~name:(prefix ^- "status") unit spool_status ~version:3
 
+    module V4 = Streamable.Plain_rpc.Make (struct
+        let name = prefix ^- "status"
+        let version = 4
+        let client_pushes_back = false
+
+        type query = unit [@@deriving bin_io]
+        type response = Spool.Stable.Status.V3.t [@@deriving bin_io]
+
+        module Response = Spool.Stable.Status.V3
+      end)
+
+    let v4 = V4.rpc
+
     let callee =
       let open Babel.Callee.Rpc in
-      singleton v2 |> map_response ~f:Spool.Stable.Status.V2.of_v3 |> add ~rpc:v3
+      singleton v2
+      |> map_response ~f:Spool.Stable.Status.V2.of_v3
+      |> add ~rpc:v3
+      |> map_response ~f:Or_error.ok_exn
+      |> Babel.Callee.Streamable_plain_rpc.add ~rpc:v4
     ;;
 
     let caller =
       let open Babel.Caller.Rpc in
-      singleton v2 |> map_response ~f:Spool.Stable.Status.V2.to_v3 |> add ~rpc:v3
+      singleton v2
+      |> map_response ~f:Spool.Stable.Status.V2.to_v3
+      |> add ~rpc:v3
+      |> map_response ~f:Or_error.return
+      |> Babel.Caller.Streamable_plain_rpc.add ~rpc:v4
     ;;
 
     let dispatch client =
       let open Deferred.Or_error.Let_syntax in
       let%bind client = Versioned_rpc.Connection_with_menu.create client in
-      Babel.Caller.Rpc.dispatch_multi caller client ()
+      let%bind result = Babel.Caller.Rpc.dispatch_multi caller client () in
+      Deferred.return result
     ;;
   end
 

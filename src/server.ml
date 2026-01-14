@@ -83,8 +83,8 @@ let read_data ~max_size ~close_started ~timeouts reader =
   let max_len = max_size |> Byte_units.bytes_int_exn in
   let write_string s buf =
     let%bind.Result buf in
-    (* [Bigbuffer] does not bound its underlying buffer. It's possible for [buf] to
-       resize to something between [max_len] and [2 * max_len]. *)
+    (* [Bigbuffer] does not bound its underlying buffer. It's possible for [buf] to resize
+       to something between [max_len] and [2 * max_len]. *)
     if Bigbuffer.length buf + String.length s > max_len
     then Error `Too_much_data
     else (
@@ -253,12 +253,10 @@ module Make (Cb : Plugin.S) = struct
     let syntax_error ~here ~flows ~component msg =
       write_reply ~here ~flows ~component (Smtp_reply.syntax_error_501 msg)
     in
-    (* This is kind of like a state machine.
-       [next] is the node the machine is on
-       [next] returns Error for invalid transition
-       [next] returns Ok fun for valid transitions
-       fun is invoked on the result and this loops back into the state machine.
-       [state] is meta data that gets passed through and mutated by the machine
+    (* This is kind of like a state machine. [next] is the node the machine is on [next]
+       returns Error for invalid transition [next] returns Ok fun for valid transitions
+       fun is invoked on the result and this loops back into the state machine. [state] is
+       meta data that gets passed through and mutated by the machine
     *)
     let loop ~flows ~component ~next =
       let component = component @ [ "read-loop" ] in
@@ -283,8 +281,8 @@ module Make (Cb : Plugin.S) = struct
           in
           return ()
         | `Ok "" ->
-          (*_ .Net System.Net.Mail.SmtpClient sends an unexpected empty line.
-            It seems okay to silently skip these. *)
+          (*_ .Net System.Net.Mail.SmtpClient sends an unexpected empty line. It seems
+              okay to silently skip these. *)
           Log.debug
             log
             (lazy
@@ -338,8 +336,7 @@ module Make (Cb : Plugin.S) = struct
         | Smtp_command.Auth (meth, initial_resp) ->
           top_auth ~flows ~session ~meth ~initial_resp
         | Smtp_command.Start_tls ->
-          (* We assume that [Cb.Session.extensions] only changes after a protocol
-             upgrade. *)
+          (* We assume that [Cb.Session.extensions] only changes after a protocol upgrade. *)
           (match
              Cb.Session.extensions ~state session
              |> List.find_map ~f:(function
@@ -422,8 +419,8 @@ module Make (Cb : Plugin.S) = struct
           ~allowed_ciphers:tls_options.Config.Tls_options.allowed_ciphers
           ~crt_file:tls_options.Config.Tls_options.crt_file
           ~key_file:tls_options.Config.Tls_options.key_file
-            (* Closing ssl connection will close the pipes which will in turn close
-             the readers. *)
+            (* Closing ssl connection will close the pipes which will in turn close the
+               readers. *)
           ~net_to_ssl:(Reader.pipe old_reader)
           ~ssl_to_net:(Writer.pipe old_writer)
           ~ssl_to_app:reader_pipe_w
@@ -540,8 +537,8 @@ module Make (Cb : Plugin.S) = struct
                    Smtp_monad.try_with ~here:[%here] (fun () ->
                      return (Base64.decode_exn resp))
                  in
-                 (* Deliberately only release the lock on success.
-                    This ensures that calls after failure will continue to fail. *)
+                 (* Deliberately only release the lock on success. This ensures that calls
+                    after failure will continue to fail. *)
                  challenge_lock := Result.is_error result;
                  result))
         in

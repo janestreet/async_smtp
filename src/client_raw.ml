@@ -480,12 +480,12 @@ let do_start_tls t ~log ~component tls_options =
       ?ca_file:tls_options.Config.Tls.ca_file
       ?ca_path:tls_options.Config.Tls.ca_path
         (* This is set to [Verify_none] to allow [check_tls_security] to do its job below,
-         which (depending on configuration) may allow the connection to succeed in spite
-         of a certificate that OpenSSL would consider invalid. *)
+           which (depending on configuration) may allow the connection to succeed in spite
+           of a certificate that OpenSSL would consider invalid. *)
       ~verify_modes:[ Verify_none ]
       ~allowed_ciphers:tls_options.Config.Tls.allowed_ciphers
-        (* Closing ssl connection will close the pipes which will in turn close
-         the readers. *)
+        (* Closing ssl connection will close the pipes which will in turn close the
+           readers. *)
       ~net_to_ssl:(Reader.pipe old_reader)
       ~ssl_to_net:(Writer.pipe old_writer)
       ~ssl_to_app:reader_pipe_w
@@ -505,8 +505,7 @@ let do_start_tls t ~log ~component tls_options =
            ?local_ip_address:(local_ip_address t)
            ?remote_ip_address:(remote_ip_address t)
            "finished tls negotiation"));
-    (* Make sure we forget all of the peer info except the host and port we talk
-       to. *)
+    (* Make sure we forget all of the peer info except the host and port we talk to. *)
     let remote_address = Peer_info.remote_address (Plain.info plain) in
     let local_ip_address = Peer_info.local_ip_address (Plain.info plain) in
     let remote_ip_address = Peer_info.remote_ip_address (Plain.info plain) in
@@ -515,8 +514,8 @@ let do_start_tls t ~log ~component tls_options =
     do_ehlo t ~log ~component
 ;;
 
-(* The correctness of our security relies on the correctness of this
-   function. The rest of the code in this module does not need to be trusted.
+(* The correctness of our security relies on the correctness of this function. The rest of
+   the code in this module does not need to be trusted.
 *)
 let check_tls_security t =
   let config = config t in
@@ -578,8 +577,7 @@ let should_try_tls t : Config.Tls.t option =
           if supports_extension t Smtp_extension.Start_tls then Some tls else None))
 ;;
 
-(* Will fail if negotiated security level is lower than that required by the
-   config. *)
+(* Will fail if negotiated security level is lower than that required by the config. *)
 let maybe_start_tls t ~log ~component =
   (match should_try_tls t with
    | None -> return (Ok ())
@@ -734,8 +732,8 @@ let with_session t ~log ~component ~credentials ~f =
          ?remote_ip_address:(remote_ip_address t)
          ?local_ip_address:(local_ip_address t)
          ()));
-  (* The RFC prescribes that we send QUIT if we are not happy with the reached
-     level of TLS security. *)
+  (* The RFC prescribes that we send QUIT if we are not happy with the reached level of
+     TLS security. *)
   with_quit t ~log ~component ~f:(fun () ->
     do_greeting t ~log ~component
     >>=? fun () ->

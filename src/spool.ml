@@ -74,6 +74,13 @@ module Stable = struct
     module V3 = struct
       type t = Spooled_message_info.V3.t list [@@deriving bin_io]
 
+      include (
+        Streamable.Of_list_rpc (struct
+          include Spooled_message_info.V3
+          include Streamable.Of_atomic_rpc (Spooled_message_info.V3)
+        end) :
+          Streamable.S_rpc with type t := t)
+
       let%expect_test _ =
         print_endline [%bin_digest: t];
         [%expect {| 8b4a0fae72e23152fa35fc5d804b0e32 |}]
@@ -104,6 +111,8 @@ module Stable = struct
         | `Unfrozen
         | `Recovered of [ `From_quarantined | `From_removed ]
         | `Quarantined of [ `Reason of Quarantine_reason.V1.t ]
+        | `Delayed of Time.V1.t
+        | `Delayed_rate_limited of Time.V1.t
         ]
         * Message_id.V1.t
         * Smtp_envelope.Info.V2.t
@@ -114,7 +123,7 @@ module Stable = struct
 
       let%expect_test _ =
         print_endline [%bin_digest: t];
-        [%expect {| 04e301d2f60a79fb948ed32d1de0c9fd |}]
+        [%expect {| 39b4b08898af01d27f2aea892c9ff159 |}]
       ;;
     end
   end
@@ -141,6 +150,8 @@ module Event = struct
       | `Unfrozen
       | `Recovered of [ `From_quarantined | `From_removed ]
       | `Quarantined of [ `Reason of Quarantine_reason.t ]
+      | `Delayed of Time.t
+      | `Delayed_rate_limited of Time.t
       ]
       * Message_id.t
       * Smtp_envelope.Info.t
@@ -168,6 +179,8 @@ module Event = struct
           | `Delivered -> "delivered"
           | `Recovered _from -> "recovered"
           | `Quarantined _reason -> "quarantined"
+          | `Delayed _ -> "delayed"
+          | `Delayed_rate_limited _ -> "delayed-rate-limited"
         in
         Message_id.to_string id ^ " " ^ event_string
     in
@@ -213,6 +226,8 @@ module Event = struct
   let unfrozen = event_gen `Unfrozen ~time:`Now
   let quarantined reason = event_gen (`Quarantined reason) ~time:`Now
   let recovered from_where = event_gen (`Recovered from_where) ~time:`Now
+  let delayed ~at = event_gen (`Delayed at) ~time:`Now
+  let delayed_rate_limited ~at = event_gen (`Delayed_rate_limited at) ~time:`Now
 end
 
 type t =
@@ -233,7 +248,7 @@ type t =
       -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
       -> Message.t
       -> Smtp_reply.t
-      -> [ `Fail_permanently | `Try_later | `Done ] Deferred.t
+      -> [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ] Deferred.t
   }
 [@@deriving fields ~getters ~iterators:create]
 
@@ -280,6 +295,8 @@ let removed_event = with_event_writer ~f:Event.removed
 let unfrozen_event = with_event_writer ~f:Event.unfrozen
 let recovered_event t from_where = with_event_writer t ~f:(Event.recovered from_where)
 let quarantined_event t reason = with_event_writer t ~f:(Event.quarantined reason)
+let delayed_event ~at = with_event_writer ~f:(Event.delayed ~at)
+let delayed_rate_limited_event ~at = with_event_writer ~f:(Event.delayed_rate_limited ~at)
 
 let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
   let spool_dir = Config.spool_dir config in
@@ -296,9 +313,9 @@ let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
   >>|? fun spool ->
   let event_stream =
     Bus.create_exn
-      Arity1
       ~on_subscription_after_first_write:Allow
       ~on_callback_raise:Error.raise
+      ()
   in
   Clock.every (sec 30.) (fun () ->
     Log.debug
@@ -378,7 +395,9 @@ let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
              ~reply
              ~flows
              (Sexp.to_string
-                [%sexp (decision : [ `Fail_permanently | `Try_later | `Done ])])));
+                [%sexp
+                  (decision
+                   : [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ])])));
       decision
     | Error error ->
       Log.error
@@ -510,7 +529,12 @@ let rec enqueue ?don't_re_enqueue ?at t spooled_msg =
               ~spool_id:(Message_id.to_string msgid)
               error));
        return (Error error)
-     | `Ok (Ok (`Delayed_to at, maybe_error)) ->
+     | `Ok (Ok (((`Delayed_to at | `Delayed_to_rate_limited at) as delayed), maybe_error))
+       ->
+       (match delayed with
+        | `Delayed_to at -> delayed_event ~at ~here:[%here] t spooled_msg
+        | `Delayed_to_rate_limited at ->
+          delayed_rate_limited_event ~at ~here:[%here] t spooled_msg);
        (match don't_re_enqueue with
         | Some () -> error_opt maybe_error
         | None ->
@@ -634,17 +658,29 @@ let load t =
   return (Ok ())
 ;;
 
-let create
-  ?(presend = fun ~log:_ _message -> return `Send_now)
-  ?(on_error =
-    fun ~log:_ ~load_envelope:_ _message reply ->
-      if Smtp_reply.is_permanent_error reply
-      then return (Ok `Fail_permanently)
-      else return (Ok `Try_later))
-  ~config
-  ~log
-  ()
-  =
+let create ?presend ?on_error ~config ~log () =
+  let presend =
+    match presend with
+    | Some f ->
+      fun ~log msg ->
+        let%map d = f ~log msg in
+        (d :> [ `Send_now | `Send_at of Time.t | `Freeze | `Remove ])
+    | None -> fun ~log:_ _message -> return `Send_now
+  in
+  let on_error =
+    match on_error with
+    | Some f ->
+      fun ~log ~load_envelope msg reply ->
+        let%map d = f ~log ~load_envelope msg reply in
+        (d
+          :> [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ]
+               Or_error.t)
+    | None ->
+      fun ~log:_ ~load_envelope:_ _message reply ->
+        if Smtp_reply.is_permanent_error reply
+        then return (Ok `Fail_permanently)
+        else return (Ok `Try_later)
+  in
   internal_create ~presend ~on_error ~config ~log ()
   >>=? fun t ->
   let%bind () = uncheckout_all_entries t in
@@ -752,9 +788,8 @@ let send_msgs ?(retry_intervals = []) t ids =
       match Message.status msg with
       | `Frozen -> do_send ~event:(unfrozen_event ~here:[%here]) msg
       | `Send_at _ ->
-        (* This will enqueue the message without changing what was previously
-           queued, so we will attempt to deliver twice. It's ok,
-           [Message.send] can deal with this. *)
+        (* This will enqueue the message without changing what was previously queued, so
+           we will attempt to deliver twice. It's ok, [Message.send] can deal with this. *)
         do_send msg
       | `Sending | `Delivered | `Send_now | `Removed | `Quarantined _ -> return (Ok ()))
     >>| Or_error.tag ~tag:(Message_id.to_string id))
@@ -873,27 +908,24 @@ module Status = struct
 
        Each message on the queue is display as in the following example:
 
-       25m  2.9K 0t5C6f-0000c8-00 <alice@wonderland.fict.example>
-       red.king@looking-glass.fict.example
-       <other addresses>
+       25m 2.9K 0t5C6f-0000c8-00 <alice@wonderland.fict.example>
+       red.king@looking-glass.fict.example <other addresses>
 
-       The first line contains the length of time the message has been on the queue
-       (in this case 25 minutes), the size of the message (2.9K), the unique local
-       identifier for the message, and the message sender, as contained in the
-       envelope. For bounce messages, the sender address is empty, and appears as
-       "<>". If the message was submitted locally by an untrusted user who overrode
-       the default sender address, the user’s login name is shown in parentheses
-       before the sender address.
+       The first line contains the length of time the message has been on the queue (in
+       this case 25 minutes), the size of the message (2.9K), the unique local identifier
+       for the message, and the message sender, as contained in the envelope. For bounce
+       messages, the sender address is empty, and appears as "<>". If the message was
+       submitted locally by an untrusted user who overrode the default sender address, the
+       user’s login name is shown in parentheses before the sender address.
 
-       If the message is frozen (attempts to deliver it are suspended) then the text
-       "*** frozen ***" is displayed at the end of this line.
+       If the message is frozen (attempts to deliver it are suspended) then the text "***
+       frozen ***" is displayed at the end of this line.
 
        The recipients of the message (taken from the envelope, not the headers) are
        displayed on subsequent lines. Those addresses to which the message has already
-       been delivered are marked with the letter D. If an original address gets
-       expanded into several addresses via an alias or forward file, the original is
-       displayed with a D only when deliveries for all of its child addresses are
-       complete.  *)
+       been delivered are marked with the letter D. If an original address gets expanded
+       into several addresses via an alias or forward file, the original is displayed with
+       a D only when deliveries for all of its child addresses are complete. *)
     let module S = Spooled_message_info in
     let msg_to_string msg =
       let frozen_text =
@@ -1027,8 +1059,8 @@ let status_from_disk config =
            ; envelope = Some envelope
            ; file_size = Some file_size
            }))
-    (* Drop errors because the list of files might have changed since we read
-       the directory. *)
+    (* Drop errors because the list of files might have changed since we read the
+       directory. *)
   in
   Ok (List.filter_map msgs ~f:Result.ok)
 ;;

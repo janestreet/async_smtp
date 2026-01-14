@@ -76,7 +76,7 @@ module Server = Smtp_server.Make (struct
 
 let handle_signals () =
   Signal.handle [ Signal.term; Signal.int ] ~f:(fun signal ->
-    [%log.global.info_format !"shutting down upon receiving signal %{Signal}" signal];
+    [%log.info_format !"shutting down upon receiving signal %{Signal}" signal];
     shutdown 0)
 ;;
 
@@ -92,7 +92,7 @@ let main () =
   let ports =
     Server.ports server |> List.map ~f:Int.to_string |> String.concat ~sep:", "
   in
-  [%log.global.info_format "mailcore listening on ports %s" ports];
+  [%log.info_format "mailcore listening on ports %s" ports];
   Shutdown.set_default_force Deferred.never;
   let timeout = Clock.after (sec 60.) in
   Shutdown.at_shutdown (fun () ->

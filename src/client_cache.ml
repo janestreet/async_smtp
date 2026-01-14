@@ -169,7 +169,7 @@ let init
       Client_cache.keep_cache_warm
         cache
         ~on_error_opening_resource:(fun ~key:address ~error ->
-          [%log.global.info
+          [%log.info
             "Failed to open connection when warming cache"
               (address : Address_and_route.t)
               (error : Error.t)])

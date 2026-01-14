@@ -62,7 +62,7 @@ val create
   :  ?presend:
        (log:Mail_log.t
         -> Message.t
-        -> [ `Send_now | `Send_at of Time_float.t | `Freeze | `Remove ] Deferred.t)
+        -> [< `Send_now | `Send_at of Time_float.t | `Freeze | `Remove ] Deferred.t)
        (** Immediately prior to sending a message, [presend] is called and can decide to
            delay it to a later time. Example use case is rate limiting outbound messages.
            default: `Send_now for all messages *)
@@ -71,16 +71,21 @@ val create
         -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
         -> Message.t
         -> Smtp_reply.t
-        -> [ `Fail_permanently | `Try_later | `Done ] Deferred.Or_error.t)
+        -> [< `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ]
+             Deferred.Or_error.t)
        (** Upon receiving an error reply for a SMTP relay attempt, [on_error] is called to
            determine how to handle the error. This callback can make decisions based on
            the contents of the SMTP reply, the history of previous relay attempts, and
            other information. `Fail_permanently will cause the message to be frozen (saved
            on disk but not attempted again), while `Try_later will cause the message to be
-           retried according to [Message.retry_intervals]. `Done will cause the spool to
-           treat the message as handled. `Done can be used for [on-error] to let the spool
-           know that it has enqueued a bounce message to the sender of the failed message,
-           and the spool should stop worrying about the failed message.
+           retried according to [Message.retry_intervals]. `Try_later_rate_limited is
+           similar but indicates the retry is specifically due to rate limiting by the
+           recipient server; the distinction between `Try_later and
+           `Try_later_rate_limited is primarily observable in the spool-events stream's
+           `Delayed and `Delayed_rate_limited events. `Done will cause the spool to treat
+           the message as handled. `Done can be used for [on-error] to let the spool know
+           that it has enqueued a bounce message to the sender of the failed message, and
+           the spool should stop worrying about the failed message.
 
            Example use case is detecting and handling emails rate-limited or deemed
            malicious by the recipient email server.
@@ -108,8 +113,8 @@ val add
   -> Smtp_envelope.Routed.Batch.t list
   -> (Message_id.t * Smtp_envelope.Routed.t) list Deferred.Or_error.t
 
-(* Move the message into a special quarantine directory where it can be manually
-   inspected and optionally manually injected back into the spool *)
+(* Move the message into a special quarantine directory where it can be manually inspected
+   and optionally manually injected back into the spool *)
 
 val quarantine
   :  t
@@ -176,12 +181,11 @@ module Spooled_message_info : sig
        | `Quarantined of Quarantine_reason.t
        ]
 
-  (* These will not be populated for information obtained using [status].  Use
-     [status_from_disk] if you want to see envelopes. Part of the reason is that
-     we don't hold envelopes in memory, so we can return status much faster if
-     we don't read the disk. A bigger part is that [status] is used to implement
-     the rpc call, and we don't want the result to contain sensitive
-     information.  *)
+  (* These will not be populated for information obtained using [status]. Use
+     [status_from_disk] if you want to see envelopes. Part of the reason is that we don't
+     hold envelopes in memory, so we can return status much faster if we don't read the
+     disk. A bigger part is that [status] is used to implement the rpc call, and we don't
+     want the result to contain sensitive information. *)
 
   val file_size : t -> Byte_units.t option
   val envelope : t -> Smtp_envelope.t option
@@ -221,6 +225,8 @@ module Event : sig
     | `Unfrozen
     | `Recovered of [ `From_quarantined | `From_removed ]
     | `Quarantined of [ `Reason of Quarantine_reason.t ]
+    | `Delayed of Time_float.t
+    | `Delayed_rate_limited of Time_float.t
     ]
     * Message_id.t
     * Smtp_envelope.Info.t
@@ -241,6 +247,8 @@ module Stable : sig
   module Status : sig
     module V3 : sig
       type t = Status.t [@@deriving bin_io]
+
+      include Streamable.S_rpc with type t := t
     end
 
     module V2 : sig
