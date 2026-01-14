@@ -74,6 +74,13 @@ module Stable = struct
     module V3 = struct
       type t = Spooled_message_info.V3.t list [@@deriving bin_io]
 
+      include (
+        Streamable.Of_list_rpc (struct
+          include Spooled_message_info.V3
+          include Streamable.Of_atomic_rpc (Spooled_message_info.V3)
+        end) :
+          Streamable.S_rpc with type t := t)
+
       let%expect_test _ =
         print_endline [%bin_digest: t];
         [%expect {| 8b4a0fae72e23152fa35fc5d804b0e32 |}]
@@ -104,6 +111,8 @@ module Stable = struct
         | `Unfrozen
         | `Recovered of [ `From_quarantined | `From_removed ]
         | `Quarantined of [ `Reason of Quarantine_reason.V1.t ]
+        | `Delayed of Time.V1.t
+        | `Delayed_rate_limited of Time.V1.t
         ]
         * Message_id.V1.t
         * Smtp_envelope.Info.V2.t
@@ -114,7 +123,7 @@ module Stable = struct
 
       let%expect_test _ =
         print_endline [%bin_digest: t];
-        [%expect {| 04e301d2f60a79fb948ed32d1de0c9fd |}]
+        [%expect {| 39b4b08898af01d27f2aea892c9ff159 |}]
       ;;
     end
   end
@@ -141,6 +150,8 @@ module Event = struct
       | `Unfrozen
       | `Recovered of [ `From_quarantined | `From_removed ]
       | `Quarantined of [ `Reason of Quarantine_reason.t ]
+      | `Delayed of Time.t
+      | `Delayed_rate_limited of Time.t
       ]
       * Message_id.t
       * Smtp_envelope.Info.t
@@ -168,6 +179,8 @@ module Event = struct
           | `Delivered -> "delivered"
           | `Recovered _from -> "recovered"
           | `Quarantined _reason -> "quarantined"
+          | `Delayed _ -> "delayed"
+          | `Delayed_rate_limited _ -> "delayed-rate-limited"
         in
         Message_id.to_string id ^ " " ^ event_string
     in
@@ -213,6 +226,8 @@ module Event = struct
   let unfrozen = event_gen `Unfrozen ~time:`Now
   let quarantined reason = event_gen (`Quarantined reason) ~time:`Now
   let recovered from_where = event_gen (`Recovered from_where) ~time:`Now
+  let delayed ~at = event_gen (`Delayed at) ~time:`Now
+  let delayed_rate_limited ~at = event_gen (`Delayed_rate_limited at) ~time:`Now
 end
 
 type t =
@@ -233,7 +248,7 @@ type t =
       -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
       -> Message.t
       -> Smtp_reply.t
-      -> [ `Fail_permanently | `Try_later | `Done ] Deferred.t
+      -> [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ] Deferred.t
   }
 [@@deriving fields ~getters ~iterators:create]
 
@@ -280,6 +295,8 @@ let removed_event = with_event_writer ~f:Event.removed
 let unfrozen_event = with_event_writer ~f:Event.unfrozen
 let recovered_event t from_where = with_event_writer t ~f:(Event.recovered from_where)
 let quarantined_event t reason = with_event_writer t ~f:(Event.quarantined reason)
+let delayed_event ~at = with_event_writer ~f:(Event.delayed ~at)
+let delayed_rate_limited_event ~at = with_event_writer ~f:(Event.delayed_rate_limited ~at)
 
 let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
   let spool_dir = Config.spool_dir config in
@@ -296,9 +313,9 @@ let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
   >>|? fun spool ->
   let event_stream =
     Bus.create_exn
-      Arity1
       ~on_subscription_after_first_write:Allow
       ~on_callback_raise:Error.raise
+      ()
   in
   Clock.every (sec 30.) (fun () ->
     Log.debug
@@ -378,7 +395,9 @@ let internal_create ~presend ~on_error ~config ~log () : t Deferred.Or_error.t =
              ~reply
              ~flows
              (Sexp.to_string
-                [%sexp (decision : [ `Fail_permanently | `Try_later | `Done ])])));
+                [%sexp
+                  (decision
+                   : [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ])])));
       decision
     | Error error ->
       Log.error
@@ -510,7 +529,12 @@ let rec enqueue ?don't_re_enqueue ?at t spooled_msg =
               ~spool_id:(Message_id.to_string msgid)
               error));
        return (Error error)
-     | `Ok (Ok (`Delayed_to at, maybe_error)) ->
+     | `Ok (Ok (((`Delayed_to at | `Delayed_to_rate_limited at) as delayed), maybe_error))
+       ->
+       (match delayed with
+        | `Delayed_to at -> delayed_event ~at ~here:[%here] t spooled_msg
+        | `Delayed_to_rate_limited at ->
+          delayed_rate_limited_event ~at ~here:[%here] t spooled_msg);
        (match don't_re_enqueue with
         | Some () -> error_opt maybe_error
         | None ->
@@ -634,17 +658,29 @@ let load t =
   return (Ok ())
 ;;
 
-let create
-  ?(presend = fun ~log:_ _message -> return `Send_now)
-  ?(on_error =
-    fun ~log:_ ~load_envelope:_ _message reply ->
-      if Smtp_reply.is_permanent_error reply
-      then return (Ok `Fail_permanently)
-      else return (Ok `Try_later))
-  ~config
-  ~log
-  ()
-  =
+let create ?presend ?on_error ~config ~log () =
+  let presend =
+    match presend with
+    | Some f ->
+      fun ~log msg ->
+        let%map d = f ~log msg in
+        (d :> [ `Send_now | `Send_at of Time.t | `Freeze | `Remove ])
+    | None -> fun ~log:_ _message -> return `Send_now
+  in
+  let on_error =
+    match on_error with
+    | Some f ->
+      fun ~log ~load_envelope msg reply ->
+        let%map d = f ~log ~load_envelope msg reply in
+        (d
+          :> [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ]
+               Or_error.t)
+    | None ->
+      fun ~log:_ ~load_envelope:_ _message reply ->
+        if Smtp_reply.is_permanent_error reply
+        then return (Ok `Fail_permanently)
+        else return (Ok `Try_later)
+  in
   internal_create ~presend ~on_error ~config ~log ()
   >>=? fun t ->
   let%bind () = uncheckout_all_entries t in

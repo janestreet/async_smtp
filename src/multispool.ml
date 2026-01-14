@@ -748,14 +748,14 @@ module Monitor = struct
         let open Command.Let_syntax in
         [%map_open
           let max_checked_out_age =
-            flag_optional_with_default_doc
+            flag_optional_with_default_doc_sexp
               "-max-checked-out-age"
               Time.Span.arg_type
               Time.Span.sexp_of_t
               ~default:Defaults.max_checked_out_age
               ~doc:"SPAN alert once idle checkout reaches age SPAN"
           and max_tmp_file_age =
-            flag_optional_with_default_doc
+            flag_optional_with_default_doc_sexp
               "-max-tmp-file-age"
               Time.Span.arg_type
               Time.Span.sexp_of_t
@@ -976,14 +976,14 @@ module Monitor = struct
         let open Command.Let_syntax in
         [%map_open
           let check_every =
-            flag_optional_with_default_doc
+            flag_optional_with_default_doc_sexp
               "-check-every"
               Time.Span.arg_type
               Time.Span.sexp_of_t
               ~default:Defaults.check_every
               ~doc:"SPAN run fsck at intervals of SPAN"
           and alert_after_cycles =
-            flag_optional_with_default_doc
+            flag_optional_with_default_doc_sexp
               "-alert-after-cycles"
               int
               Int.sexp_of_t

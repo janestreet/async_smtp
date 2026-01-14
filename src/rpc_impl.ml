@@ -6,9 +6,9 @@ module Monitor = struct
     let seqnum = ref 0 in
     let error_stream =
       Bus.create_exn
-        Arity1
         ~on_subscription_after_first_write:Allow
         ~on_callback_raise:Error.raise
+        ()
     in
     (* Hearbeats *)
     Clock.every (sec 10.) (fun () -> Bus.write error_stream (!seqnum, None));
@@ -30,7 +30,7 @@ module Monitor = struct
     Rpc.Pipe_rpc.implement
       Rpc_intf.Monitor.errors
       (fun () () ->
-        [%log.global.debug_string "received error stream subscription"];
+        [%log.debug_string "received error stream subscription"];
         let pipe = Async_bus.pipe1_exn error_stream in
         return (Ok pipe))
       ~leave_open_on_exception:true
@@ -67,7 +67,7 @@ module Spool = struct
   module Status = struct
     let rpcs =
       Babel.Callee.implement_multi_exn Rpc_intf.Spool.Status.callee ~f:(fun spool _ () ->
-        return (Spool.status spool))
+        return (Spool.status spool |> Ok))
     ;;
   end
 
@@ -91,12 +91,9 @@ module Spool = struct
   ;;
 
   let events =
-    Rpc.Pipe_rpc.implement
-      Rpc_intf.Spool.events
-      (fun spool () ->
-        let pipe = Spool.event_stream spool in
-        return (Ok pipe))
-      ~leave_open_on_exception:true
+    Rpc.Pipe_rpc.implement Rpc_intf.Spool.events (fun spool () ->
+      let pipe = Spool.event_stream spool in
+      return (Ok pipe))
   ;;
 
   let rpcs = [ freeze; send; remove; recover; events ] @ Status.rpcs @ Cache.rpcs

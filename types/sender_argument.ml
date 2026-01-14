@@ -29,7 +29,7 @@ let of_string = function
     (match Email_address.of_string email_address with
      | Ok email_address -> Ok (Auth (Some email_address))
      | Error _ ->
-       [%log.global.info_format "Unparsable argument to AUTH: %s" email_address];
+       [%log.info_format "Unparsable argument to AUTH: %s" email_address];
        Ok (Auth None))
   | "BODY=8BITMIME" -> Ok (Body `Mime_8bit)
   | "BODY=7BIT" -> Ok (Body `Mime_7bit)

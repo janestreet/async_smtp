@@ -53,8 +53,14 @@ val send
        (log:Mail_log.t
         -> load_envelope:(unit -> Smtp_envelope.t Deferred.Or_error.t)
         -> Smtp_reply.t
-        -> [ `Fail_permanently | `Try_later | `Done ] Deferred.t)
-  -> ([> `Delivered | `Frozen | `Removed | `Delayed_to of Time_float.t ] * Error.t option)
+        -> [ `Fail_permanently | `Try_later | `Try_later_rate_limited | `Done ] Deferred.t)
+  -> ([> `Delivered
+      | `Frozen
+      | `Removed
+      | `Delayed_to of Time_float.t
+      | `Delayed_to_rate_limited of Time_float.t
+      ]
+     * Error.t option)
        Or_error.t
        Deferred.t
 

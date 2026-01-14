@@ -29,6 +29,7 @@ depends: [
   "re2"
   "resource_cache"
   "sexp_macro"
+  "streamable"
   "textutils"
   "angstrom"       {>= "0.15.0"}
   "base64"         {>= "3.4.0"}

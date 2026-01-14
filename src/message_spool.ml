@@ -238,6 +238,81 @@ let send_envelope_via_sendfile
     envelope_info
 ;;
 
+module Partitioned_recipients = struct
+  type 'a t =
+    { fail_permanently : 'a list
+    ; try_later : 'a list
+    ; done_ : 'a list
+    ; try_later_rate_limited : bool
+    }
+  [@@deriving sexp_of]
+end
+
+let partition_send_results results : 'a Partitioned_recipients.t =
+  let try_later_rate_limited = ref false in
+  let fail_permanently, try_later, done_ =
+    List.partition3_map results ~f:(fun (recipient, result) ->
+      match result with
+      | `Fail_permanently -> `Fst recipient
+      | `Try_later -> `Snd recipient
+      | `Try_later_rate_limited ->
+        try_later_rate_limited := true;
+        `Snd recipient
+      | `Done -> `Trd recipient)
+  in
+  { fail_permanently; try_later; done_; try_later_rate_limited = !try_later_rate_limited }
+;;
+
+let%expect_test "partition_send_results" =
+  let test decisions =
+    let result =
+      List.mapi decisions ~f:(fun i decision -> sprintf "r%d" i, decision)
+      |> partition_send_results
+    in
+    print_s [%sexp (result : string Partitioned_recipients.t)]
+  in
+  let () = test [] in
+  [%expect
+    {|
+    ((fail_permanently ()) (try_later ()) (done_ ())
+     (try_later_rate_limited false))
+    |}];
+  let () = test [ `Fail_permanently; `Fail_permanently ] in
+  [%expect
+    {|
+    ((fail_permanently (r0 r1)) (try_later ()) (done_ ())
+     (try_later_rate_limited false))
+    |}];
+  let () = test [ `Try_later; `Try_later ] in
+  [%expect
+    {|
+    ((fail_permanently ()) (try_later (r0 r1)) (done_ ())
+     (try_later_rate_limited false))
+    |}];
+  let () = test [ `Try_later_rate_limited ] in
+  [%expect
+    {|
+    ((fail_permanently ()) (try_later (r0)) (done_ ())
+     (try_later_rate_limited true))
+    |}];
+  let () = test [ `Done; `Done ] in
+  [%expect
+    {|
+    ((fail_permanently ()) (try_later ()) (done_ (r0 r1))
+     (try_later_rate_limited false))
+    |}];
+  let () =
+    test
+      [ `Fail_permanently; `Try_later; `Try_later_rate_limited; `Done; `Fail_permanently ]
+  in
+  [%expect
+    {|
+    ((fail_permanently (r0 r4)) (try_later (r1 r2)) (done_ (r3))
+     (try_later_rate_limited true))
+    |}];
+  return ()
+;;
+
 let send_to_hops t ~log ~client_cache ~on_error data_file =
   let hops_tag =
     Sexp.to_string ([%sexp_of: Host_and_port.t list] (Message.next_hop_choices t))
@@ -360,31 +435,28 @@ let send_to_hops t ~log ~client_cache ~on_error data_file =
        (match envelope_status with
         | Ok (_ (* envelope_id *), rejected_recipients)
         | Error (`Rejected_all_recipients rejected_recipients) ->
-          let%bind ( permanently_failed_recipients
-                   , temporarily_failed_recipients
-                   , _done_recipients )
-            =
+          let%bind { fail_permanently; try_later; done_; try_later_rate_limited } =
             Deferred.List.map
               ~how:`Sequential
               rejected_recipients
               ~f:(fun (recipient, reject) ->
-                match%map on_error ~log reject with
-                | `Fail_permanently -> `Fst recipient
-                | `Try_later -> `Snd recipient
-                | `Done -> `Trd recipient)
-            >>| List.partition3_map ~f:Fn.id
+                let%map.Deferred result = on_error ~log reject in
+                recipient, result)
+            >>| partition_send_results
           in
-          Message.set_remaining_recipients t temporarily_failed_recipients;
-          Message.set_failed_recipients
-            t
-            (Message.failed_recipients t @ permanently_failed_recipients);
+          (* We don't need to track recipients who have received the email. *)
+          let _ = done_ in
+          Message.set_remaining_recipients t try_later;
+          Message.set_failed_recipients t (Message.failed_recipients t @ fail_permanently);
           (match
              ( List.is_empty (Message.remaining_recipients t)
              , List.is_empty (Message.failed_recipients t) )
            with
            | true, true -> return `Done
            | true, false -> return `Fail_permanently
-           | false, false | false, true -> return `Try_later)
+           | false, false | false, true ->
+             return
+               (if try_later_rate_limited then `Try_later_rate_limited else `Try_later))
         | Error
             ( `Rejected_sender r
             | `Rejected_sender_and_recipients (r, _)
@@ -402,18 +474,23 @@ let do_send_without_file t ~log ~client_cache ~on_error ~get_envelope =
   | `Done ->
     Message.set_status t `Delivered;
     Deferred.Or_error.return (`Unlink, (`Delivered, None))
-  | (`Fail_permanently | `Try_later) as fail ->
+  | (`Fail_permanently | `Try_later | `Try_later_rate_limited) as fail ->
     (match fail, Message.retry_intervals t with
-     | `Fail_permanently, _ | `Try_later, [] ->
+     | `Fail_permanently, _ | (`Try_later | `Try_later_rate_limited), [] ->
        let delivery_failure = last_relay_error t in
        let%map.Deferred.Or_error action, () = freeze_without_file t ~log in
        action, (`Frozen, Some delivery_failure)
-     | `Try_later, r :: rs ->
+     | ((`Try_later | `Try_later_rate_limited) as try_later), r :: rs ->
        let delivery_failure = last_relay_error t in
        let at = Time_float.(add (now ()) (Smtp_envelope.Retry_interval.to_span r)) in
        let%map.Deferred.Or_error action, () = mark_for_send_at_without_file t ~at ~log in
        Message.set_retry_intervals t rs;
-       action, (`Delayed_to at, Some delivery_failure))
+       let delayed =
+         match try_later with
+         | `Try_later -> `Delayed_to at
+         | `Try_later_rate_limited -> `Delayed_to_rate_limited at
+       in
+       action, (delayed, Some delivery_failure))
 ;;
 
 let do_send t ~log ~client_cache ~presend ~on_error =

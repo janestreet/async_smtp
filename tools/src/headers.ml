@@ -175,8 +175,7 @@ let sort_emails_in_header pattern =
        | Error e ->
          (* Not an error since this is not a reason to trigger the kill switch. *)
          Async_log.Ppx_log_syntax.(
-           [%log.global.info_format
-             "could not parse %s: %s" value (Error.to_string_hum e)]);
+           [%log.info_format "could not parse %s: %s" value (Error.to_string_hum e)]);
          value
        | Ok emails -> f ~remove_duplicates emails |> String.concat ~sep:", "))
 ;;

@@ -4,6 +4,6 @@
  (libraries textutils.ascii_table async async_extra.async_bus async_inotify
    async_sendfile async_smtp_types async_ssl babel base64 bin_prot.shape
    core_kernel.bus core core_unix email_message resource_cache sexp_macro
-   core_unix.time_float_unix core_kernel.uuid core_unix.uuid)
+   streamable core_unix.time_float_unix core_kernel.uuid core_unix.uuid)
  (preprocess
-  (pps ppx_jane ppx_stable)))
+  (pps ppx_jane ppx_stable streamable.ppx)))
