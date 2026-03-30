@@ -14,6 +14,26 @@ module type S = sig
     -> log:Mail_log.t
     -> t Deferred.Or_error.t
 
+  (** Like [start], but uses [start_rpc_server] instead of the default
+      [Rpc.Connection.serve] to serve the async_smtp RPC implementations.
+
+      This is useful when you need to customize how the RPC server is started, e.g., to
+      use a different authentication or transport mechanism.
+
+      [start_rpc_server] receives the full list of RPC implementations (built-in
+      async_smtp implementations + plugin RPCs) as [unit Rpc.Implementation.t list]. The
+      caller is responsible for creating [Rpc.Implementations.t] and starting the server. *)
+  val start_with_custom_rpc_server
+    :  server_state:server_state
+    -> config:Config.t
+    -> log:Mail_log.t
+    -> start_rpc_server:
+         (config:Config.t
+          -> log:Mail_log.t
+          -> implementations:unit Rpc.Implementation.t list
+          -> unit Or_error.t Deferred.t)
+    -> t Or_error.t Deferred.t
+
   val config : t -> Config.t
   val ports : t -> int list
   val close : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t

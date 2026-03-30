@@ -59,6 +59,9 @@ type t =
   ; max_concurrent_receive_jobs_per_port : int
   ; timeouts : Timeouts.t
   ; rpc_port : int
+  ; rpc_listen_on_all_interfaces : bool
+  (** If [false] (the default), the RPC server listens only on localhost. If [true], it
+      listens on all interfaces (0.0.0.0). *)
   ; rpc_heartbeat_config : Rpc.Connection.Heartbeat_config.t option
   ; malformed_emails : [ `Reject | `Wrap ]
   ; max_message_size : Byte_units.t

@@ -23,11 +23,12 @@ module Level = struct
     include Log.Level
 
     (* Stable comparison functions as [Log.Level.compare] doesn't compare s..t
-       [`Debug < `Info < `Error] *)
+       [`Debug < `Info < `Warn < `Error] *)
     let severity = function
       | `Debug -> 0
       | `Info -> 1
-      | `Error -> 2
+      | `Warn -> 2
+      | `Error -> 3
     ;;
 
     let compare a b = Comparable.lift [%compare: int] ~f:severity a b
@@ -573,6 +574,7 @@ let with_flow_and_component ~flows ~component t =
 let adjust_log_levels
   ?(minimum_level = `Debug)
   ?(remap_info_to = `Info)
+  ?(remap_warn_to = `Warn)
   ?(remap_error_to = `Error)
   t
   =
@@ -594,6 +596,7 @@ let adjust_log_levels
                   match Message.level msg with
                   | `Debug -> `Debug
                   | `Info -> remap_info_to
+                  | `Warn -> remap_warn_to
                   | `Error -> remap_error_to
                 in
                 if Level.( <= ) minimum_level level then message' ~level t msg);

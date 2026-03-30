@@ -142,6 +142,7 @@ module Config = struct
       ; max_concurrent_receive_jobs_per_port = concurrent_receivers
       ; timeouts = Smtp_server.Config.Timeouts.default
       ; rpc_port = 0 (* not used *)
+      ; rpc_listen_on_all_interfaces = false
       ; rpc_heartbeat_config = None
       ; malformed_emails = `Reject
       ; max_message_size = Byte_units.of_megabytes 1.

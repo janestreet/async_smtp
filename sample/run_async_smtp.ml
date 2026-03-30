@@ -9,6 +9,7 @@ let server_config =
   ; max_concurrent_receive_jobs_per_port = 1
   ; timeouts = Smtp_server.Config.default.timeouts
   ; rpc_port = 2210
+  ; rpc_listen_on_all_interfaces = false
   ; rpc_heartbeat_config = None
   ; malformed_emails = `Reject
   ; max_message_size = Byte_units.of_megabytes 1.
