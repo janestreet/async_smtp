@@ -27,6 +27,7 @@ module Smtp_quarantine_reason = Quarantine_reason
 module Smtp_reply = Smtp_reply
 module Smtp_rpc_impl = Rpc_impl
 module Smtp_rpc_intf = Rpc_intf
+module Smtp_rpc_server = Rpc_server
 module Smtp_session = Session
 module Smtp_spool_monitor = Message_spool.On_disk_monitor
 module Smtp_spool_queue = Message.Queue

@@ -23,15 +23,14 @@ module Command : sig
 end = struct
   include Command
 
-  let rpc_client_command0 ~host_and_port ~f =
-    let open Deferred.Let_syntax in
-    match%map
-      Rpc.Connection.with_client
-        (Tcp.Where_to_connect.of_host_and_port host_and_port)
-        (fun conn -> f conn)
-    with
-    | Ok a -> a
-    | Error exn -> raise exn
+  let with_rpc_client host_and_port f =
+    [%map.Deferred
+      let result =
+        Rpc.Connection.with_client (Tcp.Where_to_connect.of_host_and_port host_and_port) f
+      in
+      match result with
+      | Ok a -> a
+      | Error exn -> raise exn]
   ;;
 
   let rpc_server_or_configs_flag =
@@ -84,7 +83,7 @@ end = struct
       [%map_open
         let main = main
         and rpc_server, _server_config, _spool_config = rpc_server_or_configs_flag in
-        fun () -> rpc_client_command0 ~host_and_port:rpc_server ~f:main]
+        fun () -> with_rpc_client rpc_server main]
       ~behave_nicely_in_pipeline:false
   ;;
 
@@ -100,9 +99,7 @@ end = struct
           match server_config, spool_config with
           | Some server_config, Some spool_config ->
             main (`Configs (server_config, spool_config))
-          | None, None ->
-            rpc_client_command0 ~host_and_port:rpc_server ~f:(fun client ->
-              main (`Rpc client))
+          | None, None -> with_rpc_client rpc_server (fun client -> main (`Rpc client))
           | _ ->
             (* Other cases should be prevented in rpc_server_or_configs_flag *)
             assert false]

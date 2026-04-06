@@ -257,6 +257,8 @@ val adjust_log_levels
        (* Only output messages of level > [minimum_level] AND level > [Log.level t] *)
   -> ?remap_info_to:
        Log.Level.t (* Rewrite messages with level [`Info] to level [remap_info_to] *)
+  -> ?remap_warn_to:
+       Log.Level.t (* Rewrite messages with level [`Warn] to level [remap_warn_to] *)
   -> ?remap_error_to:
        Log.Level.t (* Rewrite messages with level [`Error] to level [remap_error_to] *)
   -> t

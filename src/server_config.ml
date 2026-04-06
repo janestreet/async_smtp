@@ -105,6 +105,7 @@ type t =
   ; max_concurrent_receive_jobs_per_port : int
   ; timeouts : Timeouts.t
   ; rpc_port : int
+  ; rpc_listen_on_all_interfaces : bool [@sexp.bool]
   ; rpc_heartbeat_config : Rpc.Connection.Heartbeat_config.t option [@sexp.option]
   ; malformed_emails : [ `Reject | `Wrap ]
   ; max_message_size : Byte_units.Stable.V1.t
@@ -120,6 +121,7 @@ let default =
   ; max_concurrent_receive_jobs_per_port = 0
   ; timeouts = Timeouts.default
   ; rpc_port = 0
+  ; rpc_listen_on_all_interfaces = false
   ; rpc_heartbeat_config = None
   ; malformed_emails = `Reject
   ; max_message_size = Byte_units.of_megabytes 35.

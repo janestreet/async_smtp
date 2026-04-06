@@ -16,6 +16,17 @@ module type S = sig
     -> log:Mail_log.t
     -> t Deferred.Or_error.t
 
+  val start_with_custom_rpc_server
+    :  server_state:server_state
+    -> config:Config.t
+    -> log:Mail_log.t
+    -> start_rpc_server:
+         (config:Config.t
+          -> log:Mail_log.t
+          -> implementations:unit Rpc.Implementation.t list
+          -> unit Or_error.t Deferred.t)
+    -> t Or_error.t Deferred.t
+
   val config : t -> Config.t
   val ports : t -> int list
   val close : ?timeout:unit Deferred.t -> t -> unit Deferred.Or_error.t
@@ -1044,10 +1055,10 @@ module Make (Cb : Plugin.S) = struct
     Deferred.List.map ~how:`Parallel (Config.where_to_listen config) ~f:start_server
   ;;
 
-  let start ~server_state ~config ~log =
+  let start_with_custom_rpc_server ~server_state ~config ~log ~start_rpc_server =
     let close_started = Ivar.create () in
     let server_events = Smtp_events.create () in
-    let%map servers =
+    let%bind servers =
       tcp_servers
         ~server_state
         ~config
@@ -1058,8 +1069,18 @@ module Make (Cb : Plugin.S) = struct
     let plugin_rpcs =
       List.map (Cb.rpcs ()) ~f:(Rpc.Implementation.lift ~f:(fun () -> server_state))
     in
-    don't_wait_for (Rpc_server.start (config, server_events) ~log ~plugin_rpcs);
-    Ok { config; servers; close_started }
+    let implementations = Rpc_server.implementations server_events @ plugin_rpcs in
+    let%map.Deferred.Or_error () = start_rpc_server ~config ~log ~implementations in
+    { config; servers; close_started }
+  ;;
+
+  let start ~server_state ~config ~log =
+    start_with_custom_rpc_server
+      ~server_state
+      ~config
+      ~log
+      ~start_rpc_server:(fun ~config ~log ~implementations ->
+        Rpc_server.default_start_rpc_server ~config ~log ~implementations ())
   ;;
 
   let config t = t.config
